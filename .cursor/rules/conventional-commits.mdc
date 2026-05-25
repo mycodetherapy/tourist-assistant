@@ -1,0 +1,41 @@
+---
+description: Conventional Commits (subject <= 20 symbols)
+alwaysApply: true
+---
+
+# Conventional Commit Messages (short subject)
+
+Use this format for every commit header:
+
+`<type>[optional-context]: <description>`
+
+## Allowed structure
+
+- `<type>` is a lowercase word (examples: `feat`, `fix`, `docs`, `chore`).
+- Optional context is in parentheses: `type(scope): ...` (e.g. `fix(parser): ...`)
+- Always use `: ` (colon + space) between the header part and the description.
+
+## Critical changes
+
+- Add `!` before `:` (e.g. `feat(api)!: ...`)
+- Or include a footer trailer: `BREAKING CHANGE: ...` or `BREAKING-CHANGE: ...`
+
+## Exception (must follow)
+
+- The description part (the text after `: `) must be **<= 20 characters**.
+
+## Body rule (optional)
+
+- If you add a body, it must start after **one empty line** after the header.
+
+## Examples
+
+✅ `feat: add rag pipeline`
+✅ `fix(parser): trim spaces`
+✅ `feat(api)!: new behavior`
+✅ `chore: refactor io`
+
+❌ `feat: implement full UI dashboard` (description > 20)
+❌ `feat:missing space after colon`
+❌ `feat: ok
+body without empty line`

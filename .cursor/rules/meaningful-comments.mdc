@@ -1,0 +1,42 @@
+---
+description: Add meaningful comments to key code areas (intent > narration)
+globs: **/*.py
+alwaysApply: false
+---
+
+# Meaningful comments for significant places
+
+Add short, high-signal comments in the **most significant** parts of the codebase to explain **intent and constraints**.
+Use the same principle as in `main.py` around the schema/`output_type` block: a compact explanation + 2–4 bullets.
+
+## Language
+
+- Write these comments in **Russian**.
+- Keep code symbols, library/class names, and env var names as-is (e.g. `OpenAIProvider`, `output_type`, `OPENAI_API_KEY`).
+
+## Where to add comments (good targets)
+
+- Configuration boundaries (env vars, provider/model wiring, base URLs, auth)
+- “Policy” or business rules (prioritization criteria, validation rules, tie-breakers)
+- Non-obvious constraints/trade-offs (why this approach, what it protects against)
+- Public APIs / entrypoints (what it guarantees, what it returns, failure modes)
+
+## How to write them
+
+- Prefer **why/so that** over **what** (avoid narrating each line).
+- Keep to **1–3 lines + bullets**; place comment **above** the block it explains.
+- Mention **inputs/outputs/guarantees** when a block creates a contract (e.g. a Pydantic schema).
+- If a block reduces ambiguity, say what ambiguity it prevents (e.g. “closed set via Literal”).
+
+## Avoid
+
+- Obvious narration (“import X”, “create variable”, “return result”).
+- Restating type hints or names without adding intent.
+- Over-commenting: if the code is self-evident, skip.
+
+## Example style (pattern to follow)
+
+Use a compact summary and bullets:
+
+- explain the intent in one line
+- then 2–4 bullets that capture the key consequences/constraints
