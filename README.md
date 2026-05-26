@@ -38,9 +38,20 @@ python main.py
 
 ### Тесты (без API)
 
+Запускайте **по одной строке** (без `#` в конце — иначе shell передаст комментарий как аргумент).
+
 ```bash
 python3 -m unittest discover -s tests -v
+```
+
+```bash
 python3 -m eval --suite smoke
+```
+
+С LLM-judge (нужен `OPENAI_API_KEY`):
+
+```bash
+python3 -m eval --suite smoke --with-llm
 ```
 
 ### Переменные окружения
@@ -171,19 +182,21 @@ flowchart TB
 
 ```
 tourist-assistant/
-├── main.py                 # Граф LangGraph, tools, CLI
-├── db/                     # SQLite: schema, repository
-├── onboarding/             # Опросник, TripPreferences
-├── search/                 # search_context для enrich_query
+├── main.py                 # Точка входа CLI
+├── cli/app.py              # Меню, опросник, запуск графа
+├── config/settings.py      # Константы поиска, LLM, валидация ввода
+├── models/                 # Pydantic-схемы, AgentState
+├── input_validation.py     # sanitize_and_validate
+├── search/                 # web.py, tools.py, context
+├── agents/                 # llm, nodes, graph, critic
 ├── planning/               # rebuild_scope, merge разделов
-├── agents/                 # critic, human_review
+├── db/                     # SQLite
+├── onboarding/             # Опросник
 ├── observability/          # LangSmith metadata
 ├── eval/                   # python -m eval --suite smoke
-├── tests/                  # unittest без LLM
+├── tests/
 ├── data/                   # trips.db (в .gitignore)
-├── requirements.txt
-├── .env.example
-└── README.md
+└── requirements.txt
 ```
 
 ---

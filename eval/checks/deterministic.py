@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from main import FinalProgram
+from models.schemas import FinalProgram
 
 
 def check_program_schema(program: dict[str, Any]) -> list[str]:
