@@ -62,6 +62,14 @@ from onboarding.preferences import (
     interests_query_suffix,
     restaurant_rating_suffix,
 )
+from planning import (
+    REBUILD_SCOPES,
+    finalize_extra_prompt,
+    human_message_for_scope,
+    merge_program,
+    planner_tools_hint,
+    required_tools_for_scope,
+)
 from search.context import enrich_query, get_session_preferences, set_session
 
 # Конфигурация из .env: секреты и URL провайдера не попадают в репозиторий.
@@ -866,17 +874,20 @@ class AgentState(TypedDict, total=False):
     search_context: str
     preferences: dict[str, Any]
     program: dict[str, Any]
+    rebuild_scope: str
+    base_program: dict[str, Any]
     messages: Annotated[list[AnyMessage], add_messages]
 
 
 # Узлы LangGraph: planner → executor|finalize, цикл до исчерпания tool_calls.
 
 
-def _build_planner_system_prompt(ctx: PlannerContext) -> str:
+def _build_planner_system_prompt(ctx: PlannerContext, rebuild_scope: str) -> str:
     """Формирует системный промпт для узла planner."""
     prefs_block = ""
     if ctx.search_context:
         prefs_block = f"\nПредпочтения пользователя (опросник): {ctx.search_context}\n"
+    tools_hint = planner_tools_hint(rebuild_scope)
     return (
         "Ты — туристический ассистент. Составляешь культурную программу поездки.\n"
         f"Город поездки: {ctx.city}. Даты: {ctx.dates}. Город вылета: {ctx.origin_city}."
@@ -888,10 +899,9 @@ def _build_planner_system_prompt(ctx: PlannerContext) -> str:
         "1. Билеты: самолёт, поезд (РЖД/Tutu), автобус (search_roundtrip_tickets).\n"
         "2. Музеи/афиша в пешой доступности (search_culture_events).\n"
         "3. Рестораны со ссылками рядом с музеями + транспорт (search_dining_and_transport).\n\n"
-        "Сначала вызови ВСЕ три инструмента, если их результатов ещё нет в истории. "
+        f"{tools_hint}\n"
         f"Для билетов: origin_city={ctx.origin_city}, destination_city={ctx.city}, dates={ctx.dates}. "
-        f"Для афиши и ресторанов: city={ctx.city}, dates={ctx.dates}. "
-        "Когда все три поиска выполнены — ответь кратко без вызова инструментов."
+        f"Для афиши и ресторанов: city={ctx.city}, dates={ctx.dates}."
     )
 
 
@@ -900,13 +910,14 @@ def planner_node(state: AgentState) -> dict[str, list[AnyMessage]]:
     Узел планировщика: LLM анализирует запрос и формирует tool_calls
     для сбора данных или финальный ответ без инструментов.
     """
+    rebuild_scope = state.get("rebuild_scope", "full")
     ctx = PlannerContext(
         city=state["city"],
         dates=state["dates"],
         origin_city=state["origin_city"],
         search_context=state.get("search_context", ""),
     )
-    system = SystemMessage(content=_build_planner_system_prompt(ctx))
+    system = SystemMessage(content=_build_planner_system_prompt(ctx, rebuild_scope))
     response: AIMessage = llm_with_tools.invoke([system, *state["messages"]])
 
     # Контракт выхода planner: AIMessage с tool_calls или финальный текст без tools
@@ -958,9 +969,12 @@ def finalize_node(state: AgentState) -> dict[str, list[AnyMessage]]:
         origin_city=state["origin_city"],
         search_context=state.get("search_context", ""),
     )
+    rebuild_scope = state.get("rebuild_scope", "full")
+    base_program = state.get("base_program")
     prefs_note = ""
     if ctx.search_context:
         prefs_note = f"\nУчти предпочтения: {ctx.search_context}\n"
+    scope_note = finalize_extra_prompt(rebuild_scope, base_program)
     system = SystemMessage(
         content=(
             "Составь программу по ToolMessage. Строго раздели:\n"
@@ -974,14 +988,14 @@ def finalize_node(state: AgentState) -> dict[str, list[AnyMessage]]:
             "- lifehacks: советы по пешим маршрутам «музей → обед → музей».\n"
             "Цены — только из digest; иначе «уточните на сайте» + ссылка.\n"
             f"Город: {ctx.city}. Даты: {ctx.dates}. Вылет из: {ctx.origin_city}."
-            f"{prefs_note}"
+            f"{prefs_note}{scope_note}"
         )
     )
-    human = HumanMessage(
-        content="Сформируй итоговую программу: билеты, мероприятия, питание, транспорт, лайфхаки."
-    )
+    human = HumanMessage(content=human_message_for_scope(rebuild_scope))
 
-    program: FinalProgram = llm_final.invoke([system, *state["messages"], human])
+    draft: FinalProgram = llm_final.invoke([system, *state["messages"], human])
+    merged = merge_program(base_program, draft.model_dump(), rebuild_scope)
+    program = FinalProgram.model_validate(merged)
 
     _print_final_program(program)
 
@@ -1014,6 +1028,13 @@ def _print_final_program(program: FinalProgram) -> None:
     print("\n" + "=" * 60)
 
 
+def route_entry(state: AgentState) -> Literal["planner", "finalize"]:
+    """Лайфхаки без веб-поиска — сразу в finalize."""
+    if state.get("rebuild_scope") == "lifehacks":
+        return "finalize"
+    return "planner"
+
+
 def route_after_planner(state: AgentState) -> Literal["executor", "finalize"]:
     """
     Условное ребро после planner: closed set через Literal.
@@ -1033,7 +1054,11 @@ workflow.add_node("planner", planner_node)
 workflow.add_node("executor", executor_node)
 workflow.add_node("finalize", finalize_node)
 
-workflow.add_edge(START, "planner")
+workflow.add_conditional_edges(
+    START,
+    route_entry,
+    {"planner": "planner", "finalize": "finalize"},
+)
 workflow.add_conditional_edges(
     "planner",
     route_after_planner,
@@ -1083,6 +1108,14 @@ def _collect_new_trip_inputs() -> tuple[str, str, str, str]:
     origin_city = sanitize_and_validate(origin_raw, "city")
     user_message = sanitize_and_validate(user_message_raw, "message")
     return city, dates, origin_city, user_message
+
+
+def _choose_rebuild_scope(*, has_program: bool) -> str:
+    """Выбор полной или частичной пересборки программы."""
+    if not has_program:
+        print("\nСохранённой программы нет — будет полная сборка.")
+        return "full"
+    return _prompt_choice("Что пересобрать?", REBUILD_SCOPES, "full")
 
 
 def _choose_trip_from_list() -> int | None:
@@ -1159,6 +1192,8 @@ if __name__ == "__main__":
     user_message: str
     search_context: str
     preferences_dict: dict[str, Any]
+    rebuild_scope: str = "full"
+    base_program: dict[str, Any] | None = None
 
     try:
         if mode == "continue":
@@ -1184,11 +1219,14 @@ if __name__ == "__main__":
                 preferences_dict = {}
                 print("Предпочтения не найдены — поиск без опросника.")
             latest = get_latest_itinerary(trip_id)
+            base_program = latest["program"] if latest else None
             if latest:
                 print(
                     f"Последняя версия программы: v{latest['version']} "
                     f"({latest['scope']})"
                 )
+            rebuild_scope = _choose_rebuild_scope(has_program=base_program is not None)
+            user_message = human_message_for_scope(rebuild_scope)
         else:
             city, dates, origin_city, user_message = _collect_new_trip_inputs()
             profile_data = get_user_profile()
@@ -1213,13 +1251,26 @@ if __name__ == "__main__":
             "origin_city": origin_city,
             "search_context": search_context,
             "preferences": preferences_dict,
+            "rebuild_scope": rebuild_scope,
             "messages": [HumanMessage(content=user_message)],
         }
+        if base_program is not None:
+            initial_state["base_program"] = base_program
+
+        print(f"Режим пересборки: {rebuild_scope}")
+        if rebuild_scope != "full":
+            tools = required_tools_for_scope(rebuild_scope)
+            if tools:
+                print(f"  → веб-поиск: {', '.join(tools)}")
+            else:
+                print("  → без веб-поиска")
 
         final_state = _run_graph(initial_state)
         program = final_state.get("program")
         if program:
-            version_id = save_itinerary_version(trip_id, program, scope="full")
+            version_id = save_itinerary_version(
+                trip_id, program, scope=rebuild_scope
+            )
             print(f"\nПрограмма сохранена: trip_id={trip_id}, version_id={version_id}")
         else:
             print("\nПредупреждение: программа не попала в состояние графа.")
