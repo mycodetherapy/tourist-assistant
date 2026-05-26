@@ -38,6 +38,7 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field, ValidationError
 
 from db import (
+    PlannedTripSummary,
     create_trip,
     get_latest_itinerary,
     get_preferences,
@@ -46,6 +47,7 @@ from db import (
     has_user_profile,
     ensure_user_profile_from_trips,
     init_db,
+    list_planned_trips,
     list_trips,
     save_itinerary_version,
     save_preferences,
@@ -1137,6 +1139,93 @@ def _choose_trip_from_list() -> int | None:
         return None
 
 
+def _choose_planned_trip_from_list(
+    trips: list[PlannedTripSummary],
+) -> int | None:
+    """Выбор поездки с программой по номеру в списке."""
+    print("\n--- Запланированные поездки ---")
+    for index, trip in enumerate(trips, start=1):
+        print(
+            f"  {index}. [{trip.id}] {trip.city}, {trip.dates} "
+            f"({trip.origin_city}) — {trip.status}, "
+            f"программа v{trip.last_version} ({trip.last_scope})"
+        )
+    raw = _prompt_line("Номер поездки")
+    try:
+        choice = int(raw)
+    except ValueError:
+        print("Некорректный номер.")
+        return None
+    if 1 <= choice <= len(trips):
+        return trips[choice - 1].id
+    print("Номер вне списка.")
+    return None
+
+
+def _resolve_details_trip_id() -> int | None:
+    """
+    Выбирает поездку для просмотра:
+    одна запланированная — сразу; несколько незавершённых — список.
+    """
+    planned = list_planned_trips()
+    if not planned:
+        print("\nНет поездок с сохранённой программой.")
+        return None
+
+    if len(planned) == 1:
+        return planned[0].id
+
+    incomplete = [trip for trip in planned if trip.status != "approved"]
+    if len(incomplete) == 1:
+        return incomplete[0].id
+    if len(incomplete) > 1:
+        return _choose_planned_trip_from_list(incomplete)
+
+    print("\nВсе поездки с программой отмечены как завершённые.")
+    return _choose_planned_trip_from_list(planned)
+
+
+def _print_trip_details(trip_id: int) -> None:
+    """Печатает метаданные, предпочтения и последнюю программу из БД."""
+    trip = get_trip(trip_id)
+    if trip is None:
+        print(f"Поездка #{trip_id} не найдена.")
+        return
+
+    print("\n" + "=" * 60)
+    print(f"ПОЕЗДКА #{trip_id}")
+    print("=" * 60)
+    print(f"Маршрут: {trip['origin_city']} → {trip['city']}")
+    print(f"Даты: {trip['dates']}")
+    print(f"Статус: {trip['status']}")
+    if trip.get("user_query"):
+        print(f"Запрос: {trip['user_query']}")
+
+    prefs_data = get_preferences(trip_id)
+    if prefs_data:
+        print("\n--- Предпочтения (опросник) ---")
+        try:
+            prefs = TripPreferences.model_validate(prefs_data)
+            print(build_search_context(prefs))
+        except ValidationError:
+            print(json.dumps(prefs_data, ensure_ascii=False, indent=2))
+    else:
+        print("\n--- Предпочтения ---\nне сохранялись")
+
+    latest = get_latest_itinerary(trip_id)
+    if latest is None:
+        print("\n--- Программа ---\nещё не сформирована")
+        print("=" * 60)
+        return
+
+    print(
+        f"\n--- Программа (версия {latest['version']}, "
+        f"scope={latest['scope']}) ---"
+    )
+    program = FinalProgram.model_validate(latest["program"])
+    _print_final_program(program)
+
+
 def _prompt_choice(label: str, options: list[tuple[str, str]], default_key: str) -> str:
     """Выбор пункта меню; Enter — значение по умолчанию."""
     print(f"\n{label}")
@@ -1181,9 +1270,16 @@ if __name__ == "__main__":
         [
             ("new", "Новая поездка"),
             ("continue", "Продолжить сохранённую поездку"),
+            ("details", "Показать подробности поездки"),
         ],
         "new",
     )
+
+    if mode == "details":
+        details_trip_id = _resolve_details_trip_id()
+        if details_trip_id is not None:
+            _print_trip_details(details_trip_id)
+        raise SystemExit(0)
 
     trip_id: int
     city: str

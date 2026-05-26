@@ -2,6 +2,7 @@
 
 from db.connection import get_database_path, init_db
 from db.repository import (
+    PlannedTripSummary,
     TripSummary,
     create_trip,
     ensure_user_profile_from_trips,
@@ -10,6 +11,7 @@ from db.repository import (
     get_trip,
     get_user_profile,
     has_user_profile,
+    list_planned_trips,
     list_trips,
     save_itinerary_version,
     save_preferences,
@@ -18,6 +20,7 @@ from db.repository import (
 )
 
 __all__ = [
+    "PlannedTripSummary",
     "TripSummary",
     "create_trip",
     "ensure_user_profile_from_trips",
@@ -28,6 +31,7 @@ __all__ = [
     "get_user_profile",
     "has_user_profile",
     "init_db",
+    "list_planned_trips",
     "list_trips",
     "save_itinerary_version",
     "save_preferences",

@@ -26,6 +26,20 @@ class TripSummary:
     updated_at: str
 
 
+@dataclass(frozen=True)
+class PlannedTripSummary:
+    """Поездка с сохранённой программой (для просмотра подробностей)."""
+
+    id: int
+    city: str
+    dates: str
+    origin_city: str
+    status: str
+    updated_at: str
+    last_version: int
+    last_scope: str
+
+
 def create_trip(
     city: str,
     dates: str,
@@ -153,6 +167,47 @@ def save_user_profile(preferences: dict[str, Any]) -> None:
             (payload, now),
         )
         conn.commit()
+
+
+def list_planned_trips(limit: int = 20) -> list[PlannedTripSummary]:
+    """Поездки с хотя бы одной сохранённой версией программы."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                t.id,
+                t.city,
+                t.dates,
+                t.origin_city,
+                t.status,
+                t.updated_at,
+                iv.version AS last_version,
+                iv.scope AS last_scope
+            FROM trips t
+            INNER JOIN itinerary_versions iv ON iv.trip_id = t.id
+            INNER JOIN (
+                SELECT trip_id, MAX(version) AS max_version
+                FROM itinerary_versions
+                GROUP BY trip_id
+            ) latest ON latest.trip_id = t.id AND iv.version = latest.max_version
+            ORDER BY t.updated_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [
+        PlannedTripSummary(
+            id=int(r["id"]),
+            city=r["city"],
+            dates=r["dates"],
+            origin_city=r["origin_city"],
+            status=r["status"],
+            updated_at=r["updated_at"],
+            last_version=int(r["last_version"]),
+            last_scope=r["last_scope"],
+        )
+        for r in rows
+    ]
 
 
 def list_trips(limit: int = 20) -> list[TripSummary]:

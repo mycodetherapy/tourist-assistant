@@ -13,6 +13,7 @@ from db.repository import (
     get_preferences,
     get_user_profile,
     has_user_profile,
+    list_planned_trips,
     save_itinerary_version,
     save_preferences,
     save_user_profile,
@@ -57,6 +58,25 @@ class TestRepository(unittest.TestCase):
         self.assertIsNotNone(profile)
         assert profile is not None
         self.assertEqual(profile["pace"], "relaxed")
+
+    def test_list_planned_trips(self) -> None:
+        self.assertEqual(list_planned_trips(), [])
+        trip_id = create_trip("Сочи", "август 2026", "Москва", "отдых")
+        self.assertEqual(list_planned_trips(), [])
+        save_itinerary_version(
+            trip_id,
+            {
+                "tickets": "t",
+                "events": "e",
+                "dining": "d",
+                "transport": "tr",
+                "lifehacks": "l",
+            },
+        )
+        planned = list_planned_trips()
+        self.assertEqual(len(planned), 1)
+        self.assertEqual(planned[0].id, trip_id)
+        self.assertEqual(planned[0].last_version, 1)
 
     def test_profile_fallback_from_trip(self) -> None:
         """Если user_profile пуст, берём prefs последней поездки."""
