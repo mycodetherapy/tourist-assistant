@@ -37,6 +37,33 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field, ValidationError
 
+from db import (
+    create_trip,
+    get_latest_itinerary,
+    get_preferences,
+    get_trip,
+    get_user_profile,
+    has_user_profile,
+    ensure_user_profile_from_trips,
+    init_db,
+    list_trips,
+    save_itinerary_version,
+    save_preferences,
+    save_user_profile,
+    update_trip_status,
+)
+from onboarding import (
+    TripPreferences,
+    build_search_context,
+    resolve_preferences_for_new_trip,
+)
+from onboarding.preferences import (
+    budget_query_suffix,
+    interests_query_suffix,
+    restaurant_rating_suffix,
+)
+from search.context import enrich_query, get_session_preferences, set_session
+
 # Конфигурация из .env: секреты и URL провайдера не попадают в репозиторий.
 load_dotenv()
 
@@ -69,11 +96,12 @@ class DiningTransportInput(BaseModel):
 
 
 class PlannerContext(BaseModel):
-    """Контекст планировщика: город, даты и город вылета."""
+    """Контекст планировщика: город, даты, вылет и предпочтения опросника."""
 
     city: str
     dates: str
     origin_city: str
+    search_context: str = ""
 
 
 class FinalProgram(BaseModel):
@@ -656,12 +684,14 @@ def search_roundtrip_tickets(
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
     o, d, dt = params.origin_city, params.destination_city, params.dates
+    prefs = get_session_preferences()
+    budget_hint = budget_query_suffix(prefs.budget) if prefs else ""
     queries = [
-        f"авиабилеты {o} {d} туда обратно {dt} aviasales",
-        f"рейсы {o} {d} {dt} travel.yandex.ru авиа",
-        f"билеты на поезд {o} {d} {dt} rzd.ru tutu.ru",
-        f"жд билеты {o} {d} РЖД расписание цена {dt}",
-        f"автобус {o} {d} {dt} билеты bus.ru avibus",
+        enrich_query(f"авиабилеты {o} {d} туда обратно {dt} aviasales {budget_hint}".strip()),
+        enrich_query(f"рейсы {o} {d} {dt} travel.yandex.ru авиа {budget_hint}".strip()),
+        enrich_query(f"билеты на поезд {o} {d} {dt} rzd.ru tutu.ru"),
+        enrich_query(f"жд билеты {o} {d} РЖД расписание цена {dt}"),
+        enrich_query(f"автобус {o} {d} {dt} билеты bus.ru avibus"),
     ]
     return _run_search_tool(
         params.model_dump(),
@@ -683,12 +713,16 @@ def search_culture_events(city: str, dates: str) -> str:
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
     area = _tourist_area(params.city)
+    prefs = get_session_preferences()
+    interest_hint = interests_query_suffix(prefs.interests) if prefs else ""
     queries = [
-        f"афиша {params.city} музеи выставки {params.dates}",
-        f"куда сходить {params.city} {params.dates} kassir.ru",
-        f"топ музеи {params.city} режим работы билеты",
-        f"достопримечательности {params.city} {area} пешая прогулка маршрут",
-        f"музеи {params.city} {area} рядом друг с другом",
+        enrich_query(
+            f"афиша {params.city} музеи выставки {params.dates} {interest_hint}".strip()
+        ),
+        enrich_query(f"куда сходить {params.city} {params.dates} kassir.ru {interest_hint}".strip()),
+        enrich_query(f"топ музеи {params.city} режим работы билеты"),
+        enrich_query(f"достопримечательности {params.city} {area} пешая прогулка маршрут"),
+        enrich_query(f"музеи {params.city} {area} рядом друг с другом"),
     ]
     payload_str = _run_search_tool(
         params.model_dump(),
@@ -718,17 +752,36 @@ def search_dining_and_transport(city: str, dates: str) -> str:
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
     area = _tourist_area(params.city)
+    prefs = get_session_preferences()
+    rating_hint = (
+        restaurant_rating_suffix(prefs.min_restaurant_rating) if prefs else "лучшие отзывы"
+    )
+    cuisine_hint = prefs.cuisine if prefs and prefs.cuisine else ""
     restaurant_queries = [
-        f"лучшие рестораны {params.city} {area} TripAdvisor",
-        f"рестораны {params.city} {area} 2gis рейтинг",
-        f"кафе где поесть {params.city} центр yandex maps",
-        f"рестораны рядом Эрмитаж Невский {params.city}" if "петербург" in params.city.lower() else f"рестораны рядом достопримечательности {params.city} {area}",
-        f"топ кафе {params.city} исторический центр отзывы",
+        enrich_query(
+            f"лучшие рестораны {params.city} {area} TripAdvisor {rating_hint} {cuisine_hint}".strip()
+        ),
+        enrich_query(f"рестораны {params.city} {area} 2gis рейтинг {rating_hint}".strip()),
+        enrich_query(f"кафе где поесть {params.city} центр yandex maps {cuisine_hint}".strip()),
+        enrich_query(
+            f"рестораны рядом Эрмитаж Невский {params.city} {rating_hint}"
+            if "петербург" in params.city.lower()
+            else f"рестораны рядом достопримечательности {params.city} {area} {rating_hint}"
+        ),
+        enrich_query(f"топ кафе {params.city} исторический центр отзывы {rating_hint}".strip()),
     ]
+    transport_mode = ""
+    if prefs:
+        if prefs.transport_preference == "metro":
+            transport_mode = "метро"
+        elif prefs.transport_preference == "walking":
+            transport_mode = "пешком"
+        elif prefs.transport_preference == "taxi":
+            transport_mode = "такси"
     transport_queries = [
-        f"метро {params.city} карта схема проезд",
-        f"общественный транспорт {params.city} как добраться",
-        f"яндекс карты {params.city} маршрут метро автобус",
+        enrich_query(f"метро {params.city} карта схема проезд {transport_mode}".strip()),
+        enrich_query(f"общественный транспорт {params.city} как добраться {transport_mode}".strip()),
+        enrich_query(f"яндекс карты {params.city} маршрут метро автобус"),
     ]
 
     cities = [params.city]
@@ -803,12 +856,16 @@ llm_final = llm.with_structured_output(FinalProgram, method="json_schema")
 # - messages: append-only, не перезаписываются целиком
 
 
-class AgentState(TypedDict):
-    """Состояние агента: город, даты, вылет и история сообщений."""
+class AgentState(TypedDict, total=False):
+    """Состояние агента: поездка, предпочтения, сообщения, итоговая программа."""
 
+    trip_id: int
     city: str
     dates: str
     origin_city: str
+    search_context: str
+    preferences: dict[str, Any]
+    program: dict[str, Any]
     messages: Annotated[list[AnyMessage], add_messages]
 
 
@@ -817,9 +874,13 @@ class AgentState(TypedDict):
 
 def _build_planner_system_prompt(ctx: PlannerContext) -> str:
     """Формирует системный промпт для узла planner."""
+    prefs_block = ""
+    if ctx.search_context:
+        prefs_block = f"\nПредпочтения пользователя (опросник): {ctx.search_context}\n"
     return (
         "Ты — туристический ассистент. Составляешь культурную программу поездки.\n"
-        f"Город поездки: {ctx.city}. Даты: {ctx.dates}. Город вылета: {ctx.origin_city}.\n\n"
+        f"Город поездки: {ctx.city}. Даты: {ctx.dates}. Город вылета: {ctx.origin_city}."
+        f"{prefs_block}\n"
         "Инструменты: tickets=самолёт+поезд+автобус, events=музеи (в одном районе), "
         "dining=restaurants_digest (много ссылок, рядом с музеями). "
         "Цены — только из digest, иначе «уточните на сайте» + ссылка.\n\n"
@@ -843,6 +904,7 @@ def planner_node(state: AgentState) -> dict[str, list[AnyMessage]]:
         city=state["city"],
         dates=state["dates"],
         origin_city=state["origin_city"],
+        search_context=state.get("search_context", ""),
     )
     system = SystemMessage(content=_build_planner_system_prompt(ctx))
     response: AIMessage = llm_with_tools.invoke([system, *state["messages"]])
@@ -894,7 +956,11 @@ def finalize_node(state: AgentState) -> dict[str, list[AnyMessage]]:
         city=state["city"],
         dates=state["dates"],
         origin_city=state["origin_city"],
+        search_context=state.get("search_context", ""),
     )
+    prefs_note = ""
+    if ctx.search_context:
+        prefs_note = f"\nУчти предпочтения: {ctx.search_context}\n"
     system = SystemMessage(
         content=(
             "Составь программу по ToolMessage. Строго раздели:\n"
@@ -908,6 +974,7 @@ def finalize_node(state: AgentState) -> dict[str, list[AnyMessage]]:
             "- lifehacks: советы по пешим маршрутам «музей → обед → музей».\n"
             "Цены — только из digest; иначе «уточните на сайте» + ссылка.\n"
             f"Город: {ctx.city}. Даты: {ctx.dates}. Вылет из: {ctx.origin_city}."
+            f"{prefs_note}"
         )
     )
     human = HumanMessage(
@@ -926,7 +993,7 @@ def finalize_node(state: AgentState) -> dict[str, list[AnyMessage]]:
         f"## Лайфхаки\n{program.lifehacks}"
     )
     final_message = AIMessage(content=summary)
-    return {"messages": [final_message]}
+    return {"messages": [final_message], "program": program.model_dump()}
 
 
 def _print_final_program(program: FinalProgram) -> None:
@@ -978,7 +1045,8 @@ workflow.add_edge("finalize", END)
 app = workflow.compile()
 
 
-# CLI-точка входа: валидация ввода, initial_state, invoke(app); без ключа — SystemExit(1).
+# CLI: меню (новая / продолжить), опросник, SQLite, invoke графа, сохранение версии.
+
 
 def _prompt_line(label: str, default: str = "") -> str:
     """Запрашивает строку в терминале; Enter — значение по умолчанию."""
@@ -986,6 +1054,76 @@ def _prompt_line(label: str, default: str = "") -> str:
         raw = input(f"{label} [{default}]: ").strip()
         return raw if raw else default
     return input(f"{label}: ").strip()
+
+
+def _run_graph(state: AgentState) -> AgentState:
+    """Запускает граф и возвращает финальное состояние."""
+    print(f"\nЗапуск: {state['origin_city']} → {state['city']}, {state['dates']}")
+    print("Идёт веб-поиск и формирование программы (1–2 минуты)...\n")
+    return app.invoke(state)
+
+
+def _apply_preferences_to_session(prefs: TripPreferences) -> str:
+    """Сохраняет предпочтения в search/context для tools и промптов."""
+    ctx = build_search_context(prefs)
+    set_session(prefs, ctx)
+    return ctx
+
+
+def _collect_new_trip_inputs() -> tuple[str, str, str, str]:
+    city_raw = _prompt_line("Город поездки")
+    dates_raw = _prompt_line("Даты (например, 15-18 июля 2026)")
+    origin_raw = _prompt_line("Город вылета", default="Москва")
+    user_message_raw = _prompt_line(
+        "Ваш запрос",
+        default="Составь культурную программу поездки",
+    )
+    city = sanitize_and_validate(city_raw, "city")
+    dates = sanitize_and_validate(dates_raw, "dates")
+    origin_city = sanitize_and_validate(origin_raw, "city")
+    user_message = sanitize_and_validate(user_message_raw, "message")
+    return city, dates, origin_city, user_message
+
+
+def _choose_trip_from_list() -> int | None:
+    trips = list_trips()
+    if not trips:
+        print("Сохранённых поездок нет. Создайте новую.")
+        return None
+    print("\n--- Сохранённые поездки ---")
+    for trip in trips:
+        print(
+            f"  [{trip.id}] {trip.city}, {trip.dates} "
+            f"({trip.origin_city}) — {trip.status}"
+        )
+    raw = _prompt_line("ID поездки для продолжения")
+    try:
+        return int(raw)
+    except ValueError:
+        print("Некорректный ID.")
+        return None
+
+
+def _prompt_choice(label: str, options: list[tuple[str, str]], default_key: str) -> str:
+    """Выбор пункта меню; Enter — значение по умолчанию."""
+    print(f"\n{label}")
+    default_index = next(
+        (i for i, (key, _) in enumerate(options, start=1) if key == default_key),
+        1,
+    )
+    for index, (_, text) in enumerate(options, start=1):
+        mark = " (по умолчанию)" if index == default_index else ""
+        print(f"  {index}. {text}{mark}")
+    raw = input(f"Номер [Enter = {default_index}]: ").strip()
+    if not raw:
+        return default_key
+    try:
+        choice = int(raw)
+    except ValueError:
+        return default_key
+    if 1 <= choice <= len(options):
+        return options[choice - 1][0]
+    return default_key
 
 
 if __name__ == "__main__":
@@ -996,41 +1134,101 @@ if __name__ == "__main__":
         )
         raise SystemExit(1)
 
+    init_db()
+    ensure_user_profile_from_trips()
     search_backend = "Tavily" if os.getenv("TAVILY_API_KEY", "").strip() else "ddgs (ru-ru)"
     print("=" * 60)
-    print("Туристический ассистент — введите данные поездки")
+    print("Туристический ассистент")
     print(f"Поиск данных: {search_backend}")
+    print(f"База поездок: {os.getenv('DATABASE_PATH', 'data/trips.db')}")
     print("=" * 60)
 
-    city_raw = _prompt_line("Город поездки")
-    dates_raw = _prompt_line("Даты (например, 15-18 июля 2026)")
-    origin_raw = _prompt_line("Город вылета", default="Москва")
-    user_message_raw = _prompt_line(
-        "Ваш запрос",
-        default="Составь культурную программу поездки",
+    mode = _prompt_choice(
+        "Режим",
+        [
+            ("new", "Новая поездка"),
+            ("continue", "Продолжить сохранённую поездку"),
+        ],
+        "new",
     )
 
+    trip_id: int
+    city: str
+    dates: str
+    origin_city: str
+    user_message: str
+    search_context: str
+    preferences_dict: dict[str, Any]
+
     try:
-        city = sanitize_and_validate(city_raw, "city")
-        dates = sanitize_and_validate(dates_raw, "dates")
-        origin_city = sanitize_and_validate(origin_raw, "city")
-        user_message = sanitize_and_validate(user_message_raw, "message")
+        if mode == "continue":
+            chosen = _choose_trip_from_list()
+            if chosen is None:
+                raise SystemExit(0)
+            trip = get_trip(chosen)
+            if trip is None:
+                print(f"Поездка #{chosen} не найдена.")
+                raise SystemExit(1)
+            trip_id = int(trip["id"])
+            city = trip["city"]
+            dates = trip["dates"]
+            origin_city = trip["origin_city"]
+            user_message = trip.get("user_query") or "Обнови культурную программу поездки"
+            prefs_data = get_preferences(trip_id)
+            if prefs_data:
+                prefs = TripPreferences.model_validate(prefs_data)
+                search_context = _apply_preferences_to_session(prefs)
+                preferences_dict = prefs.model_dump()
+            else:
+                search_context = ""
+                preferences_dict = {}
+                print("Предпочтения не найдены — поиск без опросника.")
+            latest = get_latest_itinerary(trip_id)
+            if latest:
+                print(
+                    f"Последняя версия программы: v{latest['version']} "
+                    f"({latest['scope']})"
+                )
+        else:
+            city, dates, origin_city, user_message = _collect_new_trip_inputs()
+            profile_data = get_user_profile()
+            prefs = resolve_preferences_for_new_trip(
+                has_profile=profile_data is not None,
+                profile_data=profile_data,
+            )
+            preferences_dict = prefs.model_dump()
+            search_context = _apply_preferences_to_session(prefs)
+            # Сразу после опросника — даже если дальше упадёт граф
+            save_user_profile(preferences_dict)
+            trip_id = create_trip(city, dates, origin_city, user_message)
+            save_preferences(trip_id, preferences_dict)
+            print(f"Поездка сохранена в БД: id={trip_id}")
+
+        update_trip_status(trip_id, "building")
+
+        initial_state: AgentState = {
+            "trip_id": trip_id,
+            "city": city,
+            "dates": dates,
+            "origin_city": origin_city,
+            "search_context": search_context,
+            "preferences": preferences_dict,
+            "messages": [HumanMessage(content=user_message)],
+        }
+
+        final_state = _run_graph(initial_state)
+        program = final_state.get("program")
+        if program:
+            version_id = save_itinerary_version(trip_id, program, scope="full")
+            print(f"\nПрограмма сохранена: trip_id={trip_id}, version_id={version_id}")
+        else:
+            print("\nПредупреждение: программа не попала в состояние графа.")
+
     except ValueError as exc:
         print(f"Ошибка валидации входа: {exc}")
         raise SystemExit(1) from exc
-
-    initial_state: AgentState = {
-        "city": city,
-        "dates": dates,
-        "origin_city": origin_city,
-        "messages": [HumanMessage(content=user_message)],
-    }
-
-    print(f"\nЗапуск: {origin_city} → {city}, {dates}")
-    print("Идёт веб-поиск и формирование программы (1–2 минуты)...\n")
-
-    try:
-        app.invoke(initial_state)
+    except SystemExit:
+        raise
     except Exception as exc:
-        print(f"Ошибка выполнения графа: {exc}")
+        print(f"Ошибка выполнения: {exc}")
         raise SystemExit(1) from exc

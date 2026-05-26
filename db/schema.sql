@@ -16,6 +16,13 @@ CREATE TABLE IF NOT EXISTS trip_preferences (
     preferences_json TEXT NOT NULL
 );
 
+-- Профиль локального пользователя (CLI): последние ответы опросника
+CREATE TABLE IF NOT EXISTS user_profile (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    preferences_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS itinerary_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,

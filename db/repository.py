@@ -85,6 +85,76 @@ def get_preferences(trip_id: int) -> dict[str, Any] | None:
     return json.loads(row["preferences_json"])
 
 
+def _get_profile_from_table() -> dict[str, Any] | None:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT preferences_json FROM user_profile WHERE id = 1",
+        ).fetchone()
+    if row is None:
+        return None
+    return json.loads(row["preferences_json"])
+
+
+def get_latest_trip_preferences() -> dict[str, Any] | None:
+    """
+    Предпочтения последней поездки — fallback, если user_profile ещё пуст
+    (например, прогон оборвался до save_user_profile).
+    """
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT tp.preferences_json
+            FROM trip_preferences tp
+            INNER JOIN trips t ON t.id = tp.trip_id
+            ORDER BY t.updated_at DESC
+            LIMIT 1
+            """,
+        ).fetchone()
+    if row is None:
+        return None
+    return json.loads(row["preferences_json"])
+
+
+def has_user_profile() -> bool:
+    """True, если опросник уже проходили (профиль или любая поездка с prefs)."""
+    return get_user_profile() is not None
+
+
+def get_user_profile() -> dict[str, Any] | None:
+    """Предпочтения: сначала user_profile, иначе последняя поездка с опросником."""
+    profile = _get_profile_from_table()
+    if profile is not None:
+        return profile
+    return get_latest_trip_preferences()
+
+
+def ensure_user_profile_from_trips() -> None:
+    """Копирует prefs последней поездки в user_profile, если профиль пуст."""
+    if _get_profile_from_table() is not None:
+        return
+    latest = get_latest_trip_preferences()
+    if latest is not None:
+        save_user_profile(latest)
+
+
+def save_user_profile(preferences: dict[str, Any]) -> None:
+    """Обновляет глобальный профиль предпочтений (id=1)."""
+    payload = json.dumps(preferences, ensure_ascii=False)
+    now = _utc_now()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_profile (id, preferences_json, updated_at)
+            VALUES (1, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                preferences_json = excluded.preferences_json,
+                updated_at = excluded.updated_at
+            """,
+            (payload, now),
+        )
+        conn.commit()
+
+
 def list_trips(limit: int = 20) -> list[TripSummary]:
     """Список поездок, новые сверху."""
     with connect() as conn:

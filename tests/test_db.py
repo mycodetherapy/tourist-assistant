@@ -11,8 +11,11 @@ from db.repository import (
     create_trip,
     get_latest_itinerary,
     get_preferences,
+    get_user_profile,
+    has_user_profile,
     save_itinerary_version,
     save_preferences,
+    save_user_profile,
 )
 
 
@@ -45,6 +48,27 @@ class TestRepository(unittest.TestCase):
         assert latest is not None
         self.assertEqual(latest["version"], 1)
         self.assertEqual(latest["program"]["events"], "музей")
+
+    def test_user_profile(self) -> None:
+        self.assertFalse(has_user_profile())
+        save_user_profile({"pace": "relaxed", "budget": "economy"})
+        self.assertTrue(has_user_profile())
+        profile = get_user_profile()
+        self.assertIsNotNone(profile)
+        assert profile is not None
+        self.assertEqual(profile["pace"], "relaxed")
+
+    def test_profile_fallback_from_trip(self) -> None:
+        """Если user_profile пуст, берём prefs последней поездки."""
+        trip_id = create_trip("Казань", "июль 2026", "Москва", "тест")
+        save_preferences(
+            trip_id,
+            {"pace": "packed", "budget": "medium", "interests": ["театр"]},
+        )
+        self.assertTrue(has_user_profile())
+        profile = get_user_profile()
+        assert profile is not None
+        self.assertEqual(profile["pace"], "packed")
 
 
 if __name__ == "__main__":
