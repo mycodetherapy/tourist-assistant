@@ -28,6 +28,7 @@ alwaysApply: true
 Синхронизируй README, если менялись:
 
 - `main.py`, `cli/`, `agents/`, `search/`, `config/`, `planning/`, `db/`, `onboarding/`, `eval/` — граф, tools, CLI, поиск, SQLite, HITL, eval.
+- `agents/graph.py` — перегенерировать `docs/assets/graph.png` (`python3 scripts/render_graph.py`) и обновить картинку в README при необходимости.
 - `requirements.txt` — новые пакеты (`ddgs`, `langgraph`, …).
 - `.env.example` — новые переменные окружения (`DATABASE_PATH`, `LANGCHAIN_*`, …).
 - Поведение агента (транспорт, питание, источники данных, частичный пересбор).
@@ -39,6 +40,7 @@ alwaysApply: true
 - [ ] Edge cases и критерии качества отражают реальную обработку в `agents/`, `search/`, `cli/`, `eval/`.
 - [ ] `requirements.txt` включён в коммит при изменении зависимостей.
 - [ ] README добавлен в `git add`, если менялся код агента.
+- [ ] После изменения `agents/graph.py` обновлён `docs/assets/graph.png` через `scripts/render_graph.py`.
 
 ## Запреты
 

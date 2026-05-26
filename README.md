@@ -89,23 +89,18 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 
 ## Архитектура
 
-```mermaid
-flowchart TB
-    CLI[cli/app.py]
-    DB[(SQLite)]
-    subgraph graph [agents/graph.py]
-        researcher -->|tool_calls| executor
-        researcher --> writer
-        executor --> researcher
-        writer --> critic
-        critic -->|retry до 2 раз| researcher
-        critic --> human_review
-        human_review -->|не утвердил| researcher
-        human_review --> END
-    end
-    CLI --> graph
-    executor -->|tool_runs| DB
-    graph -->|itinerary_versions| DB
+Граф LangGraph ([`agents/graph.py`](agents/graph.py)) — схема из кода (как в LangGraph Studio):
+
+![Схема графа агента](docs/assets/graph.png)
+
+Пунктирные рёбра — условные переходы (`lifehacks`, `tool_calls`, critic retry, HITL). Сплошные — фиксированные (`executor → researcher`, `writer → critic`).
+
+**CLI и БД:** `cli/app.py` вызывает `app.invoke`; `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions` (SQLite).
+
+После изменения графа перегенерируйте PNG:
+
+```bash
+python3 scripts/render_graph.py
 ```
 
 | Узел | Файл | Роль |
@@ -229,6 +224,8 @@ tourist-assistant/
 ├── onboarding/             # опросник, TripPreferences
 ├── observability/tracing.py
 ├── eval/                   # python3 -m eval --suite smoke
+├── scripts/render_graph.py # PNG графа → docs/assets/graph.png
+├── docs/assets/graph.png   # схема для README
 ├── tests/
 ├── data/                   # trips.db (в .gitignore)
 ├── requirements.txt
@@ -241,6 +238,7 @@ tourist-assistant/
 ## Разработка
 
 - Перед коммитом синхронизируйте **README** с кодом — см. [`.cursor/rules/readme-sync.mdc`](.cursor/rules/readme-sync.mdc) (правило для агента Cursor при коммите, не pre-commit hook).
+- При правках **`agents/graph.py`** выполните `python3 scripts/render_graph.py` и закоммитьте обновлённый `docs/assets/graph.png`.
 - Зависимости: `pip install -r requirements.txt`; при новых пакетах обновляйте `requirements.txt`.
 - Коммиты: [Conventional Commits](.cursor/rules/conventional-commits.mdc), subject ≤ 20 символов.
 - Не коммитьте `.env` с секретами.
