@@ -50,6 +50,9 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
+# Локальная SQLite
+data/
+
 # Логи и кэш
 *.log
 .cache/
