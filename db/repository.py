@@ -288,6 +288,65 @@ def save_itinerary_version(
         return int(cursor.lastrowid)
 
 
+def log_tool_run(
+    trip_id: int,
+    tool_name: str,
+    *,
+    args: dict[str, Any] | None = None,
+    provider: str | None = None,
+    live_data: bool = False,
+    results_count: int = 0,
+    raw_results_count: int = 0,
+    error: str | None = None,
+    itinerary_version_id: int | None = None,
+) -> int:
+    """Пишет строку в tool_runs для eval и отладки."""
+    now = _utc_now()
+    args_json = json.dumps(args or {}, ensure_ascii=False)
+    with connect() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO tool_runs (
+                trip_id, itinerary_version_id, tool_name, args_json,
+                provider, live_data, results_count, raw_results_count,
+                error, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                trip_id,
+                itinerary_version_id,
+                tool_name,
+                args_json,
+                provider,
+                int(live_data),
+                results_count,
+                raw_results_count,
+                error,
+                now,
+            ),
+        )
+        conn.commit()
+        return int(cursor.lastrowid)
+
+
+def list_tool_runs(trip_id: int, limit: int = 50) -> list[dict[str, Any]]:
+    """Последние вызовы tools для поездки."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT tool_name, provider, live_data, results_count,
+                   raw_results_count, error, created_at
+            FROM tool_runs
+            WHERE trip_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (trip_id, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_latest_itinerary(trip_id: int) -> dict[str, Any] | None:
     """Последняя версия программы: version, scope, program (dict), approved."""
     with connect() as conn:

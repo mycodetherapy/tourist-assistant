@@ -49,11 +49,14 @@ from db import (
     init_db,
     list_planned_trips,
     list_trips,
+    log_tool_run,
     save_itinerary_version,
     save_preferences,
     save_user_profile,
     update_trip_status,
 )
+from agents import run_critic
+from agents.human_review import prompt_approve_program, prompt_reject_action
 from onboarding import (
     TripPreferences,
     build_search_context,
@@ -72,7 +75,9 @@ from planning import (
     planner_tools_hint,
     required_tools_for_scope,
 )
+from observability import invoke_config, langsmith_enabled
 from search.context import enrich_query, get_session_preferences, set_session
+from search.tool_logging import parse_tool_result
 
 # Конфигурация из .env: секреты и URL провайдера не попадают в репозиторий.
 load_dotenv()
@@ -878,6 +883,10 @@ class AgentState(TypedDict, total=False):
     program: dict[str, Any]
     rebuild_scope: str
     base_program: dict[str, Any]
+    critic_passed: bool
+    critic_notes: str
+    retry_count: int
+    approved: bool
     messages: Annotated[list[AnyMessage], add_messages]
 
 
@@ -952,6 +961,20 @@ def executor_node(state: AgentState) -> dict[str, list[ToolMessage]]:
         except Exception as exc:
             content = f"Ошибка выполнения инструмента {name}: {exc}"
 
+        trip_id = state.get("trip_id")
+        if trip_id is not None:
+            metrics = parse_tool_result(content)
+            log_tool_run(
+                int(trip_id),
+                name,
+                args=args,
+                provider=metrics.get("provider"),
+                live_data=bool(metrics.get("live_data")),
+                results_count=int(metrics.get("results_count", 0)),
+                raw_results_count=int(metrics.get("raw_results_count", 0)),
+                error=metrics.get("error"),
+            )
+
         tool_messages.append(
             ToolMessage(content=content, tool_call_id=tool_call_id, name=name)
         )
@@ -1012,6 +1035,49 @@ def finalize_node(state: AgentState) -> dict[str, list[AnyMessage]]:
     return {"messages": [final_message], "program": program.model_dump()}
 
 
+def critic_node(state: AgentState) -> dict[str, Any]:
+    """Агент-critic: детерминированные проверки перед показом пользователю."""
+    passed, notes = run_critic(state)
+    print(f"  [critic] {notes}")
+    result: dict[str, Any] = {"critic_passed": passed, "critic_notes": notes}
+    if not passed:
+        result["retry_count"] = state.get("retry_count", 0) + 1
+    return result
+
+
+def human_review_node(state: AgentState) -> dict[str, Any]:
+    """Human-in-the-loop: утверждение программы y/n."""
+    print("\n--- Проверка программы ---")
+    if state.get("critic_notes"):
+        print(f"Замечания critic: {state['critic_notes']}")
+
+    if prompt_approve_program():
+        print("✓ Программа утверждена.\n")
+        if state.get("trip_id") is not None:
+            update_trip_status(int(state["trip_id"]), "approved")
+        return {"approved": True}
+
+    action = prompt_reject_action()
+    if action == "save_draft":
+        if state.get("trip_id") is not None:
+            update_trip_status(int(state["trip_id"]), "review")
+        return {"approved": True}
+
+    print("Повторная сборка по замечаниям...\n")
+    return {
+        "approved": False,
+        "retry_count": state.get("retry_count", 0) + 1,
+        "messages": [
+            HumanMessage(
+                content=(
+                    "Пользователь не утвердил программу. "
+                    "Пересобери слабые разделы, опираясь на digest."
+                )
+            )
+        ],
+    }
+
+
 def _print_final_program(program: FinalProgram) -> None:
     """Печатает финальную программу в консоль по разделам."""
     sections = [
@@ -1030,44 +1096,69 @@ def _print_final_program(program: FinalProgram) -> None:
     print("\n" + "=" * 60)
 
 
-def route_entry(state: AgentState) -> Literal["planner", "finalize"]:
-    """Лайфхаки без веб-поиска — сразу в finalize."""
+def route_entry(state: AgentState) -> Literal["researcher", "writer"]:
+    """Лайфхаки без веб-поиска — сразу writer."""
     if state.get("rebuild_scope") == "lifehacks":
-        return "finalize"
-    return "planner"
+        return "writer"
+    return "researcher"
 
 
-def route_after_planner(state: AgentState) -> Literal["executor", "finalize"]:
-    """
-    Условное ребро после planner: closed set через Literal.
-    tool_calls → executor; иначе все три поиска завершены → finalize.
-    """
+def route_after_researcher(state: AgentState) -> Literal["executor", "writer"]:
+    """Researcher: tool_calls → executor; иначе → writer."""
     last = state["messages"][-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "executor"
-    return "finalize"
+    return "writer"
 
 
-# Сборка графа: START→planner; planner→executor|finalize; executor→planner; finalize→END.
+def route_after_critic(state: AgentState) -> Literal["human_review", "researcher"]:
+    """Critic: ok → HITL; иначе retry researcher (до 2 раз)."""
+    if state.get("critic_passed"):
+        return "human_review"
+    if state.get("retry_count", 0) >= 2:
+        print("  [critic] лимит повторов — передаём на утверждение пользователю.")
+        return "human_review"
+    return "researcher"
+
+
+def route_after_human(state: AgentState) -> Literal["researcher", "__end__"]:
+    if state.get("approved"):
+        return "__end__"
+    return "researcher"
+
+
+# Граф: researcher → executor ↺ → writer → critic → human_review → END|researcher
 
 workflow = StateGraph(AgentState)
 
-workflow.add_node("planner", planner_node)
+workflow.add_node("researcher", planner_node)
 workflow.add_node("executor", executor_node)
-workflow.add_node("finalize", finalize_node)
+workflow.add_node("writer", finalize_node)
+workflow.add_node("critic", critic_node)
+workflow.add_node("human_review", human_review_node)
 
 workflow.add_conditional_edges(
     START,
     route_entry,
-    {"planner": "planner", "finalize": "finalize"},
+    {"researcher": "researcher", "writer": "writer"},
 )
 workflow.add_conditional_edges(
-    "planner",
-    route_after_planner,
-    {"executor": "executor", "finalize": "finalize"},
+    "researcher",
+    route_after_researcher,
+    {"executor": "executor", "writer": "writer"},
 )
-workflow.add_edge("executor", "planner")
-workflow.add_edge("finalize", END)
+workflow.add_edge("executor", "researcher")
+workflow.add_edge("writer", "critic")
+workflow.add_conditional_edges(
+    "critic",
+    route_after_critic,
+    {"human_review": "human_review", "researcher": "researcher"},
+)
+workflow.add_conditional_edges(
+    "human_review",
+    route_after_human,
+    {"researcher": "researcher", "__end__": END},
+)
 
 app = workflow.compile()
 
@@ -1084,10 +1175,27 @@ def _prompt_line(label: str, default: str = "") -> str:
 
 
 def _run_graph(state: AgentState) -> AgentState:
-    """Запускает граф и возвращает финальное состояние."""
+    """Запускает мультиагентный граф и возвращает финальное состояние."""
+    trip_id = int(state["trip_id"])
     print(f"\nЗапуск: {state['origin_city']} → {state['city']}, {state['dates']}")
-    print("Идёт веб-поиск и формирование программы (1–2 минуты)...\n")
-    return app.invoke(state)
+    if langsmith_enabled():
+        print("Трейсинг: LangSmith включён (LANGCHAIN_TRACING_V2)")
+    print(
+        "Агенты: researcher → executor → writer → critic → human_review "
+        "(1–2 минуты)...\n"
+    )
+    run_state: AgentState = {
+        **state,
+        "retry_count": state.get("retry_count", 0),
+        "approved": False,
+        "critic_passed": False,
+        "critic_notes": "",
+    }
+    config = invoke_config(
+        trip_id,
+        rebuild_scope=state.get("rebuild_scope", "full"),
+    )
+    return app.invoke(run_state, config=config)
 
 
 def _apply_preferences_to_session(prefs: TripPreferences) -> str:
@@ -1348,6 +1456,10 @@ if __name__ == "__main__":
             "search_context": search_context,
             "preferences": preferences_dict,
             "rebuild_scope": rebuild_scope,
+            "retry_count": 0,
+            "approved": False,
+            "critic_passed": False,
+            "critic_notes": "",
             "messages": [HumanMessage(content=user_message)],
         }
         if base_program is not None:
@@ -1365,7 +1477,10 @@ if __name__ == "__main__":
         program = final_state.get("program")
         if program:
             version_id = save_itinerary_version(
-                trip_id, program, scope=rebuild_scope
+                trip_id,
+                program,
+                scope=rebuild_scope,
+                approved=bool(final_state.get("approved")),
             )
             print(f"\nПрограмма сохранена: trip_id={trip_id}, version_id={version_id}")
         else:

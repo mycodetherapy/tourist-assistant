@@ -1,0 +1,81 @@
+"""Разбор JSON-ответа инструмента для записи в tool_runs."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+
+def parse_tool_result(content: str) -> dict[str, Any]:
+    """
+    Извлекает метрики из payload инструмента (строка JSON или текст ошибки).
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return {
+            "live_data": False,
+            "results_count": 0,
+            "raw_results_count": 0,
+            "provider": None,
+            "error": content[:500],
+        }
+
+    if not isinstance(data, dict):
+        return {
+            "live_data": False,
+            "results_count": 0,
+            "raw_results_count": 0,
+            "provider": None,
+            "error": "invalid payload",
+        }
+
+    if "error" in data and data.get("live_data") is False:
+        return {
+            "live_data": False,
+            "results_count": 0,
+            "raw_results_count": 0,
+            "provider": data.get("search_provider"),
+            "error": str(data.get("error", ""))[:500],
+        }
+
+    # search_dining_and_transport: два под-поиска
+    if "search" in data and isinstance(data["search"], dict):
+        nested = data["search"]
+        if "restaurants" in nested and "transport" in nested:
+            rest = nested.get("restaurants") or {}
+            trans = nested.get("transport") or {}
+            rc = int(rest.get("results_count", 0)) + int(trans.get("results_count", 0))
+            raw = int(rest.get("raw_results_count", 0)) + int(
+                trans.get("raw_results_count", 0)
+            )
+            provider = rest.get("provider") or trans.get("provider")
+            return {
+                "live_data": bool(data.get("live_data", True)),
+                "results_count": rc,
+                "raw_results_count": raw,
+                "provider": provider,
+                "error": None,
+            }
+
+    search_block = data.get("search")
+    if isinstance(search_block, dict):
+        provider = search_block.get("provider") or data.get("search_provider")
+        results_count = int(
+            data.get("results_count", search_block.get("results_count", 0))
+        )
+        raw_results_count = int(
+            data.get("raw_results_count", search_block.get("raw_results_count", 0))
+        )
+    else:
+        provider = data.get("search_provider")
+        results_count = int(data.get("results_count", 0))
+        raw_results_count = int(data.get("raw_results_count", 0))
+
+    return {
+        "live_data": bool(data.get("live_data", results_count > 0)),
+        "results_count": results_count,
+        "raw_results_count": raw_results_count,
+        "provider": provider,
+        "error": data.get("error"),
+    }
