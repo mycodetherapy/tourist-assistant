@@ -40,6 +40,7 @@ python main.py
 
 ```bash
 python3 -m unittest discover -s tests -v
+python3 -m eval --suite smoke
 ```
 
 ### Переменные окружения
@@ -50,6 +51,9 @@ python3 -m unittest discover -s tests -v
 | `PROXY_BASE_URL` | Нет | По умолчанию `https://openai.api.proxyapi.ru/v1` |
 | `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`) |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
+| `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
+| `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
+| `LANGCHAIN_PROJECT` | Нет | Имя проекта (по умолчанию `tourist-assistant`) |
 
 Шаблон: [`.env.example`](.env.example).
 
@@ -59,26 +63,30 @@ python3 -m unittest discover -s tests -v
 
 ```mermaid
 flowchart TB
-    CLI[CLI: новая / продолжить]
-    Q[Опросник 7 вопросов]
+    CLI[CLI]
     DB[(SQLite)]
     subgraph graph [LangGraph]
-        planner -->|tool_calls| executor
-        planner -->|готово| finalize
-        executor --> planner
+        researcher -->|tool_calls| executor
+        researcher --> writer
+        executor --> researcher
+        writer --> critic
+        critic -->|retry| researcher
+        critic --> human_review
+        human_review -->|нет| researcher
+        human_review --> END
     end
-    CLI --> Q
-    Q --> DB
     CLI --> graph
+    executor -->|tool_runs| DB
     graph --> DB
-    finalize --> END
 ```
 
 | Узел | Роль |
 |------|------|
-| `planner` | LLM планирует и вызывает инструменты (с учётом предпочтений) |
-| `executor` | Выполняет веб-поиск, возвращает `ToolMessage` |
-| `finalize` | Собирает структурированную программу (`FinalProgram`) |
+| `researcher` | LLM + tool_calls (веб-поиск по предпочтениям) |
+| `executor` | Выполняет tools, пишет `tool_runs` в SQLite |
+| `writer` | Собирает `FinalProgram` |
+| `critic` | Детерминированные проверки (tools, ссылки) |
+| `human_review` | Утвердить программу? Y/n |
 
 **Инструменты (3):**
 
@@ -98,7 +106,10 @@ flowchart TB
 |------|--------|
 | SQLite, опросник, продолжить поездку | ✅ |
 | Частичный пересбор разделов | ✅ |
-| Мультиагентность, HITL, eval, observability | 🔜 |
+| Просмотр подробностей поездки | ✅ |
+| tool_runs, мультиагентность, HITL | ✅ |
+| Eval smoke + LangSmith metadata | ✅ |
+| OpenTelemetry | 🔜 |
 
 ---
 
@@ -165,6 +176,9 @@ tourist-assistant/
 ├── onboarding/             # Опросник, TripPreferences
 ├── search/                 # search_context для enrich_query
 ├── planning/               # rebuild_scope, merge разделов
+├── agents/                 # critic, human_review
+├── observability/          # LangSmith metadata
+├── eval/                   # python -m eval --suite smoke
 ├── tests/                  # unittest без LLM
 ├── data/                   # trips.db (в .gitignore)
 ├── requirements.txt

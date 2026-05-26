@@ -1,0 +1,23 @@
+# Smoke-набор для offline eval (без живого LLM при --mock-tools)
+cases:
+  - id: spb_culture_smoke
+    city: Санкт-Петербург
+    dates: 1-4 августа 2026
+    origin_city: Москва
+    user_query: культурная программа
+    expect:
+      tools:
+        - search_roundtrip_tickets
+        - search_culture_events
+        - search_dining_and_transport
+      sections:
+        - tickets
+        - events
+        - dining
+        - transport
+        - lifehacks
+      min_restaurant_links: 6
+      tickets_markers:
+        - "✈"
+        - "🚂"
+        - "🚌"
