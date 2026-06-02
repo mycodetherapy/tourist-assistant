@@ -37,7 +37,7 @@ class TestRepository(unittest.TestCase):
         self.assertEqual(loaded["pace"], "moderate")
 
         program = {
-            "tickets": "✈️",
+            "tickets": "Самолёт: ссылка\nПоезд: ссылка\nАвтобус: ссылка",
             "events": "музей",
             "dining": "кафе",
             "transport": "метро",

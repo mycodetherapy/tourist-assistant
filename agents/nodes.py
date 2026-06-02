@@ -149,7 +149,7 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     system = SystemMessage(
         content=(
             "Составь программу по ToolMessage. Строго раздели:\n"
-            "- tickets: три блока со ссылками — ✈️ самолёт, 🚂 поезд (РЖД/Tutu), 🚌 автобус "
+            "- tickets: три блока со ссылками — самолёт, поезд (РЖД/Tutu), автобус "
             "(из search_roundtrip_tickets).\n"
             "- events: музеи/выставки/концерты, сгруппируй по району (пешком 10–15 мин "
             "между точками), из search_culture_events + walking_area.\n"

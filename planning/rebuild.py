@@ -15,7 +15,7 @@ RebuildScope = Literal[
 
 REBUILD_SCOPES: list[tuple[str, str]] = [
     ("full", "Всю программу"),
-    ("tickets", "Только билеты (✈️ 🚂 🚌)"),
+    ("tickets", "Только билеты (самолёт/поезд/автобус)"),
     ("events", "Только мероприятия"),
     ("dining", "Только питание"),
     ("transport", "Только транспорт в городе"),

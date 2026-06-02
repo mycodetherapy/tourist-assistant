@@ -37,9 +37,14 @@ def run_critic(state: dict[str, Any]) -> tuple[bool, str]:
 
     if program and scope in ("full", "tickets"):
         tickets = str(program.get("tickets", ""))
-        for marker in ("✈", "🚂", "🚌"):
-            if marker not in tickets:
-                issues.append(f"в билетах нет {marker}")
+        # Требуем явные словесные подписи блоков в разделе "Билеты".
+        # Это делает формат менее хрупким (без эмодзи) и позволяет детерминированно
+        # проверять полноту: самолёт / поезд / автобус.
+        required_labels = ("самол", "поезд", "автобус")
+        lower = tickets.lower()
+        for label in required_labels:
+            if label not in lower:
+                issues.append(f"в билетах нет «{label}…»")
 
     if issues:
         return False, "; ".join(issues)

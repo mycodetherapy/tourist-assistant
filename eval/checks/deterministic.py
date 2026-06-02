@@ -35,8 +35,11 @@ def check_links_and_markers(
     if links < min_restaurant_links:
         issues.append(f"dining: {links} ссылок (ожидалось ≥{min_restaurant_links})")
     tickets = str(program.get("tickets", ""))
-    for marker in tickets_markers or ("✈", "🚂", "🚌"):
-        if marker not in tickets:
+    # По умолчанию проверяем словесные подписи блоков вместо эмодзи.
+    # Маркеры задаются как подстроки, поэтому достаточно "самол", "поезд", "автобус".
+    lower = tickets.lower()
+    for marker in tickets_markers or ("самол", "поезд", "автобус"):
+        if str(marker).lower() not in lower:
             issues.append(f"tickets: нет маркера {marker}")
     return issues
 

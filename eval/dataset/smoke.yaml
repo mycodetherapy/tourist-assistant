@@ -18,6 +18,6 @@ cases:
         - lifehacks
       min_restaurant_links: 6
       tickets_markers:
-        - "✈"
-        - "🚂"
-        - "🚌"
+        - "самол"
+        - "поезд"
+        - "автобус"

@@ -22,7 +22,7 @@ class TestCritic(unittest.TestCase):
                 ),
             ],
             "program": {
-                "tickets": "✈️ 🚂 🚌",
+                "tickets": "Самолёт: https://x.ru\nПоезд: https://y.ru\nАвтобус: https://z.ru",
                 "dining": " ".join(f"https://x{i}.ru" for i in range(7)),
             },
         }
