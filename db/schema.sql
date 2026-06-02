@@ -57,5 +57,20 @@ CREATE TABLE IF NOT EXISTS section_artifacts (
     PRIMARY KEY (trip_id, section)
 );
 
+-- Метрики прогонов агента (latency / tokens / cost). Источник tokens/cost: OpenAI callback (если доступен).
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    run_id TEXT NOT NULL,
+    rebuild_scope TEXT NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    total_tokens INTEGER,
+    total_cost_usd REAL,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_trips_updated ON trips(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tool_runs_trip ON tool_runs(trip_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_trip ON agent_runs(trip_id);

@@ -330,6 +330,68 @@ def log_tool_run(
         return int(cursor.lastrowid)
 
 
+def log_agent_run(
+    trip_id: int,
+    *,
+    run_id: str,
+    rebuild_scope: str,
+    duration_ms: int,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    total_tokens: int | None = None,
+    total_cost_usd: float | None = None,
+) -> int:
+    """Пишет агрегированные метрики одного прогона графа."""
+    now = _utc_now()
+    with connect() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO agent_runs (
+                trip_id, run_id, rebuild_scope, duration_ms,
+                prompt_tokens, completion_tokens, total_tokens, total_cost_usd,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                trip_id,
+                run_id,
+                rebuild_scope,
+                int(duration_ms),
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+                total_cost_usd,
+                now,
+            ),
+        )
+        conn.commit()
+        return int(cursor.lastrowid)
+
+
+def list_agent_runs(trip_id: int | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    """Последние прогоны агента (по поездке или по всем поездкам)."""
+    where = ""
+    params: tuple[Any, ...] = (limit,)
+    if trip_id is not None:
+        where = "WHERE trip_id = ?"
+        params = (trip_id, limit)
+    with connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT trip_id, run_id, rebuild_scope, duration_ms,
+                   prompt_tokens, completion_tokens, total_tokens, total_cost_usd,
+                   created_at
+            FROM agent_runs
+            {where}
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def list_tool_runs(trip_id: int, limit: int = 50) -> list[dict[str, Any]]:
     """Последние вызовы tools для поездки."""
     with connect() as conn:

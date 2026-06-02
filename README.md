@@ -71,6 +71,19 @@ python3 -m eval --suite smoke --with-llm
 
 Eval проверяет **fixtures** в `eval/fixtures/` (схема программы, tool_runs, regression к `eval/golden/`), а не живой интернет.
 
+### Benchmark (10+ кейсов)
+
+Минимальный benchmark для диплома лежит в `eval/dataset/smoke.yaml` (**10 кейсов**). Каждый кейс содержит:
+
+- **input**: `city`, `dates`, `origin_city`, `user_query`
+- **expected output**: ожидаемые tools, секции и детерминированные маркеры (ссылки/подписи)
+
+Запуск и success rate:
+
+```bash
+python3 -m eval --suite smoke
+```
+
 ### Переменные окружения
 
 | Переменная | Обязательно | Описание |
@@ -89,6 +102,10 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
 | `LANGCHAIN_PROJECT` | Нет | Имя проекта (по умолчанию `tourist-assistant`) |
+| `LANGFUSE_ENABLED` | Нет | `true` — включить трейсы в LangFuse (self-hosted) |
+| `LANGFUSE_HOST` | Нет | URL LangFuse, например `http://localhost:3000` |
+| `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
+| `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
 Шаблон: [`.env.example`](.env.example).
 
@@ -161,6 +178,7 @@ python3 scripts/render_graph.py
 | **SQLite** (`DATABASE_PATH`) | `trips`, `trip_preferences`, `user_profile`, `itinerary_versions`, `tool_runs` |
 | **Tavily API** (опционально) | Веб-поиск с ответом-сводкой |
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
+| **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
 | **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
 | **Aviasales / Яндекс.Путешествия** | Сниппеты по авиабилетам |
 | **РЖД / Tutu.ru** | Поезда |
@@ -178,6 +196,74 @@ python3 scripts/render_graph.py
 - **Память и итерации**: SQLite, частичный пересбор, HITL без потери контекста поездки.
 
 Детерминированный пайплайн «3 HTTP-запроса → шаблон» не покрывает вариативность запросов и качество сниппетов.
+
+### Почему здесь не нужен RAG
+
+В этом проекте RAG **не даёт ключевой пользы**, потому что задача требует **актуальных данных** (события, цены, расписания) и **ссылок на первоисточники**. Поэтому основной подход — web-search tools + структурирование результата:
+
+- Источник знаний — **живой веб‑поиск** (`ddgs` / Tavily) и ссылки в `digest`, а не статичный корпус документов.
+- SQLite здесь — **память/версии/профиль**, а не база знаний для retrieval.
+- RAG усложнит систему (эмбеддинги, актуализация, качество корпуса), но не решит проблему «актуальность» — всё равно нужен web.
+Если расширять проект дальше, RAG был бы уместен для локальной базы: FAQ по визам/транспорту, чек‑листы, правила пересадок, «best practices» по городу и т.п.
+
+---
+
+## Observability (LangFuse + LangSmith)
+
+### LangFuse (self-hosted)
+
+1) Поднять LangFuse локально:
+
+```bash
+cd docker/langfuse
+cp .env.example .env
+docker compose --env-file .env -f docker-compose.yml up -d
+```
+
+2) Взять ключи проекта в UI LangFuse (`http://localhost:3000`) и прописать в `.env` проекта:
+
+- `LANGFUSE_ENABLED=true`
+- `LANGFUSE_HOST=http://localhost:3000`
+- `LANGFUSE_PUBLIC_KEY=...`
+- `LANGFUSE_SECRET_KEY=...`
+
+3) Запустить `python3 main.py` — трейсинг пойдёт через LangChain callbacks.
+
+### LangSmith (опционально, параллельно)
+
+LangSmith можно включить одновременно с LangFuse:
+
+- `LANGCHAIN_TRACING_V2=true`
+- `LANGCHAIN_API_KEY=...`
+- `LANGCHAIN_PROJECT=tourist-assistant`
+
+---
+
+## Метрики (для README диплома)
+
+- **Success rate**: `python3 -m eval --suite smoke` (10 кейсов)
+- **Latency p95 / cost per run**: после нескольких запусков CLI:
+
+```bash
+python3 -m scripts.metrics_report --limit 50
+```
+
+Примечание: стоимость/токены пишутся через `get_openai_callback()` и могут быть пустыми для не-OpenAI провайдеров.
+
+---
+
+## Security checklist
+
+Отметки: ✅ done / ➖ n/a / ⏳ open
+
+- ✅ **Secrets**: ключи только через env (`.env` в `.gitignore`), шаблон — `.env.example`.
+- ✅ **Prompt-injection (user input)**: `sanitize_and_validate` + паттерны `INJECTION_PATTERNS`.
+- ✅ **Tool safety**: tools не выполняют произвольный код и не пишут файлы; выход — строковый payload.
+- ⏳ **Allowlist доменов**: есть смысловой фильтр `SEARCH_FILTERS`, но нет жёсткой allowlist доменов.
+- ⏳ **PII**: в SQLite сохраняются запрос и предпочтения; нет маскирования/политики хранения.
+- ✅ **Ошибки внешних систем**: tool error попадает в `ToolMessage`, граф не падает, `live_data=false` в логах.
+- ⏳ **Rate limiting**: есть таймаут поиска (`SEARCH_TIMEOUT`), но нет общего лимита попыток/бюджета.
+- ➖ **Multi-user auth**: не применимо (локальный CLI).
 
 ### Сложные и нестандартные ситуации
 

@@ -1,0 +1,20 @@
+[
+  {
+    "tool_name": "search_roundtrip_tickets",
+    "live_data": true,
+    "results_count": 8,
+    "raw_results_count": 10
+  },
+  {
+    "tool_name": "search_culture_events",
+    "live_data": true,
+    "results_count": 6,
+    "raw_results_count": 8
+  },
+  {
+    "tool_name": "search_dining_and_transport",
+    "live_data": true,
+    "results_count": 12,
+    "raw_results_count": 15
+  }
+]

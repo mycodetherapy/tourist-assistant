@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
+from time import perf_counter
 from typing import Any
 
 from langchain_core.messages import HumanMessage
@@ -23,6 +25,7 @@ from db import (
     init_db,
     list_planned_trips,
     list_trips,
+    log_agent_run,
     save_itinerary_version,
     save_preferences,
     save_user_profile,
@@ -31,7 +34,14 @@ from db import (
 from input_validation import sanitize_and_validate
 from models.schemas import FinalProgram
 from models.state import AgentState
-from observability import invoke_config, langsmith_enabled
+from observability import (
+    build_langfuse_callbacks,
+    invoke_config,
+    langfuse_enabled,
+    langfuse_metadata,
+    langsmith_enabled,
+)
+from observability.langfuse_ingestion import send_trace_create
 from onboarding import (
     TripPreferences,
     build_search_context,
@@ -55,6 +65,8 @@ def _run_graph(state: AgentState) -> AgentState:
     print(f"\nЗапуск: {state['origin_city']} → {state['city']}, {state['dates']}")
     if langsmith_enabled():
         print("Трейсинг: LangSmith включён (LANGCHAIN_TRACING_V2)")
+    if langfuse_enabled():
+        print("Трейсинг: LangFuse включён (LANGFUSE_ENABLED)")
     print(
         "Агенты: researcher → executor → writer → critic → human_review "
         "(1–2 минуты)...\n"
@@ -70,7 +82,81 @@ def _run_graph(state: AgentState) -> AgentState:
         trip_id,
         rebuild_scope=state.get("rebuild_scope", "full"),
     )
-    return app.invoke(run_state, config=config)
+    callbacks = build_langfuse_callbacks()
+    if langfuse_enabled() and not callbacks:
+        print(
+            "Трейсинг: LangFuse включён, но callbacks не инициализировались "
+            "(проверьте, что установлен пакет `langfuse` и заданы ключи)."
+        )
+    if callbacks:
+        config["callbacks"] = [*callbacks, *(config.get("callbacks") or [])]
+        config.setdefault("metadata", {}).update(
+            langfuse_metadata(
+                trip_id=trip_id,
+                rebuild_scope=state.get("rebuild_scope", "full"),
+                retry_count=int(state.get("retry_count", 0)),
+            )
+        )
+        # LangFuse integration ругается на `metadata.tags` как list → приводим к строке.
+        tags = config.get("metadata", {}).get("tags")
+        if isinstance(tags, list):
+            config["metadata"]["tags"] = ",".join(str(t) for t in tags)
+    run_id = str(uuid.uuid4())
+    scope = str(state.get("rebuild_scope", "full"))
+    started = perf_counter()
+
+    # Метрики tokens/cost: работает для OpenAI-compatible LLM вызовов LangChain.
+    # Для RU/нестандартных провайдеров callback может вернуть 0 — это ок.
+    cb = None
+    try:
+        from langchain_community.callbacks.manager import (  # type: ignore
+            get_openai_callback,
+        )
+    except Exception:
+        get_openai_callback = None  # type: ignore
+
+    if get_openai_callback is not None:
+        with get_openai_callback() as cb:
+            result = app.invoke(run_state, config=config)
+    else:
+        result = app.invoke(run_state, config=config)
+
+    duration_ms = int((perf_counter() - started) * 1000)
+    prompt_tokens = int(getattr(cb, "prompt_tokens", 0)) if cb else None
+    completion_tokens = int(getattr(cb, "completion_tokens", 0)) if cb else None
+    total_tokens = int(getattr(cb, "total_tokens", 0)) if cb else None
+    total_cost_usd = float(getattr(cb, "total_cost", 0.0)) if cb else None
+
+    log_agent_run(
+        trip_id,
+        run_id=run_id,
+        rebuild_scope=scope,
+        duration_ms=duration_ms,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        total_cost_usd=total_cost_usd,
+    )
+
+    # Надёжный трейсинг в LangFuse через ingestion API (минимум 1 trace на запуск).
+    _ = send_trace_create(
+        trace_id=run_id,
+        name="tourist-assistant-run",
+        input_data={
+            "trip_id": trip_id,
+            "city": state.get("city"),
+            "dates": state.get("dates"),
+            "origin_city": state.get("origin_city"),
+            "rebuild_scope": scope,
+        },
+        output_data={"approved": bool(result.get("approved")), "has_program": bool(result.get("program"))}
+        if isinstance(result, dict)
+        else {"approved": False},
+        tags=[f"trip:{trip_id}", f"scope:{scope}"],
+        metadata={"source": "cli", "langsmith": langsmith_enabled()},
+    )
+
+    return result
 
 
 def _apply_preferences_to_session(prefs: TripPreferences) -> str:

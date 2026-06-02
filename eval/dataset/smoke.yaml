@@ -21,3 +21,93 @@ cases:
         - "самол"
         - "поезд"
         - "автобус"
+
+  - id: msk_weekend_smoke
+    city: Москва
+    dates: 10-11 октября 2026
+    origin_city: Санкт-Петербург
+    user_query: выходные, музеи и рестораны
+    expect:
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
+      sections: [tickets, events, dining, transport, lifehacks]
+      min_restaurant_links: 6
+
+  - id: kazan_family_smoke
+    city: Казань
+    dates: 5-7 ноября 2026
+    origin_city: Москва
+    user_query: семейная поездка, без ночных мероприятий
+    expect:
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
+      sections: [tickets, events, dining, transport, lifehacks]
+      min_restaurant_links: 6
+
+  - id: sochi_food_smoke
+    city: Сочи
+    dates: 20-23 сентября 2026
+    origin_city: Екатеринбург
+    user_query: культура + акцент на кухню, рейтинг от 4.7
+    expect:
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
+      sections: [tickets, events, dining, transport, lifehacks]
+      min_restaurant_links: 6
+
+  - id: nnov_walk_smoke
+    city: Нижний Новгород
+    dates: 12-14 декабря 2026
+    origin_city: Москва
+    user_query: много пешком, центр
+    expect:
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
+      sections: [tickets, events, dining, transport, lifehacks]
+      min_restaurant_links: 6
+
+  - id: vladivostok_winter_smoke
+    city: Владивосток
+    dates: 2-5 января 2027
+    origin_city: Москва
+    user_query: зимняя поездка, музеи, транспорт
+    expect:
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
+      sections: [tickets, events, dining, transport, lifehacks]
+      min_restaurant_links: 6
+
+  - id: ekb_budget_smoke
+    city: Екатеринбург
+    dates: 15-18 августа 2026
+    origin_city: Пермь
+    user_query: бюджетно, но красиво
+    expect:
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
+      sections: [tickets, events, dining, transport, lifehacks]
+      min_restaurant_links: 6
+
+  - id: novosib_museum_smoke
+    city: Новосибирск
+    dates: 3-6 марта 2027
+    origin_city: Томск
+    user_query: музеи и выставки, без клубов
+    expect:
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
+      sections: [tickets, events, dining, transport, lifehacks]
+      min_restaurant_links: 6
+
+  - id: kaliningrad_history_smoke
+    city: Калининград
+    dates: 7-10 мая 2027
+    origin_city: Москва
+    user_query: история и музеи
+    expect:
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
+      sections: [tickets, events, dining, transport, lifehacks]
+      min_restaurant_links: 6
+
+  - id: spb_repeat_smoke
+    city: Санкт-Петербург
+    dates: 1-4 августа 2026
+    origin_city: Москва
+    user_query: пересобери программу, добавь больше выставок
+    expect:
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
+      sections: [tickets, events, dining, transport, lifehacks]
+      min_restaurant_links: 6
