@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from agents.critic import run_critic
 from agents.human_review import prompt_approve_program, prompt_reject_action
-from agents.llm import llm_final, llm_with_tools
+from agents.llm import get_llm_final, get_llm_with_tools
 from agents.print_program import print_final_program
 from db import log_tool_run, update_trip_status
 from models.schemas import (
@@ -76,6 +76,10 @@ def planner_node(state: AgentState) -> dict[str, list[Any]]:
         search_context=state.get("search_context", ""),
     )
     system = SystemMessage(content=_build_planner_system_prompt(ctx, rebuild_scope))
+    llm_with_tools = get_llm_with_tools(
+        city=state.get("city", ""),
+        llm_region=state.get("llm_region"),
+    )
     response: AIMessage = llm_with_tools.invoke([system, *state["messages"]])
 
     PlannerNodeOutput(message=response)
@@ -164,6 +168,10 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     )
     human = HumanMessage(content=human_message_for_scope(rebuild_scope))
 
+    llm_final = get_llm_final(
+        city=state.get("city", ""),
+        llm_region=state.get("llm_region"),
+    )
     draft: FinalProgram = llm_final.invoke([system, *state["messages"], human])
     merged = merge_program(base_program, draft.model_dump(), rebuild_scope)
     program = FinalProgram.model_validate(merged)

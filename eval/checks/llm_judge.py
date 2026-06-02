@@ -7,8 +7,9 @@ import os
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+
+from agents.llm import get_llm, infer_llm_region
 
 
 class JudgeVerdict(BaseModel):
@@ -30,12 +31,12 @@ def run_llm_judge(
     if not os.getenv("OPENAI_API_KEY"):
         return None, "OPENAI_API_KEY не задан"
 
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",
-        temperature=0,
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("PROXY_BASE_URL", "https://openai.api.proxyapi.ru/v1"),
-    )
+    # Judge привязываем к тому же региональному роутингу, что и основной агент.
+    # Temperature=0 — детерминированнее оценка при одинаковом входе.
+    region = os.getenv("LLM_REGION", "auto").strip().lower() or "auto"
+    if region == "auto":
+        region = infer_llm_region(city)
+    llm = get_llm(city=city, llm_region=region).bind(temperature=0)
     judge = llm.with_structured_output(JudgeVerdict, method="json_schema")
     system = SystemMessage(
         content=(

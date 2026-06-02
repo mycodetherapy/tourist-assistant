@@ -75,8 +75,15 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 
 | Переменная | Обязательно | Описание |
 |------------|-------------|----------|
-| `OPENAI_API_KEY` | Да* | Ключ для LLM (*не нужен для `unittest` и `eval --suite smoke` без `--with-llm`) |
-| `PROXY_BASE_URL` | Нет | По умолчанию `https://openai.api.proxyapi.ru/v1` |
+| `OPENAI_API_KEY` | Да* | Ключ ProxyAPI для зарубежных моделей (*не нужен для `unittest` и `eval --suite smoke` без `--with-llm`) |
+| `YANDEX_API_KEY` | Нет* | Ключ Yandex Cloud для `LLM_MODEL_RU` (*нужен для поездок по РФ при роутинге `ru`) |
+| `YANDEX_FOLDER_ID` | Нет | ID каталога YC; если не задан — берётся из `gpt://<folder_id>/...` в `LLM_MODEL_RU` |
+| `PROXY_BASE_URL` | Нет | Fallback endpoint, по умолчанию `https://openai.api.proxyapi.ru/v1` |
+| `LLM_REGION` | Нет | Роутинг модели: `auto`/`ru`/`intl` (по умолчанию `auto`) |
+| `LLM_MODEL_RU` | Нет | Модель Yandex (например `gpt://<folder>/aliceai-llm/latest`) |
+| `LLM_MODEL_INTL` | Нет | Модель ProxyAPI (например `gpt-4o-mini`) |
+| `PROXY_BASE_URL_RU` | Нет | Yandex: `https://llm.api.cloud.yandex.net/v1` (не proxyapi.ru) |
+| `PROXY_BASE_URL_INTL` | Нет | ProxyAPI: `https://openai.api.proxyapi.ru/v1` |
 | `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`, регион `ru-ru`) |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |

@@ -181,6 +181,14 @@ DEFAULT_PROXY_BASE_URL = "https://openai.api.proxyapi.ru/v1"
 LLM_MODEL = "gpt-4o-mini"
 LLM_TEMPERATURE = 0.2
 
+# Роутинг моделей (Россия vs зарубежье)
+# - LLM_REGION: auto|ru|intl — принудительный выбор региона (по умолчанию auto)
+# - LLM_MODEL_RU / LLM_MODEL_INTL: имена моделей для регионов (если не заданы — LLM_MODEL)
+# - PROXY_BASE_URL_RU / PROXY_BASE_URL_INTL: endpoint'ы (если не заданы — PROXY_BASE_URL/DEFAULT_PROXY_BASE_URL)
+LLM_REGION = "auto"
+LLM_MODEL_RU = LLM_MODEL
+LLM_MODEL_INTL = LLM_MODEL
+
 
 def ensure_env() -> None:
     """Проверяет обязательные переменные окружения перед запуском CLI."""
