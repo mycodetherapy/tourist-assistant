@@ -98,6 +98,7 @@ python3 -m eval --suite smoke
 | `PROXY_BASE_URL_RU` | Нет | Yandex: `https://llm.api.cloud.yandex.net/v1` (не proxyapi.ru) |
 | `PROXY_BASE_URL_INTL` | Нет | ProxyAPI: `https://openai.api.proxyapi.ru/v1` |
 | `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`, регион `ru-ru`) |
+| `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
@@ -139,7 +140,7 @@ python3 scripts/render_graph.py
 
 | Инструмент | Что ищет |
 |------------|----------|
-| `search_roundtrip_tickets` | Deep links: авиа (Aviasales, Яндекс, Google, Skyscanner), жд (РЖД, Tutu), автобус; JSON `offers[]` |
+| `search_roundtrip_tickets` | Deep links + опционально API авиа (`TRAVELPAYOUTS_API_KEY`); JSON `offers[]`, `schema_version=1` |
 | `search_culture_events` | Афиша, музеи, выставки (по району) |
 | `search_dining_and_transport` | Рестораны (много ссылок) + транспорт |
 
@@ -183,11 +184,11 @@ python3 scripts/render_graph.py
 | **Aviasales / Яндекс.Путешествия / Google / Skyscanner** | Deep links на поиск авиа с датами (фаза 1) |
 | **РЖД / Tutu.ru** | Deep links на жд |
 | **Bus.tutu.ru / E-traffic** | Deep links на автобус |
-| **Travelpayouts / Aviasales API** (фаза 2, опционально) | Реальные рейсы и пересадки — `TRAVELPAYOUTS_API_KEY` |
+| **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
 | **Афиша / Kassir.ru** | Мероприятия |
 | **2GIS / Яндекс.Карты / TripAdvisor** | Рестораны и транспорт |
 
-Билеты: **не** веб-поиск, а `search/ticket_links.py` + Pydantic-контракт `models/tickets.py`. Афиша и рестораны — поиск как раньше. Партнёрский API авиа (фаза 2) — отдельно, когда задан ключ.
+Билеты: `search/ticket_links.py` (deep links) + `search/providers/avia.py` (API при `TRAVELPAYOUTS_API_KEY`). Контракт — `models/tickets.py`. Афиша и рестораны — веб-поиск как раньше.
 
 ### Почему нужен именно агент, а не workflow?
 
@@ -309,6 +310,7 @@ tourist-assistant/
 │   ├── tools.py            # @tool, TOOLS, TOOL_MAP
 │   ├── tickets_search.py   # оркестрация билетов
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu, …
+│   ├── providers/avia.py   # Travelpayouts prices_for_dates
 │   ├── city_codes.py       # город → IATA
 │   ├── context.py          # search_context сессии
 │   └── tool_logging.py     # разбор payload для tool_runs

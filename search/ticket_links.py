@@ -311,6 +311,12 @@ def format_offers_summary(
             continue
         lines.append(f"**{title}**:")
         for item in block:
-            lines.append(f"- {item.label}: {item.booking_url}")
+            price = (
+                f", от {item.price_from} ₽"
+                if item.source.value == "api" and item.price_from
+                else ""
+            )
+            src = f" [{item.source.value}]" if item.source.value == "api" else ""
+            lines.append(f"- {item.label}{price}{src}: {item.booking_url}")
         lines.append("")
     return "\n".join(lines).strip()

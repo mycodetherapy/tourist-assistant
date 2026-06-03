@@ -36,6 +36,8 @@ INJECTION_PATTERNS: list[re.Pattern[str]] = [
 
 # Веб-поиск
 SEARCH_TIMEOUT = 30
+AVIA_API_TIMEOUT = 30
+AVIA_API_LIMIT = 5
 MAX_SEARCH_RESULTS = 10
 KIND_MAX_RESULTS: dict[str, int] = {
     "tickets": 12,
