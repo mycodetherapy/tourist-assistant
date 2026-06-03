@@ -31,6 +31,21 @@ class PlannerContext(BaseModel):
     search_context: str = ""
 
 
+class ProgramDraft(BaseModel):
+    """Секции программы от LLM (без билетов — их подставляет finalize из tool)."""
+
+    events: str = Field(
+        ...,
+        description="Музеи, выставки, мероприятия (желательно в одном районе для прогулок)",
+    )
+    dining: str = Field(
+        ...,
+        description="Рестораны и кафе со ссылками, рядом с мероприятиями (пешая доступность)",
+    )
+    transport: str = Field(..., description="Транспортная логистика в городе")
+    lifehacks: str = Field(..., description="Полезные лайфхаки для туриста")
+
+
 class FinalProgram(BaseModel):
     """Структурированная культурная программа поездки."""
 

@@ -7,6 +7,7 @@ from typing import Any, Literal
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agents.critic import run_critic
+from agents.finalize_helpers import prepare_finalize_messages, resolve_tickets_section
 from agents.human_review import prompt_approve_program, prompt_reject_action
 from agents.llm import get_llm_final, get_llm_with_tools
 from agents.print_program import print_final_program
@@ -16,6 +17,7 @@ from models.schemas import (
     FinalProgram,
     PlannerContext,
     PlannerNodeOutput,
+    ProgramDraft,
 )
 from models.state import AgentState
 from planning import (
@@ -150,18 +152,25 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     if ctx.search_context:
         prefs_note = f"\nУчти предпочтения: {ctx.search_context}\n"
     scope_note = finalize_extra_prompt(rebuild_scope, base_program)
+    tickets_body = resolve_tickets_section(
+        messages=state["messages"],
+        base_program=base_program,
+        origin_city=ctx.origin_city,
+        destination_city=ctx.city,
+        dates=ctx.dates,
+        rebuild_scope=rebuild_scope,
+    )
+
     system = SystemMessage(
         content=(
-            "Составь программу по ToolMessage. Строго раздели:\n"
-            "- tickets: три блока — самолёт, поезд, автобус; только offers/summary_for_llm "
-            "из search_roundtrip_tickets (deep links с датами).\n"
+            "Составь программу по ToolMessage (без раздела билетов — он уже готов).\n"
             "- events: музеи/выставки/концерты, сгруппируй по району (пешком 10–15 мин "
             "между точками), из search_culture_events + walking_area.\n"
             "- dining: минимум 6–8 ресторанов/кафе со ссылками из restaurants_digest; "
             "у каждого укажи район и «рядом с …» (музей из events).\n"
             "- transport: метро/маршруты из transport_digest.\n"
             "- lifehacks: советы по пешим маршрутам «музей → обед → музей».\n"
-            "Цены билетов не выдумывай (API авиа позже); для events/dining — только digest.\n"
+            "Для events/dining — только факты из digest.\n"
             f"Город: {ctx.city}. Даты: {ctx.dates}. Вылет из: {ctx.origin_city}."
             f"{prefs_note}{scope_note}"
         )
@@ -172,8 +181,11 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
         city=state.get("city", ""),
         llm_region=state.get("llm_region"),
     )
-    draft: FinalProgram = llm_final.invoke([system, *state["messages"], human])
-    merged = merge_program(base_program, draft.model_dump(), rebuild_scope)
+    finalize_messages = prepare_finalize_messages(state["messages"])
+    draft: ProgramDraft = llm_final.invoke([system, *finalize_messages, human])
+    full_draft = {**draft.model_dump(), "tickets": tickets_body}
+    merged = merge_program(base_program, full_draft, rebuild_scope)
+    merged["tickets"] = tickets_body
     program = FinalProgram.model_validate(merged)
 
     print_final_program(program)
@@ -218,7 +230,7 @@ def human_review_node(state: AgentState) -> dict[str, Any]:
         return {"approved": True}
 
     print("Повторная сборка по замечаниям...\n")
-    return {
+    result: dict[str, Any] = {
         "approved": False,
         "retry_count": state.get("retry_count", 0) + 1,
         "messages": [
@@ -230,6 +242,9 @@ def human_review_node(state: AgentState) -> dict[str, Any]:
             )
         ],
     }
+    if state.get("program"):
+        result["base_program"] = state["program"]
+    return result
 
 
 def route_entry(state: AgentState) -> Literal["researcher", "writer"]:

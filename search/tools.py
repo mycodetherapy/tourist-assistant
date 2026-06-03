@@ -41,7 +41,7 @@ def search_roundtrip_tickets(
 ) -> str:
     """
     Билеты туда-обратно: deep links на агрегаторы с датами и маршрутом.
-    Самолёт (Aviasales, Яндекс, Google, Skyscanner), поезд (РЖД, Tutu), автобус.
+    Самолёт (Aviasales + API), поезд (РЖД, Tutu), автобус (Bus.tutu.ru).
     Возвращает JSON schema_version=1 с полем offers.
     """
     result = run_tickets_search(origin_city, destination_city, dates)

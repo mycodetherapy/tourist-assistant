@@ -15,21 +15,11 @@ from models.tickets import (
     TicketSegment,
     TransportMode,
 )
+from search.aviasales_urls import build_aviasales_search_url
 
-AVIASALES_SITE = "https://www.aviasales.ru"
 API_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
 
 AviaApiStatus = Literal["disabled", "ok", "empty", "error"]
-
-
-def _booking_url(link: str) -> str:
-    if not link:
-        return AVIASALES_SITE
-    if link.startswith("http"):
-        return link
-    if link.startswith("/"):
-        return f"{AVIASALES_SITE}{link}"
-    return f"{AVIASALES_SITE}/{link}"
 
 
 def _format_label(item: dict, transfers: int) -> str:
@@ -43,7 +33,12 @@ def _format_label(item: dict, transfers: int) -> str:
     return ", ".join(parts)
 
 
-def _map_item(item: dict, origin_iata: str, dest_iata: str) -> TicketOffer:
+def _map_item(
+    item: dict,
+    origin_iata: str,
+    dest_iata: str,
+    search_url: str,
+) -> TicketOffer:
     transfers = int(item.get("transfers") or 0)
     origin_airport = item.get("origin_airport") or origin_iata
     dest_airport = item.get("destination_airport") or dest_iata
@@ -63,7 +58,7 @@ def _map_item(item: dict, origin_iata: str, dest_iata: str) -> TicketOffer:
             )
         ],
         price_from=int(item["price"]) if item.get("price") is not None else None,
-        booking_url=_booking_url(str(item.get("link") or "")),
+        booking_url=search_url,
         label=_format_label(item, transfers),
         provider="Aviasales API",
         confidence="high",
@@ -126,6 +121,15 @@ def fetch_avia_offers(
     if not isinstance(data, list) or not data:
         return [], "empty"
 
-    offers = [_map_item(row, origin_iata, destination_iata) for row in data[:max_items]]
+    search_url = build_aviasales_search_url(
+        origin_iata,
+        destination_iata,
+        parsed.departure,
+        parsed.return_date,
+    )
+    offers = [
+        _map_item(row, origin_iata, destination_iata, search_url)
+        for row in data[:max_items]
+    ]
     print(f"  → авиа API: {len(offers)} вариантов")
     return offers, "ok"

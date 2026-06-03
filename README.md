@@ -187,9 +187,9 @@ python3 scripts/render_graph.py
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
 | **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
 | **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
-| **Aviasales / Яндекс.Путешествия / Google / Skyscanner** | Deep links на поиск авиа с датами (фаза 1) |
-| **РЖД / Tutu.ru** | Deep links на жд |
-| **Bus.tutu.ru / E-traffic** | Deep links на автобус |
+| **Aviasales** | Deep links на поиск авиа с датами |
+| **РЖД / Tutu.ru** | Deep links на жд (`ticket.rzd.ru`, `tutu.ru/poezda/…`) |
+| **Bus.tutu.ru** | Deep links на автобус (в одну сторону) |
 | **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
 | **Афиша / Kassir.ru** | Мероприятия |
 | **2GIS / Яндекс.Карты / TripAdvisor** | Рестораны и транспорт |
@@ -315,7 +315,8 @@ tourist-assistant/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool, TOOLS, TOOL_MAP
 │   ├── tickets_search.py   # оркестрация билетов
-│   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu, …
+│   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
+│   ├── transport_codes.py  # коды Tutu/РЖД для URL
 │   ├── providers/avia.py   # Travelpayouts prices_for_dates
 │   ├── city_codes.py       # город → IATA
 │   ├── context.py          # search_context сессии

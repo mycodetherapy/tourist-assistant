@@ -14,7 +14,7 @@ from functools import lru_cache
 from langchain_openai import ChatOpenAI
 
 from config import settings
-from models.schemas import FinalProgram
+from models.schemas import ProgramDraft
 from search.tools import TOOLS
 
 _RUS_CITIES_LATIN = {
@@ -172,8 +172,9 @@ def get_llm_with_tools(*, city: str = "", llm_region: str | None = None):
 
 
 def get_llm_final(*, city: str = "", llm_region: str | None = None):
+    # Билеты не в схеме LLM — иначе json_schema ломается на больших tool JSON.
     return get_llm(city=city, llm_region=llm_region).with_structured_output(
-        FinalProgram,
+        ProgramDraft,
         method="json_schema",
     )
 

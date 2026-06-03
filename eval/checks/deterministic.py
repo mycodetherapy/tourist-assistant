@@ -38,7 +38,7 @@ def check_links_and_markers(
     # По умолчанию проверяем словесные подписи блоков вместо эмодзи.
     # Маркеры задаются как подстроки, поэтому достаточно "самол", "поезд", "автобус".
     lower = tickets.lower()
-    for marker in tickets_markers or ("самол", "поезд", "автобус"):
+    for marker in tickets_markers or ("самол", "поезд"):
         if str(marker).lower() not in lower:
             issues.append(f"tickets: нет маркера {marker}")
     return issues

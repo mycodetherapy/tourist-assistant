@@ -34,7 +34,7 @@ def _instruction_for(avia_api_status: str) -> str:
     return (
         f"{_TICKETS_INSTRUCTION_BASE} "
         "Цены по авиа не выдумывай — только deep links, «цена на сайте». "
-        "Укажи, что стыковки видны на Aviasales/Яндекс."
+        "Укажи, что стыковки видны на Aviasales."
     )
 
 

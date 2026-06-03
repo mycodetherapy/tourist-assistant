@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 import unittest
 from datetime import date
+from unittest.mock import patch
 
-from models.tickets import TicketsSearchOutput, TransportMode
+from models.tickets import OfferSource, TicketOffer, TicketsSearchOutput, TransportMode
 from planning.dates import parse_trip_dates
 from search.city_codes import city_to_iata
-from search.ticket_links import build_ticket_offers
+from search.ticket_links import build_ticket_offers, format_offers_summary
 from search.providers.avia import fetch_avia_offers
 from search.tickets_search import run_tickets_search
 from search.tool_logging import parse_tool_result
-from unittest.mock import patch
 
 
 class TestParseTripDates(unittest.TestCase):
@@ -35,22 +35,77 @@ class TestTicketLinks(unittest.TestCase):
         self.assertEqual(city_to_iata("Саратов"), "GSV")
         self.assertEqual(city_to_iata("Сыктывкар"), "SCW")
 
-    def test_build_offers_has_three_modes(self) -> None:
-        parsed = parse_trip_dates("15-18 июля 2026")
-        offers = build_ticket_offers("Саратов", "Сыктывкар", parsed)
+    def test_build_offers_saratov_moscow(self) -> None:
+        parsed = parse_trip_dates("18-21 июня 2026")
+        offers = build_ticket_offers("Саратов", "Москва", parsed)
         modes = {o.mode for o in offers}
         self.assertIn(TransportMode.plane, modes)
         self.assertIn(TransportMode.train, modes)
         self.assertIn(TransportMode.bus, modes)
+        providers = {o.provider for o in offers}
+        self.assertEqual(
+            {p for o in offers if o.mode == TransportMode.plane for p in [o.provider]},
+            {"Aviasales"},
+        )
+        self.assertNotIn("Яндекс", " ".join(providers))
+        self.assertNotIn("Google", " ".join(providers))
+        self.assertNotIn("Skyscanner", " ".join(providers))
+        self.assertNotIn("E-traffic", " ".join(providers))
+
+    def test_tutu_train_url_format(self) -> None:
+        parsed = parse_trip_dates("18 июня 2026")
+        offers = build_ticket_offers("Саратов", "Москва", parsed)
+        tutu = next(o for o in offers if o.provider == "Tutu.ru")
+        self.assertEqual(
+            tutu.booking_url,
+            "https://www.tutu.ru/poezda/Saratov/Moskva/?date=18.06.2026&travelers=1",
+        )
+
+    def test_rzd_url_format(self) -> None:
+        parsed = parse_trip_dates("18 июня 2026")
+        offers = build_ticket_offers("Саратов", "Москва", parsed)
+        rzd = next(o for o in offers if o.provider == "РЖД")
+        self.assertEqual(
+            rzd.booking_url,
+            "https://ticket.rzd.ru/searchresults/v/1/"
+            "5a13ba86340c745ca1e7eb03/5a323c29340c7441a0a556bb/"
+            "2026-6-18?adult=1",
+        )
+
+    def test_bus_tutu_one_way_url(self) -> None:
+        parsed = parse_trip_dates("15 июня 2026")
+        offers = build_ticket_offers("Саратов", "Москва", parsed)
+        bus = next(o for o in offers if o.provider == "Bus.tutu.ru")
+        self.assertTrue(bus.booking_url.startswith("https://bus.tutu.ru/raspisanie/gorod_Saratov/gorod_Moskva/"))
+        self.assertIn("date=15.06.2026", bus.booking_url)
+        self.assertIn("from=1433947", bus.booking_url)
+        self.assertIn("to=1447874", bus.booking_url)
+        self.assertIn("travelers=1", bus.booking_url)
+        self.assertIn("amount=1", bus.booking_url)
+
+    def test_summary_no_duplicate_price(self) -> None:
+        parsed = parse_trip_dates("1-4 августа 2026")
+        api_offer = TicketOffer(
+            mode=TransportMode.plane,
+            source=OfferSource.api,
+            is_direct=True,
+            transfers=0,
+            price_from=8469,
+            booking_url="https://www.aviasales.ru/search/test",
+            label="DP 6825, прямой, от 8469 ₽",
+            provider="Aviasales API",
+        )
+        summary = format_offers_summary("Москва", "Санкт-Петербург", parsed, [api_offer])
+        self.assertEqual(summary.count("от 8469 ₽"), 1)
 
     def test_aviasales_url_contains_dates(self) -> None:
         parsed = parse_trip_dates("15-18 июля 2026")
         offers = build_ticket_offers("Саратов", "Сыктывкар", parsed)
         avia = next(o for o in offers if o.provider == "Aviasales")
-        self.assertIn("aviasales.ru", avia.booking_url)
-        self.assertTrue(
-            "GSV" in avia.booking_url.upper() or "search" in avia.booking_url
-        )
+        self.assertIn("aviasales.ru/search/", avia.booking_url)
+        self.assertIn("GSV1507", avia.booking_url.upper())
+        self.assertIn("SCW1807", avia.booking_url.upper())
+        self.assertNotIn("?t=", avia.booking_url)
 
 
 class TestAviaApi(unittest.TestCase):
@@ -79,6 +134,8 @@ class TestAviaApi(unittest.TestCase):
         self.assertEqual(offers[0].source.value, "api")
         self.assertEqual(offers[0].transfers, 1)
         self.assertEqual(offers[0].price_from, 12000)
+        self.assertIn("/search/", offers[0].booking_url)
+        self.assertNotIn("?t=", offers[0].booking_url)
 
     def test_fetch_disabled_without_key(self) -> None:
         parsed = parse_trip_dates("15-18 июля 2026")
