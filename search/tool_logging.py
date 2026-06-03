@@ -41,11 +41,16 @@ def parse_tool_result(content: str) -> dict[str, Any]:
 
     if data.get("category") == "tickets" and data.get("schema_version") == "1":
         count = int(data.get("offers_count", data.get("results_count", 0)))
+        provider = (
+            "travelpayouts"
+            if data.get("avia_api_status") == "ok"
+            else "deep_links"
+        )
         return {
             "live_data": bool(data.get("live_data", count > 0)),
             "results_count": count,
             "raw_results_count": count,
-            "provider": "deep_links",
+            "provider": provider,
             "error": data.get("error"),
         }
 

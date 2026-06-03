@@ -2,8 +2,10 @@
   {
     "tool_name": "search_roundtrip_tickets",
     "live_data": true,
-    "results_count": 8,
-    "raw_results_count": 10
+    "results_count": 12,
+    "raw_results_count": 12,
+    "provider": "travelpayouts",
+    "avia_api_status": "ok"
   },
   {
     "tool_name": "search_culture_events",

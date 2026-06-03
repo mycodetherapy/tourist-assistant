@@ -34,6 +34,23 @@ def check_results_count(runs: list[dict[str, Any]]) -> list[str]:
     return issues
 
 
+def check_tickets_offers(
+    runs: list[dict[str, Any]],
+    min_offers: int,
+) -> list[str]:
+    """Минимум offers в search_roundtrip_tickets (deep links + API)."""
+    for row in runs:
+        if row.get("tool_name") != "search_roundtrip_tickets":
+            continue
+        count = int(row.get("results_count") or 0)
+        if count < min_offers:
+            return [
+                f"search_roundtrip_tickets: offers={count} (ожидалось ≥{min_offers})"
+            ]
+        return []
+    return ["search_roundtrip_tickets: нет записи в tool_runs"]
+
+
 def run_tool_checks(
     runs: list[dict[str, Any]],
     expect: dict[str, Any],
@@ -41,4 +58,7 @@ def run_tool_checks(
     issues = check_tools_called(runs, expect.get("tools", []))
     issues.extend(check_live_data(runs))
     issues.extend(check_results_count(runs))
+    min_ticket = expect.get("min_ticket_offers")
+    if min_ticket is not None:
+        issues.extend(check_tickets_offers(runs, int(min_ticket)))
     return issues

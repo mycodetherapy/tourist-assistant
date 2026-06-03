@@ -1,4 +1,5 @@
-# Smoke-набор для offline eval (без живого LLM при --mock-tools)
+# Smoke-набор для offline eval (fixtures в eval/fixtures/)
+# Билеты: обновить живыми данными — python3 scripts/refresh_tickets_fixtures.py
 cases:
   - id: spb_culture_smoke
     city: Санкт-Петербург
@@ -21,6 +22,7 @@ cases:
         - "самол"
         - "поезд"
         - "автобус"
+      min_ticket_offers: 6
 
   - id: msk_weekend_smoke
     city: Москва
@@ -31,6 +33,7 @@ cases:
       tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
       sections: [tickets, events, dining, transport, lifehacks]
       min_restaurant_links: 6
+      min_ticket_offers: 6
 
   - id: kazan_family_smoke
     city: Казань
@@ -41,6 +44,7 @@ cases:
       tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
       sections: [tickets, events, dining, transport, lifehacks]
       min_restaurant_links: 6
+      min_ticket_offers: 6
 
   - id: sochi_food_smoke
     city: Сочи
@@ -51,6 +55,7 @@ cases:
       tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
       sections: [tickets, events, dining, transport, lifehacks]
       min_restaurant_links: 6
+      min_ticket_offers: 6
 
   - id: nnov_walk_smoke
     city: Нижний Новгород
@@ -61,6 +66,7 @@ cases:
       tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
       sections: [tickets, events, dining, transport, lifehacks]
       min_restaurant_links: 6
+      min_ticket_offers: 6
 
   - id: vladivostok_winter_smoke
     city: Владивосток
@@ -71,6 +77,7 @@ cases:
       tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
       sections: [tickets, events, dining, transport, lifehacks]
       min_restaurant_links: 6
+      min_ticket_offers: 6
 
   - id: ekb_budget_smoke
     city: Екатеринбург
@@ -81,6 +88,7 @@ cases:
       tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
       sections: [tickets, events, dining, transport, lifehacks]
       min_restaurant_links: 6
+      min_ticket_offers: 6
 
   - id: novosib_museum_smoke
     city: Новосибирск
@@ -91,6 +99,7 @@ cases:
       tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
       sections: [tickets, events, dining, transport, lifehacks]
       min_restaurant_links: 6
+      min_ticket_offers: 6
 
   - id: kaliningrad_history_smoke
     city: Калининград
@@ -101,6 +110,7 @@ cases:
       tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
       sections: [tickets, events, dining, transport, lifehacks]
       min_restaurant_links: 6
+      min_ticket_offers: 6
 
   - id: spb_repeat_smoke
     city: Санкт-Петербург

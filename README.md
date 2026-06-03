@@ -71,6 +71,12 @@ python3 -m eval --suite smoke --with-llm
 
 Eval проверяет **fixtures** в `eval/fixtures/` (схема программы, tool_runs, regression к `eval/golden/`), а не живой интернет.
 
+Обновить билеты в fixtures после смены логики или ключа API:
+
+```bash
+python3 scripts/refresh_tickets_fixtures.py --suite smoke
+```
+
 ### Benchmark (10+ кейсов)
 
 Минимальный benchmark для диплома лежит в `eval/dataset/smoke.yaml` (**10 кейсов**). Каждый кейс содержит:

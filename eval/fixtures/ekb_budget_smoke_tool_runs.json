@@ -3,7 +3,9 @@
     "tool_name": "search_roundtrip_tickets",
     "live_data": true,
     "results_count": 8,
-    "raw_results_count": 10
+    "raw_results_count": 8,
+    "provider": "deep_links",
+    "avia_api_status": "empty"
   },
   {
     "tool_name": "search_culture_events",
