@@ -9,18 +9,20 @@ from search.tool_logging import parse_tool_result
 
 
 class TestToolLogging(unittest.TestCase):
-    def test_parse_tickets_payload(self) -> None:
+    def test_parse_tickets_payload_v1(self) -> None:
         payload = json.dumps(
             {
+                "schema_version": "1",
+                "category": "tickets",
                 "live_data": True,
-                "results_count": 5,
-                "raw_results_count": 7,
-                "search_provider": "ddgs",
+                "offers_count": 8,
+                "results_count": 8,
             }
         )
         m = parse_tool_result(payload)
         self.assertTrue(m["live_data"])
-        self.assertEqual(m["results_count"], 5)
+        self.assertEqual(m["results_count"], 8)
+        self.assertEqual(m["provider"], "deep_links")
 
     def test_parse_error_string(self) -> None:
         m = parse_tool_result("not json")

@@ -54,7 +54,7 @@ def _build_planner_system_prompt(ctx: PlannerContext, rebuild_scope: str) -> str
         "dining=restaurants_digest (много ссылок, рядом с музеями). "
         "Цены — только из digest, иначе «уточните на сайте» + ссылка.\n\n"
         "Обязанности:\n"
-        "1. Билеты: самолёт, поезд (РЖД/Tutu), автобус (search_roundtrip_tickets).\n"
+        "1. Билеты: из JSON search_roundtrip_tickets (offers, summary_for_llm), не выдумывай ссылки.\n"
         "2. Музеи/афиша в пешой доступности (search_culture_events).\n"
         "3. Рестораны со ссылками рядом с музеями + транспорт (search_dining_and_transport).\n\n"
         f"{tools_hint}\n"
@@ -153,15 +153,15 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     system = SystemMessage(
         content=(
             "Составь программу по ToolMessage. Строго раздели:\n"
-            "- tickets: три блока со ссылками — самолёт, поезд (РЖД/Tutu), автобус "
-            "(из search_roundtrip_tickets).\n"
+            "- tickets: три блока — самолёт, поезд, автобус; только offers/summary_for_llm "
+            "из search_roundtrip_tickets (deep links с датами).\n"
             "- events: музеи/выставки/концерты, сгруппируй по району (пешком 10–15 мин "
             "между точками), из search_culture_events + walking_area.\n"
             "- dining: минимум 6–8 ресторанов/кафе со ссылками из restaurants_digest; "
             "у каждого укажи район и «рядом с …» (музей из events).\n"
             "- transport: метро/маршруты из transport_digest.\n"
             "- lifehacks: советы по пешим маршрутам «музей → обед → музей».\n"
-            "Цены — только из digest; иначе «уточните на сайте» + ссылка.\n"
+            "Цены билетов не выдумывай (API авиа позже); для events/dining — только digest.\n"
             f"Город: {ctx.city}. Даты: {ctx.dates}. Вылет из: {ctx.origin_city}."
             f"{prefs_note}{scope_note}"
         )

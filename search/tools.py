@@ -9,11 +9,8 @@ from langchain_core.tools import tool
 from pydantic import ValidationError
 
 from config import settings
-from models.schemas import (
-    CultureEventsInput,
-    DiningTransportInput,
-    TicketsSearchInput,
-)
+from models.schemas import CultureEventsInput, DiningTransportInput
+from search.tickets_search import run_tickets_search
 from onboarding.preferences import (
     budget_query_suffix,
     interests_query_suffix,
@@ -43,34 +40,12 @@ def search_roundtrip_tickets(
     dates: str,
 ) -> str:
     """
-    Поиск билетов туда-обратно: самолёт, поезд и автобус.
-    Aviasales, Яндекс.Путешествия, РЖД/Tutu, автобусные сервисы.
+    Билеты туда-обратно: deep links на агрегаторы с датами и маршрутом.
+    Самолёт (Aviasales, Яндекс, Google, Skyscanner), поезд (РЖД, Tutu), автобус.
+    Возвращает JSON schema_version=1 с полем offers.
     """
-    try:
-        params = TicketsSearchInput(
-            origin_city=origin_city,
-            destination_city=destination_city,
-            dates=dates,
-        )
-    except ValidationError as exc:
-        return json.dumps({"error": str(exc)}, ensure_ascii=False)
-
-    o, d, dt = params.origin_city, params.destination_city, params.dates
-    prefs = get_session_preferences()
-    budget_hint = budget_query_suffix(prefs.budget) if prefs else ""
-    queries = [
-        enrich_query(f"авиабилеты {o} {d} туда обратно {dt} aviasales {budget_hint}".strip()),
-        enrich_query(f"рейсы {o} {d} {dt} travel.yandex.ru авиа {budget_hint}".strip()),
-        enrich_query(f"билеты на поезд {o} {d} {dt} rzd.ru tutu.ru"),
-        enrich_query(f"жд билеты {o} {d} РЖД расписание цена {dt}"),
-        enrich_query(f"автобус {o} {d} {dt} билеты bus.ru avibus"),
-    ]
-    return run_search_tool(
-        params.model_dump(),
-        queries,
-        ["Aviasales", "Яндекс.Путешествия", "РЖД", "Tutu.ru", "Bus.ru"],
-        kind="tickets",
-    )
+    result = run_tickets_search(origin_city, destination_city, dates)
+    return result.model_dump_json(ensure_ascii=False, indent=2)
 
 
 @tool

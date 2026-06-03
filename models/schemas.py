@@ -5,13 +5,7 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import BaseModel, Field
 
-
-class TicketsSearchInput(BaseModel):
-    """Параметры поиска билетов туда-обратно (самолёт, поезд, автобус)."""
-
-    origin_city: str = Field(..., description="Город отправления")
-    destination_city: str = Field(..., description="Город назначения")
-    dates: str = Field(..., description="Даты поездки в свободной форме")
+from models.tickets import TicketsSearchInput  # контракт билетов — models/tickets.py
 
 
 class CultureEventsInput(BaseModel):

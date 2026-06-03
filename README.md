@@ -1,6 +1,6 @@
 # Туристический ассистент (LangGraph)
 
-Агент составляет **культурную программу поездки** по городу и датам: билеты туда-обратно (самолёт, поезд, автобус), музеи и мероприятия, рестораны в пешей доступности от достопримечательностей, городской транспорт и лайфхаки. Данные берутся из **живого веб-поиска** (Tavily или DuckDuckGo `ddgs`), не из заглушек. Перед планированием — **опросник** (7 вопросов при первом запуске); поездки, предпочтения и версии программы хранятся в **SQLite**.
+Агент составляет **культурную программу поездки** по городу и датам: билеты туда-обратно (самолёт, поезд, автобус), музеи и мероприятия, рестораны в пешей доступности от достопримечательностей, городской транспорт и лайфхаки. **Билеты** — структурированные **deep links** с датами и маршрутом (`search_roundtrip_tickets`, JSON `schema_version=1`). **Афиша, рестораны и транспорт** — из **веб-поиска** (Tavily или DuckDuckGo `ddgs`). Перед планированием — **опросник** (7 вопросов при первом запуске); поездки, предпочтения и версии программы хранятся в **SQLite**.
 
 ## Быстрый старт
 
@@ -139,7 +139,7 @@ python3 scripts/render_graph.py
 
 | Инструмент | Что ищет |
 |------------|----------|
-| `search_roundtrip_tickets` | Авиа, РЖД/Tutu, автобус |
+| `search_roundtrip_tickets` | Deep links: авиа (Aviasales, Яндекс, Google, Skyscanner), жд (РЖД, Tutu), автобус; JSON `offers[]` |
 | `search_culture_events` | Афиша, музеи, выставки (по району) |
 | `search_dining_and_transport` | Рестораны (много ссылок) + транспорт |
 
@@ -180,13 +180,14 @@ python3 scripts/render_graph.py
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
 | **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
 | **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
-| **Aviasales / Яндекс.Путешествия** | Сниппеты по авиабилетам |
-| **РЖД / Tutu.ru** | Поезда |
-| **Bus.ru и аналоги** | Автобусы |
+| **Aviasales / Яндекс.Путешествия / Google / Skyscanner** | Deep links на поиск авиа с датами (фаза 1) |
+| **РЖД / Tutu.ru** | Deep links на жд |
+| **Bus.tutu.ru / E-traffic** | Deep links на автобус |
+| **Travelpayouts / Aviasales API** (фаза 2, опционально) | Реальные рейсы и пересадки — `TRAVELPAYOUTS_API_KEY` |
 | **Афиша / Kassir.ru** | Мероприятия |
 | **2GIS / Яндекс.Карты / TripAdvisor** | Рестораны и транспорт |
 
-Прямые партнёрские API этих сервисов **не подключены** — агент находит публичные страницы через поиск.
+Билеты: **не** веб-поиск, а `search/ticket_links.py` + Pydantic-контракт `models/tickets.py`. Афиша и рестораны — поиск как раньше. Партнёрский API авиа (фаза 2) — отдельно, когда задан ключ.
 
 ### Почему нужен именно агент, а не workflow?
 
@@ -272,7 +273,8 @@ python3 -m scripts.metrics_report --limit 50
 | **Пустой или нерелевантный поиск** | Фильтр по `SEARCH_FILTERS` + fallback top-8; предупреждение в payload tool |
 | **Ошибка поиска / сети** | `ToolMessage` с ошибкой; граф не падает, `tool_runs` с `live_data=false` |
 | **Prompt-injection во вводе** | `input_validation.sanitize_and_validate` |
-| **Галлюцинации цен** | Промпт: цены только из `digest`; иначе «уточните на сайте» + ссылка |
+| **Галлюцинации цен** | Билеты: только `offers` из tool; афиша/рестораны — цены из `digest` |
+| **Нет прямых рейсов** | В `summary_for_llm` — стыковки на агрегаторах; ссылки с IATA и датами |
 | **Critic не прошёл** | До 2 повторов researcher; затем всё равно HITL с замечаниями |
 | **Пользователь не утвердил (n)** | Пересбор или сохранение черновика (`status=review`) |
 | **Повторный запуск без опросника** | `user_profile` + `trip_preferences`; fallback из последней поездки |
@@ -283,7 +285,7 @@ python3 -m scripts.metrics_report --limit 50
 
 | Критерий | Приемлемый результат |
 |----------|----------------------|
-| **Полнота программы** | Все 5 разделов заполнены; в «Билетах» есть 3 блока со ссылками: «Самолёт», «Поезд», «Автобус» |
+| **Полнота программы** | Все 5 разделов; в «Билетах» 3 блока со ссылками из `offers` (не главные страницы агрегаторов) |
 | **Опора на поиск** | В «Питании» ≥ 6 ресторанов со ссылками из digest; мероприятия сгруппированы по району |
 | **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят; в «Продолжить» видна поездка с версией программы |
 
@@ -297,12 +299,17 @@ tourist-assistant/
 ├── cli/app.py              # Меню, опросник, invoke графа, сохранение в БД
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
-│   ├── schemas.py          # FinalProgram, входы tools
+│   ├── schemas.py          # FinalProgram, CultureEventsInput, …
+│   ├── tickets.py          # TicketsSearchInput/Output, TicketOffer
 │   └── state.py            # AgentState
 ├── input_validation.py     # sanitize_and_validate
+├── planning/dates.py       # parse_trip_dates
 ├── search/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool, TOOLS, TOOL_MAP
+│   ├── tickets_search.py   # оркестрация билетов
+│   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu, …
+│   ├── city_codes.py       # город → IATA
 │   ├── context.py          # search_context сессии
 │   └── tool_logging.py     # разбор payload для tool_runs
 ├── agents/
