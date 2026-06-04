@@ -168,7 +168,7 @@ python3 -m eval --suite smoke
 
 ## Архитектура
 
-Граф LangGraph ([`agents/graph.py`](agents/graph.py)) — схема из кода (как в LangGraph Studio):
+Граф LangGraph ([`agents/graph.py`](agents/graph.py)) — схема из кода:
 
 ![Схема графа агента](docs/assets/graph.png)
 
