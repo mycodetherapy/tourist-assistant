@@ -16,6 +16,11 @@ from search.tickets_search import run_tickets_search
 from search.tool_logging import parse_tool_result
 
 
+def _expected_tickets_provider(avia_api_status: str) -> str:
+    """Тот же контракт, что в search/tool_logging.py для category=tickets."""
+    return "travelpayouts" if avia_api_status == "ok" else "deep_links"
+
+
 class TestParseTripDates(unittest.TestCase):
     def test_range_russian_month(self) -> None:
         parsed = parse_trip_dates("15-18 июля 2026")
@@ -146,6 +151,24 @@ class TestAviaApi(unittest.TestCase):
 
 
 class TestTicketsSearchTool(unittest.TestCase):
+    def _assert_tickets_tool_logging(
+        self,
+        origin: str,
+        destination: str,
+        dates: str,
+        *,
+        expected_provider: str | None = None,
+    ) -> None:
+        raw = run_tickets_search(origin, destination, dates)
+        payload = json.loads(raw.model_dump_json())
+        metrics = parse_tool_result(raw.model_dump_json())
+        self.assertTrue(metrics["live_data"])
+        self.assertGreater(metrics["results_count"], 0)
+        provider = expected_provider or _expected_tickets_provider(
+            payload["avia_api_status"]
+        )
+        self.assertEqual(metrics["provider"], provider)
+
     def test_run_returns_valid_schema(self) -> None:
         raw = run_tickets_search("Саратов", "Сыктывкар", "15-18 июля 2026")
         payload = json.loads(raw.model_dump_json())
@@ -155,11 +178,42 @@ class TestTicketsSearchTool(unittest.TestCase):
         self.assertIn(model.avia_api_status, ("disabled", "ok", "empty", "error"))
 
     def test_tool_logging_tickets_payload(self) -> None:
-        raw = run_tickets_search("Москва", "Казань", "10-12 августа 2026")
-        metrics = parse_tool_result(raw.model_dump_json())
-        self.assertTrue(metrics["live_data"])
-        self.assertGreater(metrics["results_count"], 0)
-        self.assertEqual(metrics["provider"], "deep_links")
+        """С ключом TRAVELPAYOUTS_API_KEY или без — provider согласован с avia_api_status."""
+        self._assert_tickets_tool_logging(
+            "Москва", "Казань", "10-12 августа 2026"
+        )
+
+    @patch("search.tickets_search.fetch_avia_offers", return_value=([], "disabled"))
+    def test_tool_logging_provider_without_avia_api(
+        self, _mock_fetch: object
+    ) -> None:
+        with patch.dict("os.environ", {"TRAVELPAYOUTS_API_KEY": "test-token"}):
+            self._assert_tickets_tool_logging(
+                "Москва",
+                "Казань",
+                "10-12 августа 2026",
+                expected_provider="deep_links",
+            )
+
+    @patch("search.tickets_search.fetch_avia_offers")
+    def test_tool_logging_provider_with_avia_api(self, mock_fetch) -> None:
+        api_offer = TicketOffer(
+            mode=TransportMode.plane,
+            source=OfferSource.api,
+            transfers=0,
+            price_from=9000,
+            booking_url="https://www.aviasales.ru/search/MOW1008KZN1208",
+            label="SU 123, прямой, от 9000 ₽",
+            provider="Aviasales API",
+        )
+        mock_fetch.return_value = ([api_offer], "ok")
+        with patch.dict("os.environ", {"TRAVELPAYOUTS_API_KEY": "test-token"}):
+            self._assert_tickets_tool_logging(
+                "Москва",
+                "Казань",
+                "10-12 августа 2026",
+                expected_provider="travelpayouts",
+            )
 
 
 if __name__ == "__main__":

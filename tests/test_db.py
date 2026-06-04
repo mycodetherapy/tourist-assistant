@@ -40,7 +40,6 @@ class TestRepository(unittest.TestCase):
             "tickets": "Самолёт: ссылка\nПоезд: ссылка\nАвтобус: ссылка",
             "events": "музей",
             "dining": "кафе",
-            "transport": "метро",
             "lifehacks": "совет",
         }
         save_itinerary_version(trip_id, program, scope="full")
@@ -69,7 +68,6 @@ class TestRepository(unittest.TestCase):
                 "tickets": "t",
                 "events": "e",
                 "dining": "d",
-                "transport": "tr",
                 "lifehacks": "l",
             },
         )

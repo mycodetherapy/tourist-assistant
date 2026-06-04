@@ -9,8 +9,10 @@ from langchain_core.messages import ToolMessage
 
 from agents.finalize_helpers import (
     _is_garbage_tickets,
+    build_fallback_program_draft,
     extract_tickets_summary,
     prepare_finalize_messages,
+    slim_tool_message_for_finalize,
     resolve_tickets_section,
 )
 from search.tickets_search import run_tickets_search
@@ -58,6 +60,95 @@ class TestFinalizeHelpers(unittest.TestCase):
         data = json.loads(str(slimmed.content))
         self.assertNotIn("offers", data)
         self.assertIn("summary_for_llm", data)
+
+    def test_slim_events_drops_search_blob(self) -> None:
+        heavy = {
+            "digest": "1. [Музей](https://example.com/m) — выставка",
+            "search": {"results": [{"url": "x", "content": "y" * 5000}] * 40},
+            "results_count": 40,
+        }
+        msg = ToolMessage(
+            content=json.dumps(heavy, ensure_ascii=False),
+            tool_call_id="2",
+            name="search_culture_events",
+        )
+        slim = slim_tool_message_for_finalize(msg)
+        data = json.loads(str(slim.content))
+        self.assertNotIn("search", data)
+        self.assertIn("digest", data)
+
+    def test_prepare_keeps_latest_tool_only(self) -> None:
+        old = ToolMessage(
+            content=json.dumps({"digest": "старый"}, ensure_ascii=False),
+            tool_call_id="a",
+            name="search_culture_events",
+        )
+        new = ToolMessage(
+            content=json.dumps({"digest": "новый"}, ensure_ascii=False),
+            tool_call_id="b",
+            name="search_culture_events",
+        )
+        out = prepare_finalize_messages([old, new], rebuild_scope="events")
+        self.assertEqual(len(out), 1)
+        self.assertIn("новый", str(out[0].content))
+
+    def test_fallback_draft_from_digest(self) -> None:
+        messages = [
+            ToolMessage(
+                content=json.dumps(
+                    {"digest": "1. [Музей](https://example.com/m) — тест"},
+                    ensure_ascii=False,
+                ),
+                tool_call_id="e",
+                name="search_culture_events",
+            ),
+            ToolMessage(
+                content=json.dumps(
+                    {"restaurants_digest": "1. [Кафе](https://example.com/c)"},
+                    ensure_ascii=False,
+                ),
+                tool_call_id="d",
+                name="search_dining",
+            ),
+        ]
+        draft = build_fallback_program_draft(messages, city="Казань", walking_area="центр")
+        self.assertIn("Музей", draft.events)
+        self.assertIn("Кафе", draft.dining)
+        self.assertFalse(hasattr(draft, "transport"))
+        self.assertIn("музей", draft.lifehacks.lower())
+
+    def test_invoke_fallback_passes_city(self) -> None:
+        from unittest.mock import MagicMock
+
+        from agents.finalize_helpers import invoke_program_draft
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        class LengthErr(Exception):
+            pass
+
+        llm = MagicMock()
+        llm.invoke.side_effect = LengthErr(
+            "Could not parse response content as the length limit was reached"
+        )
+        messages = [
+            ToolMessage(
+                content=json.dumps(
+                    {"digest": "1. [Музей](https://example.com/m)"},
+                    ensure_ascii=False,
+                ),
+                tool_call_id="e",
+                name="search_culture_events",
+            ),
+        ]
+        draft = invoke_program_draft(
+            llm,
+            system=SystemMessage(content="test"),
+            tool_messages=[],
+            human=HumanMessage(content="test"),
+            state_messages=messages,
+            city="Казань",
+        )
+        self.assertIn("Музей", draft.events)
 
 
 if __name__ == "__main__":

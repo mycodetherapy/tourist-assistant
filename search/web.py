@@ -113,20 +113,30 @@ def _dedupe_results(results: list[dict[str, str | None]]) -> list[dict[str, str 
     return unique
 
 
-def format_search_digest(results: list[dict[str, str | None]]) -> str:
+def format_search_digest(
+    results: list[dict[str, str | None]],
+    *,
+    kind: str = "general",
+) -> str:
     """Текстовая сводка результатов — LLM легче использует её, чем сырой JSON."""
     if not results:
         return "Результаты поиска пусты."
+    if kind == "events":
+        from search.digest_format import format_events_digest
+
+        return format_events_digest(results)
+    from search.digest_format import sanitize_snippet
+
     lines: list[str] = []
     for index, item in enumerate(results, start=1):
         title = item.get("title") or "Без названия"
         url = item.get("url") or ""
-        snippet = (item.get("snippet") or "").strip()
+        snippet = sanitize_snippet(str(item.get("snippet") or ""))
         block = f"{index}. {title}"
         if url:
             block += f"\n   Ссылка: {url}"
         if snippet:
-            block += f"\n   Описание: {snippet}"
+            block += f"\n   {snippet}"
         lines.append(block)
     return "\n\n".join(lines)
 
@@ -269,7 +279,12 @@ def run_search_tool(
         data = web_search_multi(queries, kind=kind, cities=cities)
         results = data.get("results", [])
         digest_limit = settings.DIGEST_LIMITS.get(kind, 15)
-        digest = format_search_digest(results[:digest_limit])
+        if kind == "events":
+            from search.digest_format import rank_events_results
+
+            results = rank_events_results(results)
+            digest_limit = min(digest_limit, 8)
+        digest = format_search_digest(results[:digest_limit], kind=kind)
 
         kind_hints = {
             "tickets": (
@@ -277,15 +292,14 @@ def run_search_tool(
                 "автобус (Bus.ru и аналоги). Дай ссылки на каждый вид транспорта."
             ),
             "events": (
-                "Музеи, выставки, концерты. Группируй по району — "
-                "объекты в пешей доступности друг от друга."
+                "5–8 конкретных музеев/выставок (официальные страницы), не городские ленты "
+                "afisha.ru/events. Кратко: название, даты, одна ссылка. Группируй по району."
             ),
             "restaurants": (
                 "Рестораны и кафе со ссылками (минимум 6–8 заведений). "
                 "Указывай район/улицу рядом с музеями из программы."
             ),
-            "transport": "Горской транспорт: метро, маршруты, карты.",
-            "dining": "Рестораны, кафе и городской транспорт.",
+            "dining": "Рестораны и кафе со ссылками.",
         }
 
         payload = {

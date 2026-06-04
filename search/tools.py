@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from pydantic import ValidationError
 
 from config import settings
-from models.schemas import CultureEventsInput, DiningTransportInput
+from models.schemas import CultureEventsInput, DiningInput
 from search.tickets_search import run_tickets_search
 from onboarding.preferences import (
     budget_query_suffix,
@@ -28,7 +28,7 @@ __all__ = [
     "TOOLS",
     "TOOL_MAP",
     "search_culture_events",
-    "search_dining_and_transport",
+    "search_dining",
     "search_roundtrip_tickets",
 ]
 
@@ -88,13 +88,13 @@ def search_culture_events(city: str, dates: str) -> str:
 
 
 @tool
-def search_dining_and_transport(city: str, dates: str) -> str:
+def search_dining(city: str, dates: str) -> str:
     """
-    Поиск ресторанов (много ссылок, рядом с музеями) и городского транспорта.
+    Поиск ресторанов и кафе (много ссылок, рядом с музеями).
     2GIS, Яндекс.Карты, TripAdvisor — в пешой доступности от мероприятий.
     """
     try:
-        params = DiningTransportInput(city=city, dates=dates)
+        params = DiningInput(city=city, dates=dates)
     except ValidationError as exc:
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
@@ -117,34 +117,14 @@ def search_dining_and_transport(city: str, dates: str) -> str:
         ),
         enrich_query(f"топ кафе {params.city} исторический центр отзывы {rating_hint}".strip()),
     ]
-    transport_mode = ""
-    if prefs:
-        if prefs.transport_preference == "metro":
-            transport_mode = "метро"
-        elif prefs.transport_preference == "walking":
-            transport_mode = "пешком"
-        elif prefs.transport_preference == "taxi":
-            transport_mode = "такси"
-    transport_queries = [
-        enrich_query(f"метро {params.city} карта схема проезд {transport_mode}".strip()),
-        enrich_query(f"общественный транспорт {params.city} как добраться {transport_mode}".strip()),
-        enrich_query(f"яндекс карты {params.city} маршрут метро автобус"),
-    ]
 
     cities = [params.city]
     rest_data = web_search_multi(restaurant_queries, kind="restaurants", cities=cities)
-    trans_data = web_search_multi(transport_queries, kind="transport", cities=cities)
-
     rest_results = rest_data.get("results", [])
-    trans_results = trans_data.get("results", [])
 
     print(
         f"  → поиск [restaurants]: {len(rest_results)} ссылок "
         f"({rest_data.get('provider')})"
-    )
-    print(
-        f"  → поиск [transport]: {len(trans_results)} ссылок "
-        f"({trans_data.get('provider')})"
     )
 
     payload = {
@@ -153,20 +133,16 @@ def search_dining_and_transport(city: str, dates: str) -> str:
         "walking_area": area,
         "live_data": True,
         "restaurants_count": len(rest_results),
-        "transport_count": len(trans_results),
         "restaurants_digest": format_search_digest(
             rest_results[: settings.DIGEST_LIMITS["restaurants"]]
         ),
-        "transport_digest": format_search_digest(
-            trans_results[: settings.DIGEST_LIMITS["transport"]]
-        ),
         "digest": format_search_digest(rest_results[: settings.DIGEST_LIMITS["restaurants"]]),
-        "search": {"restaurants": rest_data, "transport": trans_data},
+        "search": {"restaurants": rest_data},
         "instruction": (
             f"Рестораны подбирай в районе {area} — в 5–15 минутах пешком от музеев "
             "из search_culture_events. В разделе питания дай минимум 6–8 заведений "
             "со ссылками из restaurants_digest (название + ссылка + район/улица). "
-            "Транспорт — из transport_digest. Группируй «утро: музей → обед рядом»."
+            "Группируй «утро: музей → обед рядом»."
         ),
     }
     if not rest_results:
@@ -177,6 +153,8 @@ def search_dining_and_transport(city: str, dates: str) -> str:
 TOOLS = [
     search_roundtrip_tickets,
     search_culture_events,
-    search_dining_and_transport,
+    search_dining,
 ]
 TOOL_MAP: dict[str, Any] = {t.name: t for t in TOOLS}
+# Старые tool_calls в истории чата
+TOOL_MAP["search_dining_and_transport"] = search_dining

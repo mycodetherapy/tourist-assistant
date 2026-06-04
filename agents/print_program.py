@@ -11,7 +11,6 @@ def print_final_program(program: FinalProgram) -> None:
         ("Билеты", program.tickets),
         ("Мероприятия", program.events),
         ("Питание", program.dining),
-        ("Транспорт", program.transport),
         ("Лайфхаки", program.lifehacks),
     ]
     print("\n" + "=" * 60)

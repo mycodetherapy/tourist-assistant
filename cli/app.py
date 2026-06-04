@@ -32,7 +32,7 @@ from db import (
     update_trip_status,
 )
 from input_validation import sanitize_and_validate
-from models.schemas import FinalProgram
+from models.schemas import FinalProgram, normalize_stored_program
 from models.state import AgentState
 from observability import (
     build_langfuse_callbacks,
@@ -49,6 +49,27 @@ from onboarding import (
 )
 from planning import REBUILD_SCOPES, human_message_for_scope, required_tools_for_scope
 from search.context import set_session
+
+
+def _format_runtime_error(exc: Exception) -> str:
+    """Человекочитаемое сообщение для типичных сбоев LLM API."""
+    text = str(exc)
+    if "length" in text.lower() or "LengthFinishReason" in type(exc).__name__:
+        return (
+            "Ответ LLM обрезан по лимиту токенов (слишком большой контекст или программа).\n"
+            "Повторите пересбор по разделам (билеты / мероприятия / питание) или сократите запрос.\n"
+            f"Детали: {text}"
+        )
+    if any(
+        marker in text
+        for marker in ("401", "Invalid API Key", "AuthenticationError", "authentication")
+    ):
+        return (
+            "Ошибка аутентификации LLM (401): ProxyAPI не принял OPENAI_API_KEY.\n"
+            "Проверьте .env: ключ с https://proxyapi.ru (не sk-... из .env.example).\n"
+            f"Детали: {text}"
+        )
+    return f"Ошибка выполнения: {text}"
 
 
 def _prompt_line(label: str, default: str = "") -> str:
@@ -210,16 +231,18 @@ def _choose_trip_from_list() -> int | None:
 
 def _choose_planned_trip_from_list(
     trips: list[PlannedTripSummary],
+    *,
+    prompt: str = "Номер поездки",
 ) -> int | None:
     """Выбор поездки с программой по номеру в списке."""
-    print("\n--- Запланированные поездки ---")
+    print("\n--- Поездки с сохранённой программой ---")
     for index, trip in enumerate(trips, start=1):
         print(
             f"  {index}. [{trip.id}] {trip.city}, {trip.dates} "
             f"({trip.origin_city}) — {trip.status}, "
             f"программа v{trip.last_version} ({trip.last_scope})"
         )
-    raw = _prompt_line("Номер поездки")
+    raw = _prompt_line(prompt)
     try:
         choice = int(raw)
     except ValueError:
@@ -232,26 +255,15 @@ def _choose_planned_trip_from_list(
 
 
 def _resolve_details_trip_id() -> int | None:
-    """
-    Выбирает поездку для просмотра:
-    одна запланированная — сразу; несколько незавершённых — список.
-    """
+    """Выбор поездки для просмотра — всегда из списка с программой."""
     planned = list_planned_trips()
     if not planned:
         print("\nНет поездок с сохранённой программой.")
         return None
-
-    if len(planned) == 1:
-        return planned[0].id
-
-    incomplete = [trip for trip in planned if trip.status != "approved"]
-    if len(incomplete) == 1:
-        return incomplete[0].id
-    if len(incomplete) > 1:
-        return _choose_planned_trip_from_list(incomplete)
-
-    print("\nВсе поездки с программой отмечены как завершённые.")
-    return _choose_planned_trip_from_list(planned)
+    return _choose_planned_trip_from_list(
+        planned,
+        prompt="Номер поездки для просмотра",
+    )
 
 
 def _print_trip_details(trip_id: int) -> None:
@@ -291,7 +303,7 @@ def _print_trip_details(trip_id: int) -> None:
         f"\n--- Программа (версия {latest['version']}, "
         f"scope={latest['scope']}) ---"
     )
-    program = FinalProgram.model_validate(latest["program"])
+    program = FinalProgram.model_validate(normalize_stored_program(latest["program"]))
     print_final_program(program)
 
 
@@ -379,7 +391,9 @@ def main() -> None:
                 preferences_dict = {}
                 print("Предпочтения не найдены — поиск без опросника.")
             latest = get_latest_itinerary(trip_id)
-            base_program = latest["program"] if latest else None
+            base_program = (
+                normalize_stored_program(latest["program"]) if latest else None
+            )
             if latest:
                 print(
                     f"Последняя версия программы: v{latest['version']} "
@@ -447,5 +461,5 @@ def main() -> None:
     except SystemExit:
         raise
     except Exception as exc:
-        print(f"Ошибка выполнения: {exc}")
+        print(_format_runtime_error(exc))
         raise SystemExit(1) from exc

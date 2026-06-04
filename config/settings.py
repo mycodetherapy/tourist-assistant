@@ -43,14 +43,12 @@ KIND_MAX_RESULTS: dict[str, int] = {
     "tickets": 12,
     "events": 12,
     "restaurants": 18,
-    "transport": 8,
     "dining": 14,
 }
 DIGEST_LIMITS: dict[str, int] = {
     "tickets": 25,
-    "events": 15,
+    "events": 8,
     "restaurants": 20,
-    "transport": 10,
 }
 DDG_REGION = "ru-ru"
 
@@ -140,35 +138,14 @@ SEARCH_FILTERS: dict[str, dict[str, tuple[str, ...]]] = {
             "метро схем",
         ),
     },
-    "transport": {
-        "include_any": (
-            "метро",
-            "транспорт",
-            "маршрут",
-            "яндекс.карт",
-            "общественный",
-            "проезд",
-            "карта метро",
-            "2gis",
-        ),
-        "exclude_any": (
-            "aviasales",
-            "ресторан",
-            "tripadvisor",
-            "kinopoisk",
-        ),
-    },
     "dining": {
         "include_any": (
             "ресторан",
             "кафе",
             "2gis",
             "tripadvisor",
-            "метро",
-            "транспорт",
-            "маршрут",
             "яндекс.карт",
-            "общественный",
+            "где поесть",
         ),
         "exclude_any": (
             "aviasales",
@@ -192,10 +169,29 @@ LLM_MODEL_RU = LLM_MODEL
 LLM_MODEL_INTL = LLM_MODEL
 
 
+def is_placeholder_secret(value: str) -> bool:
+    """Плейсхолдер из .env.example, а не реальный ключ/токен."""
+    raw = (value or "").strip()
+    if not raw:
+        return True
+    lowered = raw.lower()
+    if lowered in ("sk-...", "sk-your-key", "changeme", "your-api-key"):
+        return True
+    return "..." in raw or ("<" in raw and ">" in raw)
+
+
 def ensure_env() -> None:
     """Проверяет обязательные переменные окружения перед запуском CLI."""
-    if not os.getenv("OPENAI_API_KEY"):
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
         raise SystemExit(
             "Ошибка: не задан OPENAI_API_KEY. "
-            "Создайте файл .env (см. .env.example): OPENAI_API_KEY=..."
+            "Создайте файл .env (см. .env.example): OPENAI_API_KEY=sk-..."
+        )
+    if is_placeholder_secret(api_key):
+        raise SystemExit(
+            "Ошибка: OPENAI_API_KEY в .env — плейсхолдер из .env.example (sk-...), "
+            "а не ключ ProxyAPI.\n"
+            "Вставьте ключ с https://proxyapi.ru → личный кабинет → API keys.\n"
+            "Если ключ был раньше — восстановите из бэкапа или сгенерируйте новый."
         )

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from models.schemas import normalize_stored_program
+
 RebuildScope = Literal[
     "full",
     "tickets",
     "events",
     "dining",
-    "transport",
     "lifehacks",
 ]
 
@@ -18,7 +19,6 @@ REBUILD_SCOPES: list[tuple[str, str]] = [
     ("tickets", "Только билеты (самолёт/поезд/автобус)"),
     ("events", "Только мероприятия"),
     ("dining", "Только питание"),
-    ("transport", "Только транспорт в городе"),
     ("lifehacks", "Только лайфхаки (без веб-поиска)"),
 ]
 
@@ -26,12 +26,11 @@ _SCOPE_TOOLS: dict[str, tuple[str, ...]] = {
     "full": (
         "search_roundtrip_tickets",
         "search_culture_events",
-        "search_dining_and_transport",
+        "search_dining",
     ),
     "tickets": ("search_roundtrip_tickets",),
     "events": ("search_culture_events",),
-    "dining": ("search_dining_and_transport",),
-    "transport": ("search_dining_and_transport",),
+    "dining": ("search_dining",),
     "lifehacks": (),
 }
 
@@ -39,9 +38,27 @@ _SCOPE_FIELD: dict[str, str] = {
     "tickets": "tickets",
     "events": "events",
     "dining": "dining",
-    "transport": "transport",
     "lifehacks": "lifehacks",
 }
+
+# Старые сессии / tool_calls в истории
+_LEGACY_TOOL_ALIASES: dict[str, str] = {
+    "search_dining_and_transport": "search_dining",
+}
+
+
+def resolve_tool_name(name: str) -> str:
+    """Каноническое имя инструмента (для executor и critic)."""
+    return _LEGACY_TOOL_ALIASES.get(name, name)
+
+
+def tool_call_satisfied(required: str, tools_done: set[str]) -> bool:
+    if required in tools_done:
+        return True
+    for legacy, canonical in _LEGACY_TOOL_ALIASES.items():
+        if canonical == required and legacy in tools_done:
+            return True
+    return False
 
 
 def required_tools_for_scope(scope: str) -> list[str]:
@@ -62,12 +79,13 @@ def merge_program(
     scope: str,
 ) -> dict[str, Any]:
     """Подставляет один раздел из updated в сохранённую программу."""
+    updated = normalize_stored_program(updated)
     if scope == "full" or not base:
         return updated
     field = scope_field(scope)
     if not field:
         return updated
-    merged = dict(base)
+    merged = normalize_stored_program(dict(base))
     merged[field] = updated.get(field, merged.get(field, ""))
     return merged
 
@@ -103,15 +121,11 @@ def human_message_for_scope(scope: str) -> str:
         ),
         "dining": (
             "Пересобери только питание (рестораны со ссылками). "
-            "Используй search_dining_and_transport."
-        ),
-        "transport": (
-            "Пересобери только городской транспорт. "
-            "Используй search_dining_and_transport (transport_digest)."
+            "Используй search_dining."
         ),
         "lifehacks": (
             "Обнови только лайфхаки по текущей программе поездки "
-            "(маршруты «музей → обед», советы по транспорту). Без нового поиска."
+            "(маршруты «музей → обед», советы по передвижению). Без нового поиска."
         ),
     }
     return messages.get(scope, messages["full"])
@@ -136,7 +150,6 @@ def finalize_extra_prompt(scope: str, base_program: dict[str, Any] | None) -> st
         "tickets": "билеты",
         "events": "мероприятия",
         "dining": "питание",
-        "transport": "транспорт",
     }
     label = labels.get(field, field)
     return (
@@ -152,7 +165,6 @@ def _format_base_sections(base: dict[str, Any], *, exclude: str) -> str:
         ("tickets", "Билеты"),
         ("events", "Мероприятия"),
         ("dining", "Питание"),
-        ("transport", "Транспорт"),
         ("lifehacks", "Лайфхаки"),
     ):
         if key == exclude:

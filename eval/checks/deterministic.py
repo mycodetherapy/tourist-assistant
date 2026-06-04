@@ -7,17 +7,17 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from models.schemas import FinalProgram
+from models.schemas import FinalProgram, normalize_stored_program
 
 
 def check_program_schema(program: dict[str, Any]) -> list[str]:
     """FinalProgram schema + обязательные секции."""
     issues: list[str] = []
     try:
-        model = FinalProgram.model_validate(program)
+        model = FinalProgram.model_validate(normalize_stored_program(program))
     except ValidationError as exc:
         return [f"schema: {exc}"]
-    for field in ("tickets", "events", "dining", "transport", "lifehacks"):
+    for field in ("tickets", "events", "dining", "lifehacks"):
         if not getattr(model, field, "").strip():
             issues.append(f"пустое поле {field}")
     return issues
@@ -35,8 +35,6 @@ def check_links_and_markers(
     if links < min_restaurant_links:
         issues.append(f"dining: {links} ссылок (ожидалось ≥{min_restaurant_links})")
     tickets = str(program.get("tickets", ""))
-    # По умолчанию проверяем словесные подписи блоков вместо эмодзи.
-    # Маркеры задаются как подстроки, поэтому достаточно "самол", "поезд", "автобус".
     lower = tickets.lower()
     for marker in tickets_markers or ("самол", "поезд"):
         if str(marker).lower() not in lower:

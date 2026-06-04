@@ -10,12 +10,11 @@ cases:
       tools:
         - search_roundtrip_tickets
         - search_culture_events
-        - search_dining_and_transport
+        - search_dining
       sections:
         - tickets
         - events
         - dining
-        - transport
         - lifehacks
       min_restaurant_links: 6
       tickets_markers:
@@ -29,8 +28,8 @@ cases:
     origin_city: Санкт-Петербург
     user_query: выходные, музеи и рестораны
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
-      sections: [tickets, events, dining, transport, lifehacks]
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
+      sections: [tickets, events, dining, lifehacks]
       min_restaurant_links: 6
       min_ticket_offers: 2
 
@@ -40,8 +39,8 @@ cases:
     origin_city: Москва
     user_query: семейная поездка, без ночных мероприятий
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
-      sections: [tickets, events, dining, transport, lifehacks]
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
+      sections: [tickets, events, dining, lifehacks]
       min_restaurant_links: 6
       min_ticket_offers: 2
 
@@ -51,8 +50,8 @@ cases:
     origin_city: Екатеринбург
     user_query: культура + акцент на кухню, рейтинг от 4.7
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
-      sections: [tickets, events, dining, transport, lifehacks]
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
+      sections: [tickets, events, dining, lifehacks]
       min_restaurant_links: 6
       min_ticket_offers: 2
 
@@ -62,8 +61,8 @@ cases:
     origin_city: Москва
     user_query: много пешком, центр
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
-      sections: [tickets, events, dining, transport, lifehacks]
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
+      sections: [tickets, events, dining, lifehacks]
       min_restaurant_links: 6
       min_ticket_offers: 2
 
@@ -73,8 +72,8 @@ cases:
     origin_city: Москва
     user_query: зимняя поездка, музеи, транспорт
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
-      sections: [tickets, events, dining, transport, lifehacks]
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
+      sections: [tickets, events, dining, lifehacks]
       min_restaurant_links: 6
       min_ticket_offers: 2
 
@@ -84,8 +83,8 @@ cases:
     origin_city: Пермь
     user_query: бюджетно, но красиво
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
-      sections: [tickets, events, dining, transport, lifehacks]
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
+      sections: [tickets, events, dining, lifehacks]
       min_restaurant_links: 6
       min_ticket_offers: 2
 
@@ -95,8 +94,8 @@ cases:
     origin_city: Томск
     user_query: музеи и выставки, без клубов
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
-      sections: [tickets, events, dining, transport, lifehacks]
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
+      sections: [tickets, events, dining, lifehacks]
       min_restaurant_links: 6
       min_ticket_offers: 2
 
@@ -106,8 +105,8 @@ cases:
     origin_city: Москва
     user_query: история и музеи
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
-      sections: [tickets, events, dining, transport, lifehacks]
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
+      sections: [tickets, events, dining, lifehacks]
       min_restaurant_links: 6
       min_ticket_offers: 2
 
@@ -117,6 +116,6 @@ cases:
     origin_city: Москва
     user_query: пересобери программу, добавь больше выставок
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining_and_transport]
-      sections: [tickets, events, dining, transport, lifehacks]
+      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
+      sections: [tickets, events, dining, lifehacks]
       min_restaurant_links: 6

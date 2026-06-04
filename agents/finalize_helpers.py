@@ -6,13 +6,16 @@ import json
 import re
 from typing import Any, Optional
 
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 
+from models.schemas import ProgramDraft
 from models.tickets import TicketsSearchOutput
+from planning.rebuild import required_tools_for_scope, resolve_tool_name
 from search.ticket_links import format_offers_summary
 from search.tickets_search import run_tickets_search
 
 _GARBAGE_TICKETS = re.compile(r"^[\s:{}\[\]]+$")
+_FINALIZE_MAX_TOOL_CHARS = 12_000
 
 
 def _is_garbage_tickets(text: str) -> bool:
@@ -33,9 +36,7 @@ def _is_garbage_tickets(text: str) -> bool:
 
 
 def extract_tickets_summary(messages: list[Any]) -> Optional[str]:
-    """
-    Берёт готовый markdown билетов из последнего search_roundtrip_tickets.
-    """
+    """Берёт готовый markdown билетов из последнего search_roundtrip_tickets."""
     for msg in reversed(messages):
         if not isinstance(msg, ToolMessage) or msg.name != "search_roundtrip_tickets":
             continue
@@ -72,9 +73,7 @@ def resolve_tickets_section(
     dates: str,
     rebuild_scope: str,
 ) -> str:
-    """
-    Источники по приоритету: tool в истории → живой run_tickets_search → base_program.
-    """
+    """Источники по приоритету: tool в истории → живой run_tickets_search → base_program."""
     from_tool = extract_tickets_summary(messages)
     if from_tool:
         return from_tool
@@ -96,40 +95,215 @@ def resolve_tickets_section(
     )
 
 
+def _truncate_text(text: str, limit: int) -> str:
+    t = (text or "").strip()
+    if len(t) <= limit:
+        return t
+    return t[:limit].rsplit("\n", 1)[0] + "\n…"
+
+
 def slim_tool_message_for_finalize(msg: ToolMessage) -> ToolMessage:
-    """Убирает тяжёлый offers[] — LLM видит только summary."""
+    """Оставляет только digest/summary — без массивов search.results."""
     raw = msg.content if isinstance(msg.content, str) else str(msg.content)
+    name = msg.name or ""
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
         return ToolMessage(
-            content=raw[:4000],
+            content=_truncate_text(raw, 4000),
             tool_call_id=msg.tool_call_id,
-            name=msg.name,
+            name=name,
         )
-    if data.get("category") != "tickets":
-        return msg
-    slim = {
-        "schema_version": data.get("schema_version"),
-        "category": "tickets",
-        "summary_for_llm": data.get("summary_for_llm", ""),
-        "instruction": data.get("instruction", ""),
-        "warning": data.get("warning"),
-        "avia_api_status": data.get("avia_api_status"),
-        "offers_count": data.get("offers_count"),
-    }
-    return ToolMessage(
-        content=json.dumps(slim, ensure_ascii=False, indent=2),
-        tool_call_id=msg.tool_call_id,
-        name=msg.name,
+
+    if not isinstance(data, dict):
+        return ToolMessage(content=raw[:4000], tool_call_id=msg.tool_call_id, name=name)
+
+    if data.get("category") == "tickets" or name == "search_roundtrip_tickets":
+        slim = {
+            "schema_version": data.get("schema_version"),
+            "category": "tickets",
+            "summary_for_llm": data.get("summary_for_llm", ""),
+            "instruction": data.get("instruction", ""),
+            "warning": data.get("warning"),
+            "avia_api_status": data.get("avia_api_status"),
+            "offers_count": data.get("offers_count"),
+        }
+    elif name == "search_culture_events":
+        slim = {
+            "category": "events",
+            "digest": data.get("digest", ""),
+            "walking_area": data.get("walking_area", ""),
+            "results_count": data.get("results_count"),
+            "instruction": _truncate_text(str(data.get("instruction", "")), 400),
+            "warning": data.get("warning"),
+        }
+    elif name in ("search_dining", "search_dining_and_transport"):
+        slim = {
+            "category": "dining",
+            "restaurants_digest": _truncate_text(
+                str(data.get("restaurants_digest", "") or data.get("digest", "")), 3500
+            ),
+            "walking_area": data.get("walking_area", ""),
+            "instruction": _truncate_text(str(data.get("instruction", "")), 400),
+            "warning": data.get("warning"),
+        }
+    else:
+        slim = {
+            k: v
+            for k, v in data.items()
+            if k not in ("search", "results") and not isinstance(v, (list, dict))
+        }
+
+    content = json.dumps(slim, ensure_ascii=False, indent=2)
+    if len(content) > _FINALIZE_MAX_TOOL_CHARS:
+        content = content[:_FINALIZE_MAX_TOOL_CHARS] + "\n…"
+    return ToolMessage(content=content, tool_call_id=msg.tool_call_id, name=name)
+
+
+def prepare_finalize_messages(
+    messages: list[Any],
+    *,
+    rebuild_scope: str = "full",
+) -> list[Any]:
+    """
+    Для finalize — только последние slim ToolMessage по нужным tools.
+    Без всей истории AIMessage/HumanMessage (экономия ~20k токенов).
+    """
+    if rebuild_scope == "lifehacks":
+        return []
+
+    needed = set(required_tools_for_scope(rebuild_scope))
+    latest: dict[str, ToolMessage] = {}
+    for msg in messages:
+        if not isinstance(msg, ToolMessage) or not msg.name:
+            continue
+        canonical = resolve_tool_name(msg.name)
+        if canonical in needed:
+            latest[canonical] = msg
+
+    slimmed = [
+        slim_tool_message_for_finalize(latest[name])
+        for name in (
+            "search_roundtrip_tickets",
+            "search_culture_events",
+            "search_dining",
+        )
+        if name in latest
+    ]
+    return slimmed
+
+
+_DINING_TOOL_NAMES = frozenset({"search_dining", "search_dining_and_transport"})
+
+
+def _tool_payload(messages: list[Any], tool_name: str) -> dict[str, Any]:
+    for msg in reversed(messages):
+        if not isinstance(msg, ToolMessage):
+            continue
+        name = msg.name or ""
+        if tool_name in _DINING_TOOL_NAMES:
+            if name not in _DINING_TOOL_NAMES:
+                continue
+        elif name != tool_name:
+            continue
+        raw = msg.content if isinstance(msg.content, str) else str(msg.content)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def build_fallback_program_draft(
+    messages: list[Any],
+    *,
+    city: str,
+    walking_area: str = "",
+) -> ProgramDraft:
+    """Сборка черновика из digest без LLM (если ответ обрезан по length)."""
+    from search.digest_format import clean_events_display, format_events_digest
+
+    events_data = _tool_payload(messages, "search_culture_events")
+    dining_data = _tool_payload(messages, "search_dining")
+
+    events_raw = str(events_data.get("digest", "")).strip()
+    if not events_raw:
+        search_block = events_data.get("search")
+        if isinstance(search_block, dict):
+            results = search_block.get("results")
+            if isinstance(results, list):
+                events_raw = format_events_digest(results)
+    events = clean_events_display(events_raw) if events_raw else (
+        "Мероприятия: уточните на сайтах музеев города."
+    )
+
+    dining = _truncate_text(
+        str(dining_data.get("restaurants_digest", "") or dining_data.get("digest", "")),
+        3500,
+    )
+    if not dining:
+        dining = "Питание: см. restaurants_digest в повторном поиске."
+
+    area = (
+        walking_area
+        or str(events_data.get("walking_area", ""))
+        or str(dining_data.get("walking_area", ""))
+        or "центр"
+    )
+    from agents.lifehacks_quality import build_default_lifehacks
+
+    lifehacks = build_default_lifehacks(
+        city=city,
+        walking_area=area,
+        search_context=walking_area,
+    )
+
+    return ProgramDraft(
+        events=events,
+        dining=dining,
+        lifehacks=lifehacks,
     )
 
 
-def prepare_finalize_messages(messages: list[Any]) -> list[Any]:
-    """Сжимает tool payload билетов перед вызовом llm_final."""
-    return [
-        slim_tool_message_for_finalize(m)
-        if isinstance(m, ToolMessage) and m.name == "search_roundtrip_tickets"
-        else m
-        for m in messages
-    ]
+def invoke_program_draft(
+    llm_final: Any,
+    *,
+    system: Any,
+    tool_messages: list[Any],
+    human: HumanMessage,
+    state_messages: list[Any],
+    city: str,
+    walking_area: str = "",
+) -> ProgramDraft:
+    """Вызов structured output с fallback при обрезке ответа (length)."""
+    prompt = [system, *tool_messages, human]
+    try:
+        draft = llm_final.invoke(prompt)
+        from agents.lifehacks_quality import clean_lifehacks_display
+
+        fields = draft.model_dump()
+        fields["lifehacks"] = clean_lifehacks_display(
+            fields.get("lifehacks", ""),
+            city=city or "город",
+            walking_area=walking_area,
+            search_context=walking_area,
+        )
+        return ProgramDraft(**fields)
+    except Exception as exc:
+        err_name = type(exc).__name__
+        err_text = str(exc).lower()
+        if "length" not in err_text and err_name not in (
+            "LengthFinishReasonError",
+            "OutputParserException",
+        ):
+            raise
+        print(
+            "  [writer] ответ LLM обрезан (length) — сборка из digest без повторного вызова."
+        )
+        return build_fallback_program_draft(
+            state_messages,
+            city=city or "город",
+            walking_area=walking_area,
+        )

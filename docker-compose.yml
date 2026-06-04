@@ -1,0 +1,30 @@
+# Туристический ассистент: интерактивный CLI (локально и на сервере).
+#
+# Подготовка (НЕ перезаписывайте существующий .env!):
+#   test -f .env || cp .env.example .env
+#   # затем отредактируйте .env: OPENAI_API_KEY и др.
+#
+# Сборка и запуск:
+#   docker compose build
+#   docker compose run --rm app
+#
+# Тесты / eval (без интерактива):
+#   docker compose run --rm app python -m unittest discover -s tests -v
+#   docker compose run --rm app python -m eval --suite smoke
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tourist-assistant:latest
+    env_file:
+      - .env
+    environment:
+      DATABASE_PATH: /app/data/trips.db
+    volumes:
+      - ./data:/app/data
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

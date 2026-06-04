@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from langchain_core.messages import ToolMessage
 
-from planning.rebuild import required_tools_for_scope
+from agents.section_quality import critic_program_issues
+from planning.rebuild import required_tools_for_scope, tool_call_satisfied
 
 
 def run_critic(state: dict[str, Any]) -> tuple[bool, str]:
@@ -25,26 +25,12 @@ def run_critic(state: dict[str, Any]) -> tuple[bool, str]:
             tools_done.add(message.name)
 
     for tool_name in required:
-        if tool_name not in tools_done:
+        if not tool_call_satisfied(tool_name, tools_done):
             issues.append(f"не вызван {tool_name}")
 
     program = state.get("program")
-    if program and scope in ("full", "dining"):
-        dining = str(program.get("dining", ""))
-        link_count = len(re.findall(r"https?://", dining, flags=re.IGNORECASE))
-        if link_count < 6:
-            issues.append(f"в питании {link_count} ссылок (нужно ≥6)")
-
-    if program and scope in ("full", "tickets"):
-        tickets = str(program.get("tickets", ""))
-        # Требуем явные словесные подписи блоков в разделе "Билеты".
-        # Это делает формат менее хрупким (без эмодзи) и позволяет детерминированно
-        # проверять полноту: самолёт / поезд / автобус.
-        required_labels = ("самол", "поезд", "автобус")
-        lower = tickets.lower()
-        for label in required_labels:
-            if label not in lower:
-                issues.append(f"в билетах нет «{label}…»")
+    if program:
+        issues.extend(critic_program_issues(program, scope))
 
     if issues:
         return False, "; ".join(issues)

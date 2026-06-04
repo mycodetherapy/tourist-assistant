@@ -54,22 +54,16 @@ def parse_tool_result(content: str) -> dict[str, Any]:
             "error": data.get("error"),
         }
 
-    # search_dining_and_transport: два под-поиска
+    # search_dining: вложенный поиск ресторанов
     if "search" in data and isinstance(data["search"], dict):
         nested = data["search"]
-        if "restaurants" in nested and "transport" in nested:
+        if "restaurants" in nested:
             rest = nested.get("restaurants") or {}
-            trans = nested.get("transport") or {}
-            rc = int(rest.get("results_count", 0)) + int(trans.get("results_count", 0))
-            raw = int(rest.get("raw_results_count", 0)) + int(
-                trans.get("raw_results_count", 0)
-            )
-            provider = rest.get("provider") or trans.get("provider")
             return {
                 "live_data": bool(data.get("live_data", True)),
-                "results_count": rc,
-                "raw_results_count": raw,
-                "provider": provider,
+                "results_count": int(rest.get("results_count", 0)),
+                "raw_results_count": int(rest.get("raw_results_count", 0)),
+                "provider": rest.get("provider"),
                 "error": None,
             }
 

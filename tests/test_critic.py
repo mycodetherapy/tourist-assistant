@@ -18,12 +18,23 @@ class TestCritic(unittest.TestCase):
                 ToolMessage(
                     content="{}",
                     tool_call_id="3",
-                    name="search_dining_and_transport",
+                    name="search_dining",
                 ),
             ],
             "program": {
-                "tickets": "Самолёт: https://x.ru\nПоезд: https://y.ru\nАвтобус: https://z.ru",
-                "dining": " ".join(f"https://x{i}.ru" for i in range(7)),
+                "tickets": (
+                    "Самолёт: рейс SU https://avia.example/a\n"
+                    "Поезд: плацкарт https://rzd.example/b\n"
+                    "Автобус: междугородний https://bus.example/c\n"
+                ),
+                "events": (
+                    "Эрмитаж — музей https://hermitagemuseum.org\n"
+                    "Русский музей — выставки https://rusmuseum.ru\n"
+                ),
+                "dining": "\n".join(
+                    f"Ресторан {i} https://dining.example/r{i}" for i in range(7)
+                ),
+                "lifehacks": "Маршрут: музей утром → обед рядом → вечерний театр пешком.",
             },
         }
         passed, _ = run_critic(state)
