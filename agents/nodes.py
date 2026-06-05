@@ -85,10 +85,7 @@ def planner_node(state: AgentState) -> dict[str, list[Any]]:
         search_context=state.get("search_context", ""),
     )
     system = SystemMessage(content=_build_planner_system_prompt(ctx, rebuild_scope))
-    llm_with_tools = get_llm_with_tools(
-        city=state.get("city", ""),
-        llm_region=state.get("llm_region"),
-    )
+    llm_with_tools = get_llm_with_tools()
     response: AIMessage = llm_with_tools.invoke([system, *state["messages"]])
 
     PlannerNodeOutput(message=response)
@@ -188,10 +185,7 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     )
     human = HumanMessage(content=human_message_for_scope(rebuild_scope))
 
-    llm_final = get_llm_final(
-        city=state.get("city", ""),
-        llm_region=state.get("llm_region"),
-    )
+    llm_final = get_llm_final()
     finalize_messages = prepare_finalize_messages(
         state["messages"],
         rebuild_scope=rebuild_scope,

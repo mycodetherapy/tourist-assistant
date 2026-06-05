@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from agents.llm import get_llm, infer_llm_region
+from agents.llm import get_llm
+from config.settings import get_llm_api_key
 
 
 class JudgeVerdict(BaseModel):
@@ -28,15 +28,11 @@ def run_llm_judge(
     origin_city: str,
 ) -> tuple[JudgeVerdict | None, str | None]:
     """Вызов LLM-судьи; при ошибке (нет ключа) возвращает (None, error)."""
-    if not os.getenv("OPENAI_API_KEY"):
-        return None, "OPENAI_API_KEY не задан"
+    if not get_llm_api_key():
+        return None, "LLM_API_KEY не задан"
 
-    # Judge привязываем к тому же региональному роутингу, что и основной агент.
     # Temperature=0 — детерминированнее оценка при одинаковом входе.
-    region = os.getenv("LLM_REGION", "auto").strip().lower() or "auto"
-    if region == "auto":
-        region = infer_llm_region(city)
-    llm = get_llm(city=city, llm_region=region).bind(temperature=0)
+    llm = get_llm().bind(temperature=0)
     judge = llm.with_structured_output(JudgeVerdict, method="json_schema")
     system = SystemMessage(
         content=(

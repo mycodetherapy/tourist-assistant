@@ -160,15 +160,12 @@ def slim_tool_message_for_finalize(msg: ToolMessage) -> ToolMessage:
     return ToolMessage(content=content, tool_call_id=msg.tool_call_id, name=name)
 
 
-def prepare_finalize_messages(
+def _collect_latest_tool_messages(
     messages: list[Any],
     *,
-    rebuild_scope: str = "full",
-) -> list[Any]:
-    """
-    Для finalize — только последние slim ToolMessage по нужным tools.
-    Без всей истории AIMessage/HumanMessage (экономия ~20k токенов).
-    """
+    rebuild_scope: str,
+) -> list[ToolMessage]:
+    """Последние ToolMessage по нужным инструментам (до slim)."""
     if rebuild_scope == "lifehacks":
         return []
 
@@ -181,8 +178,8 @@ def prepare_finalize_messages(
         if canonical in needed:
             latest[canonical] = msg
 
-    slimmed = [
-        slim_tool_message_for_finalize(latest[name])
+    return [
+        latest[name]
         for name in (
             "search_roundtrip_tickets",
             "search_culture_events",
@@ -190,7 +187,35 @@ def prepare_finalize_messages(
         )
         if name in latest
     ]
-    return slimmed
+
+
+def prepare_finalize_messages(
+    messages: list[Any],
+    *,
+    rebuild_scope: str = "full",
+) -> list[HumanMessage]:
+    """
+    Для finalize — slim-данные инструментов в HumanMessage.
+    ToolMessage без предшествующего tool_calls OpenAI API не принимает.
+    """
+    tool_messages = _collect_latest_tool_messages(messages, rebuild_scope=rebuild_scope)
+    if not tool_messages:
+        return []
+
+    blocks: list[str] = []
+    for msg in tool_messages:
+        slim = slim_tool_message_for_finalize(msg)
+        name = slim.name or "tool"
+        blocks.append(f"### {name}\n{slim.content}")
+
+    return [
+        HumanMessage(
+            content=(
+                "Результаты инструментов (используй как источник фактов):\n\n"
+                + "\n\n".join(blocks)
+            )
+        )
+    ]
 
 
 _DINING_TOOL_NAMES = frozenset({"search_dining", "search_dining_and_transport"})
@@ -292,7 +317,7 @@ def invoke_program_draft(
     walking_area: str = "",
 ) -> ProgramDraft:
     """Вызов structured output с fallback при обрезке ответа (length)."""
-    prompt = [system, *tool_messages, human]
+    prompt = [system, *tool_messages, human]  # tool_messages — HumanMessage, не ToolMessage
     try:
         draft = _coerce_program_draft(llm_final.invoke(prompt))
         from agents.lifehacks_quality import clean_lifehacks_display

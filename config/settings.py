@@ -156,17 +156,75 @@ SEARCH_FILTERS: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 
-DEFAULT_PROXY_BASE_URL = "https://openai.api.proxyapi.ru/v1"
-LLM_MODEL = "gpt-4o-mini"
+DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1"
+# gpt-4.1-mini на Azure поддерживает tools + structured_outputs (gpt-4o-mini — только OpenAI).
+LLM_MODEL = "openai/gpt-4.1-mini"
 LLM_TEMPERATURE = 0.2
 
-# Роутинг моделей (Россия vs зарубежье)
-# - LLM_REGION: auto|ru|intl — принудительный выбор региона (по умолчанию auto)
-# - LLM_MODEL_RU / LLM_MODEL_INTL: имена моделей для регионов (если не заданы — LLM_MODEL)
-# - PROXY_BASE_URL_RU / PROXY_BASE_URL_INTL: endpoint'ы (если не заданы — PROXY_BASE_URL/DEFAULT_PROXY_BASE_URL)
-LLM_REGION = "auto"
-LLM_MODEL_RU = LLM_MODEL
-LLM_MODEL_INTL = LLM_MODEL
+# Белый список OpenRouter (only + order). DeepInfra не хостит openai/* на OpenRouter.
+DEFAULT_OPENROUTER_PROVIDERS: tuple[str, ...] = ("Azure",)
+
+# Альтернативы дефолту: (slug, провайдеры OpenRouter). См. README «Модели LLM».
+RECOMMENDED_ALTERNATIVE_LLM_MODELS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("openai/gpt-4o-mini", ("OpenAI",)),
+    ("google/gemini-2.5-flash-lite", ("Google", "Google AI Studio")),
+    ("deepseek/deepseek-chat-v3.1", ("DeepInfra",)),
+    ("meta-llama/llama-3.3-70b-instruct", ("DeepInfra", "Together")),
+    ("mistralai/mistral-nemo", ("Mistral",)),
+)
+
+
+def get_llm_api_key() -> str:
+    """Ключ OpenRouter (или другого OpenAI-compatible провайдера)."""
+    return os.getenv("LLM_API_KEY", "").strip()
+
+
+def get_llm_base_url() -> str:
+    """Base URL OpenAI-compatible API; по умолчанию OpenRouter."""
+    explicit = os.getenv("LLM_BASE_URL", "").strip()
+    if explicit:
+        return explicit
+    legacy = os.getenv("PROXY_BASE_URL", "").strip()
+    if legacy:
+        return legacy
+    return DEFAULT_LLM_BASE_URL
+
+
+def _split_csv_env(name: str) -> list[str]:
+    return [part.strip() for part in os.getenv(name, "").split(",") if part.strip()]
+
+
+def get_openrouter_providers() -> list[str]:
+    """
+    Белый список провайдеров OpenRouter (порядок = приоритет).
+    LLM_OPENROUTER_PROVIDERS не задан — DEFAULT_OPENROUTER_PROVIDERS;
+    пустая строка — без ограничений (любой провайдер OpenRouter).
+    """
+    raw = os.getenv("LLM_OPENROUTER_PROVIDERS")
+    if raw is not None:
+        return _split_csv_env("LLM_OPENROUTER_PROVIDERS")
+    legacy = os.getenv("LLM_OPENROUTER_PROVIDER_ORDER")
+    if legacy is not None:
+        return _split_csv_env("LLM_OPENROUTER_PROVIDER_ORDER")
+    return list(DEFAULT_OPENROUTER_PROVIDERS)
+
+
+def get_llm_extra_body() -> dict[str, object] | None:
+    """OpenRouter: only/order + require_parameters (нужны tools и structured output)."""
+    if "openrouter.ai" not in get_llm_base_url():
+        return None
+
+    providers = get_openrouter_providers()
+    if not providers:
+        return {"provider": {"allow_fallbacks": True, "require_parameters": True}}
+    return {
+        "provider": {
+            "only": providers,
+            "order": providers,
+            "allow_fallbacks": False,
+            "require_parameters": True,
+        }
+    }
 
 
 def is_placeholder_secret(value: str) -> bool:
@@ -175,23 +233,23 @@ def is_placeholder_secret(value: str) -> bool:
     if not raw:
         return True
     lowered = raw.lower()
-    if lowered in ("sk-...", "sk-your-key", "changeme", "your-api-key"):
+    if lowered in ("sk-...", "sk-or-...", "sk-your-key", "changeme", "your-api-key"):
         return True
     return "..." in raw or ("<" in raw and ">" in raw)
 
 
 def ensure_env() -> None:
     """Проверяет обязательные переменные окружения перед запуском CLI."""
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    api_key = get_llm_api_key()
     if not api_key:
         raise SystemExit(
-            "Ошибка: не задан OPENAI_API_KEY. "
-            "Создайте файл .env (см. .env.example): OPENAI_API_KEY=sk-..."
+            "Ошибка: не задан LLM_API_KEY. "
+            "Создайте файл .env (см. .env.example): LLM_API_KEY=sk-or-..."
         )
     if is_placeholder_secret(api_key):
         raise SystemExit(
-            "Ошибка: OPENAI_API_KEY в .env — плейсхолдер из .env.example (sk-...), "
-            "а не ключ ProxyAPI.\n"
-            "Вставьте ключ с https://proxyapi.ru → личный кабинет → API keys.\n"
+            "Ошибка: LLM_API_KEY в .env — плейсхолдер из .env.example (sk-or-...), "
+            "а не реальный ключ.\n"
+            "Вставьте ключ с https://openrouter.ai/keys.\n"
             "Если ключ был раньше — восстановите из бэкапа или сгенерируйте новый."
         )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 
 from models.schemas import ProgramDraft
 
@@ -59,10 +59,11 @@ class TestFinalizeHelpers(unittest.TestCase):
             tool_call_id="1",
             name="search_roundtrip_tickets",
         )
-        slimmed = prepare_finalize_messages([msg])[0]
-        data = json.loads(str(slimmed.content))
-        self.assertNotIn("offers", data)
-        self.assertIn("summary_for_llm", data)
+        prepared = prepare_finalize_messages([msg])
+        self.assertEqual(len(prepared), 1)
+        self.assertIsInstance(prepared[0], HumanMessage)
+        self.assertIn("summary_for_llm", str(prepared[0].content))
+        self.assertNotIn('"offers"', str(prepared[0].content))
 
     def test_slim_events_drops_search_blob(self) -> None:
         heavy = {
@@ -93,7 +94,9 @@ class TestFinalizeHelpers(unittest.TestCase):
         )
         out = prepare_finalize_messages([old, new], rebuild_scope="events")
         self.assertEqual(len(out), 1)
+        self.assertIsInstance(out[0], HumanMessage)
         self.assertIn("новый", str(out[0].content))
+        self.assertNotIn("старый", str(out[0].content))
 
     def test_fallback_draft_from_digest(self) -> None:
         messages = [

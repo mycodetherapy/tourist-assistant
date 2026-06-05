@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--with-llm",
         action="store_true",
-        help="Включить LLM-as-judge (нужен OPENAI_API_KEY)",
+        help="Включить LLM-as-judge (нужен LLM_API_KEY)",
     )
     args = parser.parse_args(argv)
 

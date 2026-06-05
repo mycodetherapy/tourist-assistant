@@ -7,7 +7,7 @@
 ### Требования
 
 - Python **3.10+** (работает на 3.9+)
-- Ключ **OpenAI API** (через [ProxyAPI](https://proxyapi.ru) или напрямую)
+- Ключ **OpenRouter** ([openrouter.ai/keys](https://openrouter.ai/keys))
 
 ### Установка и запуск
 
@@ -22,7 +22,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Отредактируйте .env: OPENAI_API_KEY=sk-...
+# Отредактируйте .env: LLM_API_KEY=sk-or-...
 
 python3 main.py
 ```
@@ -40,7 +40,7 @@ cd tourist-assistant
 ./scripts/ensure_env_file.sh
 # или: test -f .env || cp .env.example .env
 
-# Заполните .env в редакторе (OPENAI_API_KEY, TAVILY_API_KEY, …)
+# Заполните .env в редакторе (LLM_API_KEY, TAVILY_API_KEY, …)
 
 # Права только для вашего пользователя (рекомендуется):
 chmod 600 .env
@@ -65,7 +65,7 @@ docker compose run --rm app
 #### Проверка, что ключи видны в контейнере (без вывода значений)
 
 ```bash
-docker compose run --rm app python -c "import os; print('OPENAI_API_KEY', 'set' if os.getenv('OPENAI_API_KEY') else 'unset')"
+docker compose run --rm app python -c "import os; print('LLM_API_KEY', 'set' if os.getenv('LLM_API_KEY') else 'unset')"
 ```
 
 #### Тесты / eval без полного агента
@@ -111,7 +111,7 @@ python3 -m unittest discover -s tests -v
 python3 -m eval --suite smoke
 ```
 
-С LLM-judge (нужен `OPENAI_API_KEY`):
+С LLM-judge (нужен `LLM_API_KEY`):
 
 ```bash
 python3 -m eval --suite smoke --with-llm
@@ -142,15 +142,10 @@ python3 -m eval --suite smoke
 
 | Переменная | Обязательно | Описание |
 |------------|-------------|----------|
-| `OPENAI_API_KEY` | Да* | Ключ ProxyAPI для зарубежных моделей (*не нужен для `unittest` и `eval --suite smoke` без `--with-llm`) |
-| `YANDEX_API_KEY` | Нет* | Ключ Yandex Cloud для `LLM_MODEL_RU` (*нужен для поездок по РФ при роутинге `ru`) |
-| `YANDEX_FOLDER_ID` | Нет | ID каталога YC; если не задан — берётся из `gpt://<folder_id>/...` в `LLM_MODEL_RU` |
-| `PROXY_BASE_URL` | Нет | Fallback endpoint, по умолчанию `https://openai.api.proxyapi.ru/v1` |
-| `LLM_REGION` | Нет | Роутинг модели: `auto`/`ru`/`intl` (по умолчанию `auto`) |
-| `LLM_MODEL_RU` | Нет | Модель Yandex (например `gpt://<folder>/aliceai-llm/latest`) |
-| `LLM_MODEL_INTL` | Нет | Модель ProxyAPI (например `gpt-4o-mini`) |
-| `PROXY_BASE_URL_RU` | Нет | Yandex: `https://llm.api.cloud.yandex.net/v1` (не proxyapi.ru) |
-| `PROXY_BASE_URL_INTL` | Нет | ProxyAPI: `https://openai.api.proxyapi.ru/v1` |
+| `LLM_API_KEY` | Да* | Ключ [OpenRouter](https://openrouter.ai/keys) (*не нужен для `unittest` и `eval --suite smoke` без `--with-llm`) |
+| `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openrouter.ai/api/v1` |
+| `LLM_MODEL` | Нет | Slug модели на OpenRouter. По умолчанию `openai/gpt-4.1-mini` (см. [Модели LLM](#модели-llm)) |
+| `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure`. Для альтернатив через VPN — `OpenAI` |
 | `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`, регион `ru-ru`) |
 | `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
@@ -164,6 +159,60 @@ python3 -m eval --suite smoke
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
 Шаблон: [`.env.example`](.env.example).
+
+### Модели LLM
+
+#### Модель по умолчанию: `openai/gpt-4.1-mini`
+
+Значение задано в [`config/settings.py`](config/settings.py) (`LLM_MODEL`) и [`.env.example`](.env.example).
+
+Почему именно она:
+
+1. **Работает из РФ без VPN** — на OpenRouter у `openai/gpt-4.1-mini` есть endpoint **Azure** с `tools` и `structured_outputs` (в отличие от `openai/gpt-4o-mini`, где tools есть только у провайдера OpenAI → 403 из РФ).
+2. **Покрывает весь граф** — planner (tools) и writer (structured output) на одной модели.
+3. **Баланс цена/качество** — ~$0.40 / $1.60 за 1M токенов (in/out), дешевле флагманов `gpt-4.1` / `gpt-4o`.
+4. **Провайдер по умолчанию** — `LLM_OPENROUTER_PROVIDERS=Azure` (белый список в `get_llm_extra_body()`).
+
+Минимальный `.env` без VPN:
+
+```env
+LLM_MODEL=openai/gpt-4.1-mini
+LLM_OPENROUTER_PROVIDERS=Azure
+```
+
+#### Рекомендуемые альтернативы (5 моделей)
+
+Проверено по OpenRouter API (март 2026): у каждой модели на указанных провайдерах есть `tools` и `structured_outputs`. Константа — `RECOMMENDED_ALTERNATIVE_LLM_MODELS` в [`config/settings.py`](config/settings.py); автопроверка — `python3 -m unittest tests.test_recommended_llm_models`.
+
+| Модель | Производитель | Провайдер OpenRouter | ~Цена in/out | VPN |
+|--------|---------------|----------------------|--------------|-----|
+| `openai/gpt-4o-mini` | OpenAI | `OpenAI` | $0.15 / $0.60 | **Да** (403 из РФ без VPN) |
+| `google/gemini-2.5-flash-lite` | Google | `Google`, `Google AI Studio` | $0.10 / $0.40 | Обычно не нужен |
+| `deepseek/deepseek-chat-v3.1` | DeepSeek | `DeepInfra` | $0.21 / $0.80 | Обычно не нужен |
+| `meta-llama/llama-3.3-70b-instruct` | Meta | `DeepInfra`, `Together` | $0.10 / $0.32 | Обычно не нужен |
+| `mistralai/mistral-nemo` | Mistral | `Mistral` | $0.02 / $0.15 | Обычно не нужен |
+
+Примеры `.env`:
+
+```env
+# OpenAI — только с VPN из РФ
+LLM_MODEL=openai/gpt-4o-mini
+LLM_OPENROUTER_PROVIDERS=OpenAI
+```
+
+```env
+# Google — без VPN
+LLM_MODEL=google/gemini-2.5-flash-lite
+LLM_OPENROUTER_PROVIDERS=Google,Google AI Studio
+```
+
+```env
+# DeepSeek
+LLM_MODEL=deepseek/deepseek-chat-v3.1
+LLM_OPENROUTER_PROVIDERS=DeepInfra
+```
+
+Проверка связи с OpenRouter: `python3 scripts/test_llm.py`.
 
 ---
 
@@ -201,7 +250,7 @@ python3 scripts/render_graph.py
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
-**Стек:** LangGraph 0.2+, LangChain 0.3, OpenAI `gpt-4o-mini` (`agents/llm.py`), Pydantic, SQLite, **ddgs** / Tavily, PyYAML (eval).
+**Стек:** LangGraph 0.2+, LangChain 0.3, OpenRouter `openai/gpt-4.1-mini` / Azure (`agents/llm.py`), Pydantic, SQLite, **ddgs** / Tavily, PyYAML (eval).
 
 ### Eval (уровни проверки)
 
@@ -230,7 +279,7 @@ python3 scripts/render_graph.py
 
 | Система | Назначение |
 |---------|------------|
-| **OpenAI API** (ProxyAPI) | Researcher, writer, опционально LLM-judge в eval |
+| **OpenRouter** | Researcher, writer, опционально LLM-judge в eval (`openai/gpt-4.1-mini` через Azure) |
 | **SQLite** (`DATABASE_PATH`) | `trips`, `trip_preferences`, `user_profile`, `itinerary_versions`, `tool_runs` |
 | **Tavily API** (опционально) | Веб-поиск с ответом-сводкой |
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |

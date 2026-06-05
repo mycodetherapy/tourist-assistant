@@ -2,7 +2,7 @@
 #
 # Подготовка (НЕ перезаписывайте существующий .env!):
 #   test -f .env || cp .env.example .env
-#   # затем отредактируйте .env: OPENAI_API_KEY и др.
+#   # затем отредактируйте .env: LLM_API_KEY и др.
 #
 # Сборка и запуск:
 #   docker compose build

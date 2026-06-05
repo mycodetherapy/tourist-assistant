@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+_NO_APPROVE = frozenset({"n", "no", "н", "нет"})
+_YES_REBUILD = frozenset({"y", "yes", "д", "да"})
+
+
+def _normalize_answer(raw: str) -> str:
+    return raw.strip().lower().replace("ё", "е")
+
 
 def prompt_approve_program() -> bool:
-    """Утвердить программу? Enter = да."""
-    raw = input("Утвердить программу? [Y/n]: ").strip().lower()
-    if not raw:
-        return True
-    return raw in {"y", "yes", "д", "да"}
+    """
+    Утвердить программу?
+    Enter / да / y — да; н / нет / n — нет.
+    Логика «только явный отказ»: иначе при [Да/нет] легко промахнуться по раскладке.
+    """
+    raw = _normalize_answer(input("Утвердить программу? [Да/нет] (Enter — да): "))
+    return raw not in _NO_APPROVE
 
 
 def prompt_reject_action() -> str:
@@ -17,9 +26,9 @@ def prompt_reject_action() -> str:
     Возвращает 'rebuild' | 'save_draft'.
     """
     print("\nПрограмма не утверждена.")
-    raw = input(
-        "Пересобрать снова? [y/N] (n — сохранить черновик и выйти): "
-    ).strip().lower()
-    if raw in {"y", "yes", "д", "да"}:
+    raw = _normalize_answer(
+        input("Пересобрать снова? [да/Нет] (Enter — сохранить черновик и выйти): ")
+    )
+    if raw in _YES_REBUILD:
         return "rebuild"
     return "save_draft"

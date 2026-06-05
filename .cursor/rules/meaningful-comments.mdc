@@ -12,7 +12,7 @@ Use the same principle as in `main.py` around the schema/`output_type` block: a 
 ## Language
 
 - Write these comments in **Russian**.
-- Keep code symbols, library/class names, and env var names as-is (e.g. `OpenAIProvider`, `output_type`, `OPENAI_API_KEY`).
+- Keep code symbols, library/class names, and env var names as-is (e.g. `OpenAIProvider`, `output_type`, `LLM_API_KEY`).
 
 ## Where to add comments (good targets)
 

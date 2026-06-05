@@ -8,4 +8,4 @@ if [[ -f .env ]]; then
   exit 0
 fi
 cp .env.example .env
-echo "Создан .env из .env.example — заполните OPENAI_API_KEY и др."
+echo "Создан .env из .env.example — заполните LLM_API_KEY и др."

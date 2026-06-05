@@ -11,7 +11,7 @@ alwaysApply: true
 
 1. **Назначение** — что делает агент, результат (1–2 предложения).
 2. **Быстрый старт** — `venv`, `pip install -r requirements.txt`, `.env`, `python main.py`, пример ввода.
-3. **Переменные окружения** — таблица с `OPENAI_API_KEY`, `PROXY_BASE_URL`, `TAVILY_API_KEY`.
+3. **Переменные окружения** — таблица с `LLM_API_KEY`, `LLM_BASE_URL`, `TAVILY_API_KEY`.
 4. **Архитектура** — схема графа (researcher → executor → writer → critic → human_review), таблица инструментов, eval (если есть).
 5. **Проектирование агента** (все подпункты):
    - Какую задачу решает?

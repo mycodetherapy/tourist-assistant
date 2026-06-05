@@ -15,9 +15,6 @@ class AgentState(TypedDict, total=False):
     city: str
     dates: str
     origin_city: str
-    # Опциональная подсказка для выбора модели (например, "ru"/"intl"/"auto").
-    # Если не задано — будет авто-определение по городу и/или env-настройкам.
-    llm_region: str
     search_context: str
     preferences: dict[str, Any]
     program: dict[str, Any]
