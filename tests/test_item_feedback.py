@@ -75,6 +75,59 @@ class TestItemFeedback(unittest.TestCase):
         self.assertEqual(view.sections["tickets"].items, ())
         self.assertIn("Aviasales", view.sections["tickets"].intro)
 
+    def test_votes_cleared_when_rebuilt_item_changes(self) -> None:
+        from program.item_key import make_item_key
+
+        self.service.set_item_feedback(
+            self.trip_id,
+            section="events",
+            item_key=make_item_key("events", "1. Музей"),
+            vote=1,
+        )
+        save_itinerary_version(
+            self.trip_id,
+            {
+                "tickets": "- Aviasales: url",
+                "events": "1. Другой музей",
+                "dining": "1. Кафе",
+                "lifehacks": "- Совет",
+            },
+            scope="events",
+        )
+        view = self.service.get_program_view(self.trip_id)
+        assert view is not None
+        self.assertIsNone(view.sections["events"].items[0].vote)
+
+    def test_partial_rebuild_keeps_other_sections_votes(self) -> None:
+        from program.item_key import make_item_key
+
+        self.service.set_item_feedback(
+            self.trip_id,
+            section="dining",
+            item_key=make_item_key("dining", "1. Кафе"),
+            vote=-1,
+        )
+        self.service.set_item_feedback(
+            self.trip_id,
+            section="events",
+            item_key=make_item_key("events", "1. Музей"),
+            vote=1,
+        )
+        save_itinerary_version(
+            self.trip_id,
+            {
+                "tickets": "- Aviasales: url",
+                "events": "1. Новое мероприятие",
+                "dining": "1. Кафе",
+                "lifehacks": "- Совет",
+            },
+            scope="events",
+        )
+        view = self.service.get_program_view(self.trip_id)
+        assert view is not None
+        self.assertIsNone(view.sections["events"].items[0].vote)
+        self.assertEqual(view.sections["dining"].items[0].vote, -1)
+
     def test_votes_survive_new_program_version(self) -> None:
         from program.item_key import make_item_key
 

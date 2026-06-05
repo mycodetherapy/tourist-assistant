@@ -448,23 +448,43 @@ class TripService:
             sections[key] = ProgramSectionView(intro=section.intro, items=items)
         return sections
 
+    def build_program_view(
+        self,
+        trip_id: int,
+        program_data: dict[str, Any],
+        *,
+        version: int = 0,
+        version_id: int = 0,
+        scope: str = "full",
+        approved: bool = False,
+    ) -> ProgramView:
+        """Программа из dict (например state графа) с оценками из БД."""
+        program = self.parse_program(program_data)
+        parsed = parse_program_sections(program.model_dump())
+        sections = self._attach_feedback(parsed, trip_id=trip_id)
+        sections["tickets"] = ProgramSectionView(intro=program.tickets, items=())
+        return ProgramView(
+            version=version,
+            version_id=version_id,
+            scope=scope,
+            approved=approved,
+            program=program,
+            sections=sections,
+        )
+
     def get_program_view(self, trip_id: int) -> ProgramView | None:
         """Программа с разбивкой на пункты и сохранёнными оценками."""
         details = self.get_trip_details(trip_id)
         if details is None or details.latest_itinerary is None:
             return None
         latest = details.latest_itinerary
-        program = self.parse_program(latest["program"])
-        parsed = parse_program_sections(program.model_dump())
-        sections = self._attach_feedback(parsed, trip_id=trip_id)
-        sections["tickets"] = ProgramSectionView(intro=program.tickets, items=())
-        return ProgramView(
+        return self.build_program_view(
+            trip_id,
+            latest["program"],
             version=int(latest["version"]),
             version_id=int(latest["id"]),
             scope=latest["scope"],
             approved=latest["approved"],
-            program=program,
-            sections=sections,
         )
 
     def set_item_feedback(
@@ -476,6 +496,7 @@ class TripService:
         item_key: str | None = None,
         item_index: int | None = None,
         version_id: int | None = None,
+        program_data: dict[str, Any] | None = None,
     ) -> None:
         """Сохраняет, обновляет или снимает оценку пункта подборки (не для билетов)."""
         if section not in VOTABLE_SECTIONS:
@@ -484,12 +505,14 @@ class TripService:
             raise ValueError("Поездка не найдена")
 
         latest = get_latest_itinerary(trip_id)
-        if latest is None:
+        if program_data is not None:
+            program = self.parse_program(program_data)
+        elif latest is not None:
+            program = self.parse_program(latest["program"])
+        else:
             raise ValueError("Программа не найдена")
         if version_id is not None and get_itinerary_version(trip_id, version_id) is None:
             raise ValueError("Версия программы не найдена")
-
-        program = self.parse_program(latest["program"])
         parsed = parse_program_sections(program.model_dump())
         section_data = getattr(parsed, section)
         resolved_key: str | None = None
@@ -513,9 +536,10 @@ class TripService:
         if vote is None:
             delete_item_feedback(trip_id, section, resolved_key)
             return
+        storage_version_id = int(latest["id"]) if latest is not None else None
         upsert_item_feedback(
             trip_id,
-            int(latest["id"]),
+            storage_version_id,
             section,
             matched_index,
             resolved_key,

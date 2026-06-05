@@ -280,6 +280,17 @@ def human_review_node(state: AgentState) -> dict[str, Any]:
             update_trip_status(int(state["trip_id"]), "review")
         return {"approved": False}
 
+    if state.get("review_mode") == "cli" and state.get("trip_id") and state.get("program"):
+        from cli.feedback import offer_feedback_before_review
+        from services import TripService
+
+        offer_feedback_before_review(
+            TripService(),
+            int(state["trip_id"]),
+            program_data=state["program"],
+            scope=str(state.get("rebuild_scope", "full")),
+        )
+
     if prompt_approve_program():
         print("✓ Программа утверждена.\n")
         if state.get("trip_id") is not None:

@@ -77,7 +77,7 @@ docker compose up api web
 
 UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health). CLI по-прежнему: `docker compose run --rm app`.
 
-**Оценки пунктов (👍/👎):** только для **мероприятий, питания и лайфхаков** (билеты — структурированный API, без голосования). Клик → `PUT /api/trips/{id}/program/feedback` → `program_item_feedback` в `data/trips.db`; при открытии карточки `GET .../program` возвращает `vote` у пунктов. Оценка привязана к тексту пункта. После `docker compose build api web` перезапустите оба контейнера.
+**Оценки пунктов (👍/👎):** только для **мероприятий, питания и лайфхаков** (билеты — структурированный API, без голосования). Веб: клик → `PUT /api/trips/{id}/program/feedback`; CLI: пункт меню «Оценить пункты» или опционально перед утверждением. Хранение: `program_item_feedback` в `data/trips.db`, ключ по тексту пункта. При пересборе раздела оценки **сбрасываются** у изменённых пунктов; у неизменённых — сохраняются. После `docker compose build api web` перезапустите оба контейнера.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -138,9 +138,10 @@ docker compose run --rm app python -m eval --suite smoke
 
 | Режим | Действие |
 |-------|----------|
-| **Новая поездка** | Город, даты, вылет, запрос → опросник (см. ниже) → веб-поиск → программа → **утверждение Y/n** |
-| **Продолжить** | Выбор поездки по `id` → что пересобрать (всё или раздел) → снова граф и HITL |
+| **Новая поездка** | Город, даты, вылет, запрос → опросник (см. ниже) → веб-поиск → программа → **👍/👎 (опционально)** → **утверждение Y/n** |
+| **Продолжить** | Выбор поездки по `id` → что пересобрать (всё или раздел) → снова граф, оценки и HITL |
 | **Показать подробности** | Выбор поездки из списка (с сохранённой программой) → программа и предпочтения из БД **без** поиска и LLM |
+| **Оценить пункты** | Выбор поездки → интерактивные 👍/👎 у мероприятий / питания / лайфхаков (та же БД, что в вебе) |
 | **Удалить поездку** | Выбор поездки по `id` → меню подтверждения (`1` — удалить) → CASCADE в SQLite |
 
 **Опросник предпочтений**
@@ -460,6 +461,7 @@ tourist-assistant/
 ├── services/               # TripService, RunManager — общий слой CLI + API
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query
 ├── cli/app.py              # Меню, опросник, вызов TripService
+├── cli/feedback.py         # 👍/👎 пунктов программы в терминале
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
 │   ├── schemas.py          # FinalProgram, CultureEventsInput, …
@@ -485,7 +487,8 @@ tourist-assistant/
 │   ├── human_review.py
 │   └── print_program.py
 ├── planning/rebuild.py       # rebuild_scope, merge_program
-├── program/parse_items.py  # разбор markdown-секций на пункты (голосование в вебе)
+├── program/parse_items.py  # разбор markdown-секций на пункты (голосование)
+├── program/feedback_prune.py  # сброс оценок пересобранных пунктов
 ├── db/                     # schema.sql, repository (в т.ч. program_item_feedback)
 ├── onboarding/             # опросник, TripPreferences
 ├── observability/tracing.py

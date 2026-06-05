@@ -27,6 +27,7 @@ from onboarding import (
     resolve_preferences_for_new_trip,
 )
 from planning import REBUILD_SCOPES, required_tools_for_scope
+from cli.feedback import run_feedback_session
 from services import TripService
 from services.errors import format_runtime_error
 
@@ -70,6 +71,17 @@ def _confirm_delete_trip(trip_id: int, *, city: str, dates: str) -> bool:
         "no",
     )
     return choice == "yes"
+
+
+def _feedback_trip_flow(service: TripService) -> None:
+    """Оценка пунктов сохранённой программы."""
+    chosen = _choose_trip_from_list(prompt="ID поездки для оценки")
+    if chosen is None:
+        return
+    if service.get_program_view(chosen) is None:
+        print("У поездки нет сохранённой программы.")
+        return
+    run_feedback_session(service, chosen)
 
 
 def _delete_trip_flow(service: TripService) -> None:
@@ -247,10 +259,15 @@ def main() -> None:
             ("new", "Новая поездка"),
             ("continue", "Продолжить сохранённую поездку"),
             ("details", "Показать подробности поездки"),
+            ("feedback", "Оценить пункты поездки"),
             ("delete", "Удалить поездку"),
         ],
         "new",
     )
+
+    if mode == "feedback":
+        _feedback_trip_flow(service)
+        raise SystemExit(0)
 
     if mode == "delete":
         _delete_trip_flow(service)

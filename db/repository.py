@@ -268,6 +268,35 @@ def next_version_number(trip_id: int) -> int:
     return int(row["max_v"]) + 1
 
 
+def list_item_feedback_pairs(trip_id: int) -> list[tuple[str, str]]:
+    """Все оценки поездки: [(section, item_key), ...]."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT section, item_key
+            FROM program_item_feedback
+            WHERE trip_id = ?
+            """,
+            (trip_id,),
+        ).fetchall()
+    return [(row["section"], row["item_key"]) for row in rows]
+
+
+def prune_stale_item_feedback(
+    trip_id: int,
+    program: dict[str, Any],
+    scope: str,
+) -> int:
+    """Удаляет оценки пересобранных пунктов; возвращает число удалённых."""
+    from program.feedback_prune import find_stale_feedback_keys
+
+    existing = list_item_feedback_pairs(trip_id)
+    stale = find_stale_feedback_keys(program, scope, existing=existing)
+    for section, item_key in stale:
+        delete_item_feedback(trip_id, section, item_key)
+    return len(stale)
+
+
 def save_itinerary_version(
     trip_id: int,
     program: dict[str, Any],
@@ -276,6 +305,7 @@ def save_itinerary_version(
     approved: bool = False,
 ) -> int:
     """Сохраняет версию программы; возвращает id записи itinerary_versions."""
+    prune_stale_item_feedback(trip_id, program, scope)
     version = next_version_number(trip_id)
     now = _utc_now()
     program_json = json.dumps(program, ensure_ascii=False)
