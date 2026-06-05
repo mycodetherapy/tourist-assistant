@@ -13,6 +13,7 @@ from agents.graph import app
 from db import (
     TripSummary,
     create_trip,
+    delete_trip,
     get_latest_itinerary,
     get_preferences,
     get_trip,
@@ -328,6 +329,15 @@ class TripService:
             ):
                 recovered += 1
         return recovered
+
+    def delete_trip_by_id(self, trip_id: int, *, has_active_run: bool = False) -> None:
+        """Удаляет поездку из БД. Запрещено во время активного фонового прогона."""
+        if get_trip(trip_id) is None:
+            raise ValueError(f"Поездка #{trip_id} не найдена")
+        if has_active_run:
+            raise ValueError("Нельзя удалить поездку во время сборки программы")
+        if not delete_trip(trip_id):
+            raise ValueError(f"Поездка #{trip_id} не найдена")
 
     def get_trip_details(self, trip_id: int) -> TripDetails | None:
         """Метаданные, предпочтения и последняя программа."""

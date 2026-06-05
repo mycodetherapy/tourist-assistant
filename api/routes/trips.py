@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from api.deps import get_run_manager, get_trip_service
 from api.schemas.requests import CreateTripRequest, ReviewRequest, StartRunRequest
@@ -75,6 +75,26 @@ def create_trip(
         )
         run_id = run_manager.start_run(state)
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)
+
+
+@router.delete("/{trip_id}", status_code=204, response_class=Response)
+def delete_trip(
+    trip_id: int,
+    service: TripService = Depends(get_trip_service),
+    run_manager: RunManager = Depends(get_run_manager),
+) -> Response:
+    try:
+        service.delete_trip_by_id(
+            trip_id,
+            has_active_run=run_manager.has_active_run_for_trip(trip_id),
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if "сборки" in message:
+            raise HTTPException(status_code=409, detail=message) from exc
+        raise HTTPException(status_code=404, detail=message) from exc
+    run_manager.forget_runs_for_trip(trip_id)
+    return Response(status_code=204)
 
 
 @router.get("/{trip_id}", response_model=TripDetailResponse)

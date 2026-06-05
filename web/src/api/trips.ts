@@ -53,6 +53,10 @@ export async function fetchRun(runId: string): Promise<RunStatus> {
   return data;
 }
 
+export async function deleteTrip(tripId: number): Promise<void> {
+  await apiClient.delete(`/trips/${tripId}`);
+}
+
 export async function submitReview(
   tripId: number,
   action: ReviewAction,

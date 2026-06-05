@@ -9,7 +9,9 @@ import unittest
 from db.connection import init_db
 from db.repository import (
     create_trip,
+    delete_trip,
     get_latest_itinerary,
+    get_trip,
     get_preferences,
     get_user_profile,
     has_user_profile,
@@ -57,6 +59,19 @@ class TestRepository(unittest.TestCase):
         self.assertIsNotNone(profile)
         assert profile is not None
         self.assertEqual(profile["pace"], "relaxed")
+
+    def test_delete_trip_cascade(self) -> None:
+        trip_id = create_trip("Казань", "июль 2026", "Москва", "тест")
+        save_preferences(trip_id, {"pace": "moderate", "budget": "medium"})
+        save_itinerary_version(
+            trip_id,
+            {"tickets": "t", "events": "e", "dining": "d", "lifehacks": "l"},
+        )
+        self.assertTrue(delete_trip(trip_id))
+        self.assertIsNone(get_trip(trip_id))
+        self.assertIsNone(get_preferences(trip_id))
+        self.assertIsNone(get_latest_itinerary(trip_id))
+        self.assertFalse(delete_trip(trip_id))
 
     def test_list_planned_trips(self) -> None:
         self.assertEqual(list_planned_trips(), [])

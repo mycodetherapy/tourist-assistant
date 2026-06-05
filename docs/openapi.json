@@ -71,6 +71,39 @@
       }
     },
     "/api/trips/{trip_id}": {
+      "delete": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Delete Trip",
+        "operationId": "delete_trip_api_trips__trip_id__delete",
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "trips"

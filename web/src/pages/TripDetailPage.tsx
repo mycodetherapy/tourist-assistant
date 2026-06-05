@@ -1,10 +1,11 @@
+import { DeleteOutlined } from "@ant-design/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Card, Empty, Space, notification } from "antd";
+import { Alert, Button, Card, Empty, Popconfirm, Space, notification } from "antd";
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getErrorMessage } from "../api/client";
 import type { RebuildScope, ReviewAction } from "../api/types";
-import { startRun, submitReview } from "../api/trips";
+import { deleteTrip, startRun, submitReview } from "../api/trips";
 import { BuildingOverlay } from "../components/BuildingOverlay";
 import { ProgramTabs } from "../components/ProgramTabs";
 import { RebuildScopeSelect } from "../components/RebuildScopeSelect";
@@ -22,6 +23,7 @@ export function TripDetailPage() {
   );
   const [rebuildScope, setRebuildScope] = useState<RebuildScope>("full");
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const tripQuery = useTrip(tripId);
   const runQuery = useRunPolling(activeRunId);
@@ -37,6 +39,18 @@ export function TripDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
       queryClient.invalidateQueries({ queryKey: ["trips"] });
       notification.success({ message: "Готово" });
+    },
+    onError: (error) => {
+      notification.error({ message: "Ошибка", description: getErrorMessage(error) });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteTrip(tripId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trips"] });
+      notification.success({ message: "Поездка удалена" });
+      navigate("/");
     },
     onError: (error) => {
       notification.error({ message: "Ошибка", description: getErrorMessage(error) });
@@ -102,6 +116,27 @@ export function TripDetailPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Popconfirm
+          title={`Удалить поездку #${trip.id}?`}
+          description={`${trip.city}, ${trip.dates}`}
+          okText="Удалить"
+          cancelText="Отмена"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => deleteMutation.mutate()}
+          disabled={isBuilding}
+        >
+          <Button
+            danger
+            icon={<DeleteOutlined />}
+            loading={deleteMutation.isPending}
+            disabled={isBuilding}
+          >
+            Удалить поездку
+          </Button>
+        </Popconfirm>
+      </div>
+
       <TripMetaCard trip={trip} />
 
       <BuildingOverlay visible={isBuilding} runStatus={runQuery.data?.status} />

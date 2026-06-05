@@ -1,4 +1,5 @@
-import { Button, Table, Tag } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
+import { Button, Popconfirm, Space, Table, Tag } from "antd";
 import { Link } from "react-router-dom";
 import type { TripSummary } from "../api/types";
 
@@ -13,9 +14,11 @@ const STATUS_COLORS: Record<string, string> = {
 interface TripTableProps {
   trips: TripSummary[];
   loading?: boolean;
+  deletingId?: number | null;
+  onDelete: (tripId: number) => void;
 }
 
-export function TripTable({ trips, loading }: TripTableProps) {
+export function TripTable({ trips, loading, deletingId, onDelete }: TripTableProps) {
   return (
     <Table
       rowKey="id"
@@ -39,11 +42,30 @@ export function TripTable({ trips, loading }: TripTableProps) {
         },
         {
           title: "",
-          width: 120,
+          width: 200,
           render: (_, row) => (
-            <Link to={`/trips/${row.id}`}>
-              <Button type="link">Открыть</Button>
-            </Link>
+            <Space>
+              <Link to={`/trips/${row.id}`}>
+                <Button type="link">Открыть</Button>
+              </Link>
+              <Popconfirm
+                title={`Удалить поездку #${row.id}?`}
+                description={`${row.city}, ${row.dates}`}
+                okText="Удалить"
+                cancelText="Отмена"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => onDelete(row.id)}
+              >
+                <Button
+                  type="link"
+                  danger
+                  icon={<DeleteOutlined />}
+                  loading={deletingId === row.id}
+                >
+                  Удалить
+                </Button>
+              </Popconfirm>
+            </Space>
           ),
         },
       ]}

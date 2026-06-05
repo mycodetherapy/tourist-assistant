@@ -18,6 +18,7 @@ class TestExportOpenapi(unittest.TestCase):
             schema = json.loads(out.read_text(encoding="utf-8"))
         paths = schema.get("paths", {})
         self.assertIn("/api/trips", paths)
+        self.assertIn("delete", paths["/api/trips/{trip_id}"])
         self.assertIn("/api/runs/{run_id}", paths)
         self.assertEqual(schema["info"]["title"], "Туристический ассистент API")
 

@@ -40,6 +40,16 @@ class RunManager:
         with self._lock:
             return self._runs.get(run_id)
 
+    def forget_runs_for_trip(self, trip_id: int) -> None:
+        """Убирает записи прогонов поездки из памяти (после удаления из БД)."""
+        with self._lock:
+            for run_id in [
+                rid
+                for rid, record in self._runs.items()
+                if record.trip_id == trip_id
+            ]:
+                del self._runs[run_id]
+
     def has_active_run_for_trip(self, trip_id: int) -> bool:
         """Есть ли незавершённый прогон для поездки в памяти процесса."""
         with self._lock:

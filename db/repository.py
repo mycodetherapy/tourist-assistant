@@ -62,6 +62,14 @@ def create_trip(
         return int(cursor.lastrowid)
 
 
+def delete_trip(trip_id: int) -> bool:
+    """Удаляет поездку и связанные записи (CASCADE). Возвращает True, если запись была."""
+    with connect() as conn:
+        cursor = conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 def update_trip_status(trip_id: int, status: str) -> None:
     """Обновляет статус поездки и updated_at."""
     with connect() as conn:

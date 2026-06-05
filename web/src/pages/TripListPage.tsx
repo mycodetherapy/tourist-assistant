@@ -1,11 +1,34 @@
 import { PlusOutlined } from "@ant-design/icons";
-import { Button, Empty } from "antd";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button, Empty, notification } from "antd";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { getErrorMessage } from "../api/client";
+import { deleteTrip } from "../api/trips";
 import { TripTable } from "../components/TripTable";
 import { useTrips } from "../hooks/useTrips";
 
 export function TripListPage() {
+  const queryClient = useQueryClient();
   const { data: trips = [], isLoading } = useTrips();
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (tripId: number) => {
+      setDeletingId(tripId);
+      await deleteTrip(tripId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trips"] });
+      notification.success({ message: "Поездка удалена" });
+    },
+    onError: (error) => {
+      notification.error({ message: "Ошибка", description: getErrorMessage(error) });
+    },
+    onSettled: () => {
+      setDeletingId(null);
+    },
+  });
 
   return (
     <div>
@@ -24,7 +47,12 @@ export function TripListPage() {
           </Link>
         </Empty>
       ) : (
-        <TripTable trips={trips} loading={isLoading} />
+        <TripTable
+          trips={trips}
+          loading={isLoading}
+          deletingId={deletingId}
+          onDelete={(tripId) => deleteMutation.mutate(tripId)}
+        />
       )}
     </div>
   );

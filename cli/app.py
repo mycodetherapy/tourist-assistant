@@ -58,6 +58,37 @@ def _choose_rebuild_scope(*, has_program: bool) -> str:
     return _prompt_choice("Что пересобрать?", REBUILD_SCOPES, "full")
 
 
+def _confirm_delete_trip(trip_id: int, *, city: str, dates: str) -> bool:
+    """Подтверждение удаления поездки."""
+    print(f"\nУдалить поездку #{trip_id}: {city}, {dates}?")
+    raw = input("Подтвердить удаление? [y/N]: ").strip().lower()
+    return raw in {"y", "yes", "д", "да"}
+
+
+def _delete_trip_flow(service: TripService) -> None:
+    """Выбор поездки из списка и удаление из БД."""
+    chosen = _choose_trip_from_list()
+    if chosen is None:
+        return
+    trip = get_trip(chosen)
+    if trip is None:
+        print(f"Поездка #{chosen} не найдена.")
+        return
+    if not _confirm_delete_trip(
+        chosen,
+        city=trip["city"],
+        dates=trip["dates"],
+    ):
+        print("Удаление отменено.")
+        return
+    try:
+        service.delete_trip_by_id(chosen)
+    except ValueError as exc:
+        print(f"Ошибка: {exc}")
+        raise SystemExit(1) from exc
+    print(f"Поездка #{chosen} удалена.")
+
+
 def _choose_trip_from_list() -> int | None:
     trips = list_trips()
     if not trips:
@@ -209,9 +240,14 @@ def main() -> None:
             ("new", "Новая поездка"),
             ("continue", "Продолжить сохранённую поездку"),
             ("details", "Показать подробности поездки"),
+            ("delete", "Удалить поездку"),
         ],
         "new",
     )
+
+    if mode == "delete":
+        _delete_trip_flow(service)
+        raise SystemExit(0)
 
     if mode == "details":
         details_trip_id = _resolve_details_trip_id()
