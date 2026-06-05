@@ -40,6 +40,21 @@ class TestTicketLinks(unittest.TestCase):
         self.assertEqual(city_to_iata("Саратов"), "GSV")
         self.assertEqual(city_to_iata("Сыктывкар"), "SCW")
 
+    def test_moscow_istanbul_iata(self) -> None:
+        self.assertEqual(city_to_iata("Москва"), "MOW")
+        self.assertEqual(city_to_iata("Стамбул"), "IST")
+        self.assertEqual(city_to_iata("Istanbul"), "IST")
+
+    def test_build_offers_moscow_istanbul(self) -> None:
+        parsed = parse_trip_dates("1-4 июля 2026")
+        offers = build_ticket_offers("Москва", "Стамбул", parsed)
+        self.assertEqual(len(offers), 1)
+        avia = offers[0]
+        self.assertEqual(avia.provider, "Aviasales")
+        self.assertIn("aviasales.ru/search/", avia.booking_url)
+        self.assertIn("MOW0107", avia.booking_url.upper())
+        self.assertIn("IST0407", avia.booking_url.upper())
+
     def test_build_offers_saratov_moscow(self) -> None:
         parsed = parse_trip_dates("18-21 июня 2026")
         offers = build_ticket_offers("Саратов", "Москва", parsed)

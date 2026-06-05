@@ -76,6 +76,18 @@ class TestSectionQuality(unittest.TestCase):
         )
         self.assertTrue(any("ссылок" in i or "JSON" in i or "пуст" in i for i in issues))
 
+    def test_critic_tickets_international_only_plane(self) -> None:
+        program = {
+            "tickets": "Самолёт: рейс TK https://www.aviasales.ru/search/MOW0107IST0407",
+        }
+        issues = critic_program_issues(
+            program,
+            "tickets",
+            origin_city="Москва",
+            destination_city="Стамбул",
+        )
+        self.assertEqual(issues, [])
+
 
 if __name__ == "__main__":
     unittest.main()

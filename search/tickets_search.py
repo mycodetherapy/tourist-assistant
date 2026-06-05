@@ -14,6 +14,7 @@ from planning.dates import parse_trip_dates
 from search.city_codes import city_to_iata
 from search.providers.avia import fetch_avia_offers
 from search.ticket_links import build_ticket_offers, format_offers_summary
+from search.transport_codes import ground_transport_available
 
 _TICKETS_INSTRUCTION_BASE = (
     "Используй ТОЛЬКО поля offers и summary_for_llm из этого JSON. "
@@ -133,6 +134,13 @@ def run_tickets_search(
         offers,
     )
 
+    instruction = _instruction_for(avia_api_status)
+    if not ground_transport_available(params.origin_city, params.destination_city):
+        instruction += (
+            " Для зарубежного маршрута жд и автобус недоступны — "
+            "в разделе tickets только блок «Самолёт»."
+        )
+
     providers = ["deep_links"]
     if avia_api_status == "ok":
         providers.append("travelpayouts")
@@ -151,6 +159,6 @@ def run_tickets_search(
         train_api_status="disabled",
         offers=offers,
         summary_for_llm=summary,
-        instruction=_instruction_for(avia_api_status),
+        instruction=instruction,
         warning=" ".join(warnings) if warnings else None,
     )

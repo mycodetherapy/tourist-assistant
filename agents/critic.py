@@ -30,7 +30,14 @@ def run_critic(state: dict[str, Any]) -> tuple[bool, str]:
 
     program = state.get("program")
     if program:
-        issues.extend(critic_program_issues(program, scope))
+        issues.extend(
+            critic_program_issues(
+                program,
+                scope,
+                origin_city=str(state.get("origin_city", "")),
+                destination_city=str(state.get("city", "")),
+            )
+        )
 
     if issues:
         return False, "; ".join(issues)

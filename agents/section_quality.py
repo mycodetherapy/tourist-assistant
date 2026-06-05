@@ -9,6 +9,7 @@ from typing import Any, Optional
 from langchain_core.messages import ToolMessage
 
 from planning.rebuild import resolve_tool_name
+from search.transport_codes import ground_transport_available
 
 _GARBAGE_PREFIX = re.compile(r"^[\s:{}\[\],]+$")
 _JSON_ARTIFACT = re.compile(r"^[\s]*[:,\[\]{}]+")
@@ -77,7 +78,13 @@ def issues_for_section(program: dict[str, Any], section: str) -> list[str]:
     return issues
 
 
-def critic_program_issues(program: dict[str, Any], scope: str) -> list[str]:
+def critic_program_issues(
+    program: dict[str, Any],
+    scope: str,
+    *,
+    origin_city: str = "",
+    destination_city: str = "",
+) -> list[str]:
     """Проверки секций в зависимости от rebuild_scope."""
     issues: list[str] = []
     if scope in ("full", "events"):
@@ -89,13 +96,20 @@ def critic_program_issues(program: dict[str, Any], scope: str) -> list[str]:
     if scope in ("full", "tickets"):
         tickets = str(program.get("tickets", ""))
         lower = tickets.lower()
-        for label in ("самол", "поезд", "автобус"):
+        required_blocks = ["самол"]
+        if ground_transport_available(origin_city, destination_city):
+            required_blocks.extend(["поезд", "автобус"])
+        for label in required_blocks:
             if label not in lower:
                 issues.append(f"в билетах нет «{label}…»")
         try:
             from agents.finalize_helpers import _is_garbage_tickets
 
-            if _is_garbage_tickets(tickets):
+            if _is_garbage_tickets(
+                tickets,
+                origin_city=origin_city,
+                destination_city=destination_city,
+            ):
                 issues.append("раздел «tickets» некорректен")
         except ImportError:
             pass

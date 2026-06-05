@@ -85,3 +85,11 @@ def city_to_rzd_code(city: str) -> str | None:
 def city_to_tutu_bus(city: str) -> tuple[str, str] | None:
     """(gorod_Segment, numeric_id) или None."""
     return _lookup_bus(city)
+
+
+def ground_transport_available(origin: str, destination: str) -> bool:
+    """Жд/автобус deep links возможны только для пар городов из справочника Tutu/РЖД."""
+    return (
+        city_to_tutu_train_name(origin) is not None
+        and city_to_tutu_train_name(destination) is not None
+    )

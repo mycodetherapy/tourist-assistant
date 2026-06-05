@@ -13,15 +13,23 @@ from models.tickets import TicketsSearchOutput
 from planning.rebuild import required_tools_for_scope, resolve_tool_name
 from search.ticket_links import format_offers_summary
 from search.tickets_search import run_tickets_search
+from search.transport_codes import ground_transport_available
 
 _GARBAGE_TICKETS = re.compile(r"^[\s:{}\[\]]+$")
 _FINALIZE_MAX_TOOL_CHARS = 12_000
 
 
-def _is_garbage_tickets(text: str) -> bool:
+def _is_garbage_tickets(
+    text: str,
+    *,
+    origin_city: str = "",
+    destination_city: str = "",
+) -> bool:
     """Отсекает обломки structured output (:{, :[], пустые блоки)."""
     t = text.strip()
-    if len(t) < 80:
+    has_ground = ground_transport_available(origin_city, destination_city)
+    min_len = 80 if has_ground or not (origin_city and destination_city) else 40
+    if len(t) < min_len:
         return True
     if _GARBAGE_TICKETS.match(t[:20]):
         return True
@@ -30,7 +38,10 @@ def _is_garbage_tickets(text: str) -> bool:
     low = t.lower()
     if "http" not in low:
         return True
-    if "самол" not in low and "поезд" not in low and "автобус" not in low:
+    required = ["самол"]
+    if has_ground:
+        required.extend(["поезд", "автобус"])
+    if not any(label in low for label in required):
         return True
     return False
 
@@ -45,21 +56,37 @@ def extract_tickets_summary(messages: list[Any]) -> Optional[str]:
             data = json.loads(raw)
         except json.JSONDecodeError:
             continue
+        origin_city = ""
+        destination_city = ""
+        params = data.get("params")
+        if isinstance(params, dict):
+            origin_city = str(params.get("origin_city", ""))
+            destination_city = str(params.get("destination_city", ""))
         summary = str(data.get("summary_for_llm", "")).strip()
-        if summary and not _is_garbage_tickets(summary):
+        if summary and not _is_garbage_tickets(
+            summary,
+            origin_city=origin_city,
+            destination_city=destination_city,
+        ):
             return summary
         try:
             output = TicketsSearchOutput.model_validate(data)
         except Exception:
             continue
+        origin_city = output.params.origin_city
+        destination_city = output.params.destination_city
         if output.offers:
             built = format_offers_summary(
-                output.params.origin_city,
-                output.params.destination_city,
+                origin_city,
+                destination_city,
                 output.parsed_dates,
                 output.offers,
             )
-            if not _is_garbage_tickets(built):
+            if not _is_garbage_tickets(
+                built,
+                origin_city=origin_city,
+                destination_city=destination_city,
+            ):
                 return built
     return None
 
@@ -81,12 +108,20 @@ def resolve_tickets_section(
     if rebuild_scope in ("full", "tickets"):
         output = run_tickets_search(origin_city, destination_city, dates)
         summary = (output.summary_for_llm or "").strip()
-        if summary and not _is_garbage_tickets(summary):
+        if summary and not _is_garbage_tickets(
+            summary,
+            origin_city=origin_city,
+            destination_city=destination_city,
+        ):
             return summary
 
     if base_program:
         base_t = str(base_program.get("tickets", "")).strip()
-        if base_t and not _is_garbage_tickets(base_t):
+        if base_t and not _is_garbage_tickets(
+            base_t,
+            origin_city=origin_city,
+            destination_city=destination_city,
+        ):
             return base_t
 
     return (

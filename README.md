@@ -380,6 +380,7 @@ python3 -m scripts.metrics_report --limit 50
 | **Prompt-injection во вводе** | `input_validation.sanitize_and_validate` |
 | **Галлюцинации цен** | Билеты: только `offers` из tool; афиша/рестораны — цены из `digest` |
 | **Нет прямых рейсов** | В `summary_for_llm` — стыковки на агрегаторах; ссылки с IATA и датами |
+| **Зарубежный маршрут** (Москва → Стамбул и т.п.) | IATA из `search/city_codes.py`; в билетах только «Самолёт»; critic не требует жд/автобус |
 | **Critic не прошёл** | До 2 повторов researcher; затем всё равно HITL с замечаниями |
 | **Пользователь не утвердил (n)** | Пересбор или сохранение черновика (`status=review`) |
 | **Повторный запуск без опросника** | `user_profile` + `trip_preferences`; fallback из последней поездки |
@@ -390,7 +391,7 @@ python3 -m scripts.metrics_report --limit 50
 
 | Критерий | Приемлемый результат |
 |----------|----------------------|
-| **Полнота программы** | Все 4 раздела; в «Билетах» 3 блока со ссылками из `offers` (не главные страницы агрегаторов) |
+| **Полнота программы** | Все 4 раздела; в «Билетах» блоки из `offers` (3 для РФ, для зарубежа — самолёт) |
 | **Опора на поиск** | В «Питании» ≥ 6 ресторанов со ссылками из digest; мероприятия сгруппированы по району |
 | **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят; в «Продолжить» видна поездка с версией программы |
 
@@ -416,7 +417,7 @@ tourist-assistant/
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
 │   ├── transport_codes.py  # коды Tutu/РЖД для URL
 │   ├── providers/avia.py   # Travelpayouts prices_for_dates
-│   ├── city_codes.py       # город → IATA
+│   ├── city_codes.py       # город → IATA (РФ + зарубеж)
 │   ├── context.py          # search_context сессии
 │   └── tool_logging.py     # разбор payload для tool_runs
 ├── agents/
