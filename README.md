@@ -51,7 +51,7 @@ docker compose run --rm app
 
 Интерактивный CLI: ввод в том же терминале. БД: `./data/trips.db` на хосте.
 
-**LangFuse на хосте:** `LANGFUSE_HOST=http://host.docker.internal:3000` (в compose есть `extra_hosts: host-gateway`).
+**LangFuse на хосте:** в `.env` задайте `LANGFUSE_HOST_DOCKER=http://host.docker.internal:3000` — compose подставит его в контейнер `app` (есть `extra_hosts: host-gateway`). Локально без Docker: `LANGFUSE_HOST=http://localhost:3000`.
 
 #### Повторный запуск (`.env` уже есть)
 
@@ -158,7 +158,8 @@ python3 -m eval --suite smoke
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
 | `LANGCHAIN_PROJECT` | Нет | Имя проекта (по умолчанию `tourist-assistant`) |
 | `LANGFUSE_ENABLED` | Нет | `true` — включить трейсы в LangFuse (self-hosted) |
-| `LANGFUSE_HOST` | Нет | URL LangFuse, например `http://localhost:3000` |
+| `LANGFUSE_HOST` | Нет | LangFuse для локального `python3 main.py`, например `http://localhost:3000` |
+| `LANGFUSE_HOST_DOCKER` | Нет | LangFuse для `docker compose run app`, например `http://host.docker.internal:3000` |
 | `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
@@ -279,7 +280,7 @@ docker compose --env-file .env -f docker-compose.yml up -d
 2) Взять ключи проекта в UI LangFuse (`http://localhost:3000`) и прописать в `.env` проекта:
 
 - `LANGFUSE_ENABLED=true`
-- `LANGFUSE_HOST=http://localhost:3000`
+- `LANGFUSE_HOST=http://localhost:3000` (или `LANGFUSE_HOST_DOCKER=...` при запуске в Docker)
 - `LANGFUSE_PUBLIC_KEY=...`
 - `LANGFUSE_SECRET_KEY=...`
 

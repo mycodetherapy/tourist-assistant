@@ -1,22 +1,90 @@
 """LangFuse: LangChain callbacks для трейсов LangGraph/LLM/tools.
 
-Интеграция сделана через `langfuse.langchain.CallbackHandler`, чтобы:
-- автоматически видеть вызовы LLM и tools внутри LangGraph,
-- не ломать существующий опциональный LangSmith-трейсинг,
-- включать/выключать через env без изменений кода.
+Интеграция через `langfuse.langchain.CallbackHandler`.
+В SDK v4 клиент должен быть явно создан через `Langfuse(...)`, иначе
+`get_client(public_key=...)` вернёт disabled-клиент и spans не отправятся.
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
+
+_langfuse_client: Any | None = None
+_langfuse_public_key: str | None = None
 
 
 def langfuse_enabled() -> bool:
     return os.getenv("LANGFUSE_ENABLED", "").strip().lower() in {"1", "true", "yes"}
 
 
-def build_langfuse_callbacks() -> list[Any]:
+def _running_in_docker() -> bool:
+    return (
+        os.getenv("TOURIST_ASSISTANT_IN_DOCKER", "").strip() == "1"
+        or Path("/.dockerenv").exists()
+    )
+
+
+def resolve_langfuse_host() -> str:
+    """Локальный dev: LANGFUSE_HOST; в Docker — LANGFUSE_HOST_DOCKER (или override в compose)."""
+    local = (os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL") or "").strip()
+    docker = os.getenv("LANGFUSE_HOST_DOCKER", "").strip()
+    if _running_in_docker():
+        return docker or local or "http://host.docker.internal:3000"
+    return local or "http://localhost:3000"
+
+
+def _langfuse_credentials() -> tuple[str, str, str] | None:
+    public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
+    secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
+    host = resolve_langfuse_host()
+    if not public_key or not secret_key:
+        return None
+    return public_key, secret_key, host
+
+
+def _ensure_langfuse_client() -> Any | None:
+    """Создаёт и регистрирует singleton Langfuse client в SDK registry."""
+    global _langfuse_client, _langfuse_public_key
+
+    creds = _langfuse_credentials()
+    if creds is None:
+        return None
+
+    public_key, secret_key, host = creds
+    if _langfuse_client is not None and _langfuse_public_key == public_key:
+        return _langfuse_client
+
+    try:
+        from langfuse import Langfuse  # type: ignore
+    except Exception:
+        return None
+
+    # CallbackHandler читает env, но явная инициализация надёжнее.
+    os.environ["LANGFUSE_PUBLIC_KEY"] = public_key
+    os.environ["LANGFUSE_SECRET_KEY"] = secret_key
+    if host:
+        os.environ["LANGFUSE_HOST"] = host
+
+    kwargs: dict[str, str] = {
+        "public_key": public_key,
+        "secret_key": secret_key,
+    }
+    if host:
+        kwargs["host"] = host
+
+    _langfuse_client = Langfuse(**kwargs)
+    _langfuse_public_key = public_key
+    return _langfuse_client
+
+
+def normalize_trace_id(trace_id: str) -> str:
+    """OTEL/LangFuse trace id: 32 hex-символа без дефисов."""
+    return trace_id.replace("-", "")
+
+
+def build_langfuse_callbacks(*, trace_id: str | None = None) -> list[Any]:
     """
     Возвращает список callback handlers для LangChain/LangGraph.
 
@@ -25,33 +93,41 @@ def build_langfuse_callbacks() -> list[Any]:
     if not langfuse_enabled():
         return []
 
-    public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
-    secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
-    # Langfuse SDK historically used LANGFUSE_HOST; some setups use LANGFUSE_BASE_URL.
-    host = (os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL") or "").strip()
-    if not public_key or not secret_key:
+    creds = _langfuse_credentials()
+    if creds is None:
         return []
 
-    # Lazy import: зависимость опциональная для пользователей без LangFuse.
+    public_key, _, _ = creds
+    client = _ensure_langfuse_client()
+    if client is None:
+        return []
+
     try:
-        from langfuse import get_client  # type: ignore
         from langfuse.langchain import CallbackHandler  # type: ignore
     except Exception:
-        # Если пакет не установлен, не падаем — просто отключаем LangFuse.
         return []
 
-    # В нашей версии `langfuse.langchain.CallbackHandler` не принимает secret_key/host аргументы
-    # (он читает их из env: LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY/LANGFUSE_HOST).
-    if host:
-        os.environ["LANGFUSE_HOST"] = host
-    os.environ["LANGFUSE_PUBLIC_KEY"] = public_key
-    os.environ["LANGFUSE_SECRET_KEY"] = secret_key
+    trace_context = None
+    if trace_id:
+        trace_context = {"trace_id": normalize_trace_id(trace_id)}
 
-    # В v4, чтобы callbacks реально отправляли события, нужно инициализировать singleton client.
-    # Иначе SDK отключает трейсинг и пишет warning "client initialized without public_key".
-    _ = get_client(public_key=public_key)
+    return [CallbackHandler(public_key=public_key, trace_context=trace_context)]
 
-    return [CallbackHandler(public_key=public_key)]
+
+def flush_langfuse() -> None:
+    """Сбрасывает буфер spans/generations в LangFuse (вызывать после invoke)."""
+    if not langfuse_enabled():
+        return
+
+    client = _ensure_langfuse_client()
+    if client is None:
+        return
+
+    try:
+        if getattr(client, "_tracing_enabled", True):
+            client.flush()
+    except Exception:
+        pass
 
 
 def langfuse_metadata(
@@ -75,10 +151,8 @@ def langfuse_metadata(
         tags.append(f"retry:{retry_count}")
     if trip_id is not None:
         tags.append(f"trip:{trip_id}")
-    # LangFuse integration ожидает строки (а не list) в metadata.
     return {
         "langfuse_user_id": "local-cli",
         "langfuse_session_id": f"trip-{trip_id}" if trip_id is not None else "trip-unknown",
         "langfuse_tags": ",".join(tags),
     }
-

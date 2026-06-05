@@ -36,12 +36,12 @@ from models.schemas import FinalProgram, normalize_stored_program
 from models.state import AgentState
 from observability import (
     build_langfuse_callbacks,
+    flush_langfuse,
     invoke_config,
     langfuse_enabled,
     langfuse_metadata,
     langsmith_enabled,
 )
-from observability.langfuse_ingestion import send_trace_create
 from onboarding import (
     TripPreferences,
     build_search_context,
@@ -103,7 +103,8 @@ def _run_graph(state: AgentState) -> AgentState:
         trip_id,
         rebuild_scope=state.get("rebuild_scope", "full"),
     )
-    callbacks = build_langfuse_callbacks()
+    run_id = str(uuid.uuid4())
+    callbacks = build_langfuse_callbacks(trace_id=run_id)
     if langfuse_enabled() and not callbacks:
         print(
             "Трейсинг: LangFuse включён, но callbacks не инициализировались "
@@ -122,7 +123,6 @@ def _run_graph(state: AgentState) -> AgentState:
         tags = config.get("metadata", {}).get("tags")
         if isinstance(tags, list):
             config["metadata"]["tags"] = ",".join(str(t) for t in tags)
-    run_id = str(uuid.uuid4())
     scope = str(state.get("rebuild_scope", "full"))
     started = perf_counter()
 
@@ -142,6 +142,8 @@ def _run_graph(state: AgentState) -> AgentState:
     else:
         result = app.invoke(run_state, config=config)
 
+    flush_langfuse()
+
     duration_ms = int((perf_counter() - started) * 1000)
     prompt_tokens = int(getattr(cb, "prompt_tokens", 0)) if cb else None
     completion_tokens = int(getattr(cb, "completion_tokens", 0)) if cb else None
@@ -157,24 +159,6 @@ def _run_graph(state: AgentState) -> AgentState:
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         total_cost_usd=total_cost_usd,
-    )
-
-    # Надёжный трейсинг в LangFuse через ingestion API (минимум 1 trace на запуск).
-    _ = send_trace_create(
-        trace_id=run_id,
-        name="tourist-assistant-run",
-        input_data={
-            "trip_id": trip_id,
-            "city": state.get("city"),
-            "dates": state.get("dates"),
-            "origin_city": state.get("origin_city"),
-            "rebuild_scope": scope,
-        },
-        output_data={"approved": bool(result.get("approved")), "has_program": bool(result.get("program"))}
-        if isinstance(result, dict)
-        else {"approved": False},
-        tags=[f"trip:{trip_id}", f"scope:{scope}"],
-        metadata={"source": "cli", "langsmith": langsmith_enabled()},
     )
 
     return result

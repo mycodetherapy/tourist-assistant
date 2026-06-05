@@ -7,7 +7,10 @@ import unittest
 
 from langchain_core.messages import ToolMessage
 
+from models.schemas import ProgramDraft
+
 from agents.finalize_helpers import (
+    _coerce_program_draft,
     _is_garbage_tickets,
     build_fallback_program_draft,
     extract_tickets_summary,
@@ -116,6 +119,15 @@ class TestFinalizeHelpers(unittest.TestCase):
         self.assertIn("Кафе", draft.dining)
         self.assertFalse(hasattr(draft, "transport"))
         self.assertIn("музей", draft.lifehacks.lower())
+
+    def test_coerce_program_draft_from_parsed_wrapper(self) -> None:
+        from unittest.mock import MagicMock
+
+        inner = ProgramDraft(events="Музей", dining="Кафе", lifehacks="Совет")
+        wrapper = MagicMock()
+        wrapper.parsed = inner
+        self.assertEqual(_coerce_program_draft(wrapper).events, "Музей")
+        self.assertEqual(_coerce_program_draft(inner).dining, "Кафе")
 
     def test_invoke_fallback_passes_city(self) -> None:
         from unittest.mock import MagicMock

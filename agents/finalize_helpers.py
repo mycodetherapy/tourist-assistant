@@ -267,6 +267,20 @@ def build_fallback_program_draft(
     )
 
 
+def _coerce_program_draft(result: Any) -> ProgramDraft:
+    """LangChain structured output может вернуть ProgramDraft или обёртку с .parsed."""
+    if isinstance(result, ProgramDraft):
+        return result
+    parsed = getattr(result, "parsed", None)
+    if isinstance(parsed, ProgramDraft):
+        return parsed
+    if isinstance(parsed, dict):
+        return ProgramDraft(**parsed)
+    if isinstance(result, dict):
+        return ProgramDraft(**result)
+    raise TypeError(f"Unexpected structured output type: {type(result)!r}")
+
+
 def invoke_program_draft(
     llm_final: Any,
     *,
@@ -280,7 +294,7 @@ def invoke_program_draft(
     """Вызов structured output с fallback при обрезке ответа (length)."""
     prompt = [system, *tool_messages, human]
     try:
-        draft = llm_final.invoke(prompt)
+        draft = _coerce_program_draft(llm_final.invoke(prompt))
         from agents.lifehacks_quality import clean_lifehacks_display
 
         fields = draft.model_dump()
