@@ -5,19 +5,72 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from api.deps import get_run_manager, get_trip_service
-from api.schemas.requests import CreateTripRequest, ReviewRequest, StartRunRequest
+from api.schemas.requests import CreateTripRequest, ItemFeedbackRequest, ReviewRequest, StartRunRequest
 from api.schemas.responses import (
     CreateTripResponse,
+    ProgramItemResponse,
     ProgramResponse,
+    ProgramSectionResponse,
     ReviewResponse,
+    StructuredProgramResponse,
     TripDetailResponse,
     TripSummaryResponse,
 )
+from services.trip_service import ProgramView
 from onboarding.preferences import TripPreferences
 from services.run_manager import RunManager
 from services.trip_service import TripService
 
 router = APIRouter(prefix="/trips", tags=["trips"])
+
+
+def _program_response(view: ProgramView) -> ProgramResponse:
+    sections = StructuredProgramResponse(
+        tickets=ProgramSectionResponse(
+            intro=view.sections["tickets"].intro,
+            items=[
+                ProgramItemResponse(
+                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
+                )
+                for i in view.sections["tickets"].items
+            ],
+        ),
+        events=ProgramSectionResponse(
+            intro=view.sections["events"].intro,
+            items=[
+                ProgramItemResponse(
+                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
+                )
+                for i in view.sections["events"].items
+            ],
+        ),
+        dining=ProgramSectionResponse(
+            intro=view.sections["dining"].intro,
+            items=[
+                ProgramItemResponse(
+                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
+                )
+                for i in view.sections["dining"].items
+            ],
+        ),
+        lifehacks=ProgramSectionResponse(
+            intro=view.sections["lifehacks"].intro,
+            items=[
+                ProgramItemResponse(
+                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
+                )
+                for i in view.sections["lifehacks"].items
+            ],
+        ),
+    )
+    return ProgramResponse(
+        version=view.version,
+        version_id=view.version_id,
+        scope=view.scope,
+        approved=view.approved,
+        program=view.program,
+        sections=sections,
+    )
 
 
 @router.get("", response_model=list[TripSummaryResponse])
@@ -128,17 +181,33 @@ def get_program(
     trip_id: int,
     service: TripService = Depends(get_trip_service),
 ) -> ProgramResponse:
-    details = service.get_trip_details(trip_id)
-    if details is None or details.latest_itinerary is None:
+    view = service.get_program_view(trip_id)
+    if view is None:
         raise HTTPException(status_code=404, detail="Программа не найдена")
-    latest = details.latest_itinerary
-    program = service.parse_program(latest["program"])
-    return ProgramResponse(
-        version=latest["version"],
-        scope=latest["scope"],
-        approved=latest["approved"],
-        program=program,
-    )
+    return _program_response(view)
+
+
+@router.put("/{trip_id}/program/feedback", response_model=ProgramResponse)
+def set_program_feedback(
+    trip_id: int,
+    body: ItemFeedbackRequest,
+    service: TripService = Depends(get_trip_service),
+) -> ProgramResponse:
+    try:
+        service.set_item_feedback(
+            trip_id,
+            version_id=body.version_id,
+            section=body.section,
+            item_key=body.item_key,
+            item_index=body.item_index,
+            vote=body.vote,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    view = service.get_program_view(trip_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail="Программа не найдена")
+    return _program_response(view)
 
 
 @router.get("/{trip_id}/preferences", response_model=TripPreferences | None)

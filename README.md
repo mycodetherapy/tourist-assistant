@@ -66,7 +66,7 @@ npm run dev
 |-------|----------|
 | **Список поездок** | Все сохранённые поездки из SQLite |
 | **Новая поездка** | Wizard: маршрут → опросник → фоновая сборка (polling 1–2 мин) |
-| **Карточка поездки** | 4 вкладки программы, утверждение / черновик / пересбор / удаление |
+| **Карточка поездки** | 4 вкладки программы, 👍/👎 у мероприятий / ресторанов / лайфхаков, утверждение / черновик / пересбор / удаление |
 
 **Docker (веб + API):**
 
@@ -76,6 +76,8 @@ docker compose up api web
 ```
 
 UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health). CLI по-прежнему: `docker compose run --rm app`.
+
+**Оценки пунктов (👍/👎):** только для **мероприятий, питания и лайфхаков** (билеты — структурированный API, без голосования). Клик → `PUT /api/trips/{id}/program/feedback` → `program_item_feedback` в `data/trips.db`; при открытии карточки `GET .../program` возвращает `vote` у пунктов. Оценка привязана к тексту пункта. После `docker compose build api web` перезапустите оба контейнера.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -483,7 +485,8 @@ tourist-assistant/
 │   ├── human_review.py
 │   └── print_program.py
 ├── planning/rebuild.py       # rebuild_scope, merge_program
-├── db/                     # schema.sql, repository
+├── program/parse_items.py  # разбор markdown-секций на пункты (голосование в вебе)
+├── db/                     # schema.sql, repository (в т.ч. program_item_feedback)
 ├── onboarding/             # опросник, TripPreferences
 ├── observability/tracing.py
 ├── eval/                   # python3 -m eval --suite smoke

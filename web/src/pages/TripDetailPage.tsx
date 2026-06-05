@@ -172,7 +172,11 @@ export function TripDetailPage() {
         <Card
           title={`Программа v${programQuery.data.version} (${programQuery.data.scope})`}
         >
-          <ProgramTabs program={programQuery.data.program} />
+          <ProgramTabs
+            tripId={tripId}
+            data={programQuery.data}
+            votingDisabled={isBuilding}
+          />
         </Card>
       )}
 

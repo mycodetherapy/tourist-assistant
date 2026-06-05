@@ -71,6 +71,20 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     created_at TEXT NOT NULL
 );
 
+-- Оценки пунктов подборки (лайк/дизлайк). Ключ item_key — по тексту пункта.
+CREATE TABLE IF NOT EXISTS program_item_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    itinerary_version_id INTEGER REFERENCES itinerary_versions(id) ON DELETE SET NULL,
+    section TEXT NOT NULL,
+    item_index INTEGER NOT NULL,
+    item_key TEXT NOT NULL,
+    vote INTEGER NOT NULL CHECK (vote IN (1, -1)),
+    updated_at TEXT NOT NULL,
+    UNIQUE(trip_id, section, item_key)
+);
+
 CREATE INDEX IF NOT EXISTS idx_trips_updated ON trips(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tool_runs_trip ON tool_runs(trip_id);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_trip ON agent_runs(trip_id);
+CREATE INDEX IF NOT EXISTS idx_program_feedback_trip ON program_item_feedback(trip_id);

@@ -466,3 +466,99 @@ def get_latest_itinerary(trip_id: int) -> dict[str, Any] | None:
         "approved": bool(row["approved"]),
         "created_at": row["created_at"],
     }
+
+
+def get_itinerary_version(trip_id: int, version_id: int) -> dict[str, Any] | None:
+    """Версия программы по id строки itinerary_versions."""
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id, trip_id, version, scope, program_json, approved, created_at
+            FROM itinerary_versions
+            WHERE id = ? AND trip_id = ?
+            """,
+            (version_id, trip_id),
+        ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": int(row["id"]),
+        "trip_id": int(row["trip_id"]),
+        "version": int(row["version"]),
+        "scope": row["scope"],
+        "program": json.loads(row["program_json"]),
+        "approved": bool(row["approved"]),
+        "created_at": row["created_at"],
+    }
+
+
+def list_item_feedback(trip_id: int) -> dict[str, int]:
+    """Оценки пунктов поездки: {item_key: vote}. vote — 1 или -1."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT item_key, vote
+            FROM program_item_feedback
+            WHERE trip_id = ?
+            ORDER BY updated_at ASC, id ASC
+            """,
+            (trip_id,),
+        ).fetchall()
+    return {row["item_key"]: int(row["vote"]) for row in rows}
+
+
+def list_item_feedback_by_index(trip_id: int) -> dict[tuple[str, int], int]:
+    """Оценки по (section, item_index) — запасной способ после смены парсера."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT section, item_index, vote
+            FROM program_item_feedback
+            WHERE trip_id = ?
+            ORDER BY updated_at ASC, id ASC
+            """,
+            (trip_id,),
+        ).fetchall()
+    return {(row["section"], int(row["item_index"])): int(row["vote"]) for row in rows}
+
+
+def upsert_item_feedback(
+    trip_id: int,
+    itinerary_version_id: int | None,
+    section: str,
+    item_index: int,
+    item_key: str,
+    vote: int,
+) -> None:
+    """Сохраняет или обновляет оценку пункта (1 — нравится, -1 — не нравится)."""
+    now = _utc_now()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO program_item_feedback (
+                trip_id, itinerary_version_id, section, item_index, item_key, vote, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(trip_id, section, item_key)
+            DO UPDATE SET
+                vote = excluded.vote,
+                item_index = excluded.item_index,
+                itinerary_version_id = excluded.itinerary_version_id,
+                updated_at = excluded.updated_at
+            """,
+            (trip_id, itinerary_version_id, section, item_index, item_key, vote, now),
+        )
+        conn.commit()
+
+
+def delete_item_feedback(trip_id: int, section: str, item_key: str) -> None:
+    """Удаляет оценку пункта (снятие голоса)."""
+    with connect() as conn:
+        conn.execute(
+            """
+            DELETE FROM program_item_feedback
+            WHERE trip_id = ? AND section = ? AND item_key = ?
+            """,
+            (trip_id, section, item_key),
+        )
+        conn.commit()

@@ -15,5 +15,7 @@ export function useTripProgram(tripId: number, enabled = true) {
     queryFn: () => fetchProgram(tripId),
     enabled: tripId > 0 && enabled,
     retry: false,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }

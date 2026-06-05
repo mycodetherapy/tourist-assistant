@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from onboarding.preferences import TripPreferences
 
 RebuildScope = Literal["full", "tickets", "events", "dining", "lifehacks"]
 ReviewAction = Literal["approve", "save_draft", "rebuild"]
+VotableSectionKey = Literal["events", "dining", "lifehacks"]
+ItemVote = Literal[1, -1]
 
 
 class CreateTripRequest(BaseModel):
@@ -27,3 +29,17 @@ class StartRunRequest(BaseModel):
 
 class ReviewRequest(BaseModel):
     action: ReviewAction
+
+
+class ItemFeedbackRequest(BaseModel):
+    version_id: int | None = None
+    section: VotableSectionKey
+    item_key: str | None = None
+    item_index: int | None = Field(default=None, ge=0)
+    vote: ItemVote | None = None
+
+    @model_validator(mode="after")
+    def require_item_identifier(self) -> ItemFeedbackRequest:
+        if not (self.item_key or "").strip() and self.item_index is None:
+            raise ValueError("Укажите item_key или item_index")
+        return self

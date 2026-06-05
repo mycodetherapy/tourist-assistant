@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from models.schemas import FinalProgram
+
+ProgramSectionKey = Literal["tickets", "events", "dining", "lifehacks"]
+ItemVote = Literal[1, -1]
 from onboarding.preferences import TripPreferences
 
 RunStatusName = Literal["queued", "running", "completed", "failed"]
@@ -37,11 +40,32 @@ class CreateTripResponse(BaseModel):
     run_id: str | None = None
 
 
+class ProgramItemResponse(BaseModel):
+    index: int
+    item_key: str
+    text: str
+    vote: ItemVote | None = None
+
+
+class ProgramSectionResponse(BaseModel):
+    intro: str
+    items: list[ProgramItemResponse] = Field(default_factory=list)
+
+
+class StructuredProgramResponse(BaseModel):
+    tickets: ProgramSectionResponse
+    events: ProgramSectionResponse
+    dining: ProgramSectionResponse
+    lifehacks: ProgramSectionResponse
+
+
 class ProgramResponse(BaseModel):
     version: int
+    version_id: int
     scope: str
     approved: bool
     program: FinalProgram
+    sections: StructuredProgramResponse
 
 
 class RunStatusResponse(BaseModel):

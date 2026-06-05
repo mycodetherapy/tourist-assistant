@@ -187,6 +187,58 @@
         }
       }
     },
+    "/api/trips/{trip_id}/program/feedback": {
+      "put": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Set Program Feedback",
+        "operationId": "set_program_feedback_api_trips__trip_id__program_feedback_put",
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemFeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/trips/{trip_id}/preferences": {
       "get": {
         "tags": [
@@ -564,6 +616,73 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "ItemFeedbackRequest": {
+        "properties": {
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          },
+          "section": {
+            "type": "string",
+            "enum": [
+              "events",
+              "dining",
+              "lifehacks"
+            ],
+            "title": "Section"
+          },
+          "item_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Key"
+          },
+          "item_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Index"
+          },
+          "vote": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  1,
+                  -1
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section"
+        ],
+        "title": "ItemFeedbackRequest"
+      },
       "ProfileResponse": {
         "properties": {
           "preferences": {
@@ -583,11 +702,53 @@
         ],
         "title": "ProfileResponse"
       },
+      "ProgramItemResponse": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "item_key": {
+            "type": "string",
+            "title": "Item Key"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "vote": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  1,
+                  -1
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "item_key",
+          "text"
+        ],
+        "title": "ProgramItemResponse"
+      },
       "ProgramResponse": {
         "properties": {
           "version": {
             "type": "integer",
             "title": "Version"
+          },
+          "version_id": {
+            "type": "integer",
+            "title": "Version Id"
           },
           "scope": {
             "type": "string",
@@ -599,16 +760,41 @@
           },
           "program": {
             "$ref": "#/components/schemas/FinalProgram"
+          },
+          "sections": {
+            "$ref": "#/components/schemas/StructuredProgramResponse"
           }
         },
         "type": "object",
         "required": [
           "version",
+          "version_id",
           "scope",
           "approved",
-          "program"
+          "program",
+          "sections"
         ],
         "title": "ProgramResponse"
+      },
+      "ProgramSectionResponse": {
+        "properties": {
+          "intro": {
+            "type": "string",
+            "title": "Intro"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProgramItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "intro"
+        ],
+        "title": "ProgramSectionResponse"
       },
       "ReviewRequest": {
         "properties": {
@@ -725,6 +911,30 @@
         },
         "type": "object",
         "title": "StartRunRequest"
+      },
+      "StructuredProgramResponse": {
+        "properties": {
+          "tickets": {
+            "$ref": "#/components/schemas/ProgramSectionResponse"
+          },
+          "events": {
+            "$ref": "#/components/schemas/ProgramSectionResponse"
+          },
+          "dining": {
+            "$ref": "#/components/schemas/ProgramSectionResponse"
+          },
+          "lifehacks": {
+            "$ref": "#/components/schemas/ProgramSectionResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tickets",
+          "events",
+          "dining",
+          "lifehacks"
+        ],
+        "title": "StructuredProgramResponse"
       },
       "TripDetailResponse": {
         "properties": {

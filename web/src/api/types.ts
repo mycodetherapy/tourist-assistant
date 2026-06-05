@@ -40,11 +40,44 @@ export interface FinalProgram {
   lifehacks: string;
 }
 
+export type ProgramSectionKey = "tickets" | "events" | "dining" | "lifehacks";
+export type VotableSectionKey = "events" | "dining" | "lifehacks";
+export type ItemVote = 1 | -1;
+
+export interface ProgramItem {
+  index: number;
+  item_key: string;
+  text: string;
+  vote: ItemVote | null;
+}
+
+export interface ProgramSection {
+  intro: string;
+  items: ProgramItem[];
+}
+
+export interface StructuredProgram {
+  tickets: ProgramSection;
+  events: ProgramSection;
+  dining: ProgramSection;
+  lifehacks: ProgramSection;
+}
+
 export interface ProgramResponse {
   version: number;
+  version_id: number;
   scope: string;
   approved: boolean;
   program: FinalProgram;
+  sections: StructuredProgram;
+}
+
+export interface ItemFeedbackPayload {
+  version_id: number;
+  section: VotableSectionKey;
+  item_key: string;
+  item_index: number;
+  vote: ItemVote | null;
 }
 
 export interface CreateTripPayload {

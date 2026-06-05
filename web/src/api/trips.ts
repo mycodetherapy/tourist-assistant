@@ -2,6 +2,7 @@ import { apiClient } from "./client";
 import type {
   CreateTripPayload,
   CreateTripResponse,
+  ItemFeedbackPayload,
   ProfileResponse,
   ProgramResponse,
   ReviewAction,
@@ -25,6 +26,17 @@ export async function fetchTrip(id: number): Promise<TripDetail> {
 
 export async function fetchProgram(id: number): Promise<ProgramResponse> {
   const { data } = await apiClient.get<ProgramResponse>(`/trips/${id}/program`);
+  return data;
+}
+
+export async function submitItemFeedback(
+  tripId: number,
+  payload: ItemFeedbackPayload,
+): Promise<ProgramResponse> {
+  const { data } = await apiClient.put<ProgramResponse>(
+    `/trips/${tripId}/program/feedback`,
+    payload,
+  );
   return data;
 }
 

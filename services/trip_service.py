@@ -13,11 +13,15 @@ from agents.graph import app
 from db import (
     TripSummary,
     create_trip,
+    delete_item_feedback,
     delete_trip,
+    get_itinerary_version,
     get_latest_itinerary,
     get_preferences,
     get_trip,
     get_user_profile,
+    list_item_feedback,
+    list_item_feedback_by_index,
     list_planned_trips,
     list_trips,
     log_agent_run,
@@ -26,6 +30,7 @@ from db import (
     save_preferences,
     save_user_profile,
     update_trip_status,
+    upsert_item_feedback,
 )
 from input_validation import sanitize_and_validate
 from models.schemas import FinalProgram, normalize_stored_program
@@ -38,9 +43,59 @@ from observability import (
 )
 from onboarding import TripPreferences, build_search_context
 from planning import human_message_for_scope
+from program.item_key import make_item_key
+from program.parse_items import (
+    SECTION_KEYS,
+    VOTABLE_SECTIONS,
+    ParsedProgram,
+    parse_program_sections,
+)
 from search.context import set_session
 
 ReviewAction = Literal["approve", "save_draft", "rebuild"]
+ProgramSectionKey = Literal["tickets", "events", "dining", "lifehacks"]
+VotableSectionKey = Literal["events", "dining", "lifehacks"]
+ItemVote = Literal[1, -1]
+
+
+def _resolve_item_vote(
+    *,
+    section: VotableSectionKey,
+    index: int,
+    text: str,
+    votes_by_key: dict[str, int],
+    votes_by_index: dict[tuple[str, int], int],
+) -> ItemVote | None:
+    """Сначала по item_key, иначе по (section, index) — для старых оценок."""
+    item_key = make_item_key(section, text)
+    raw = votes_by_key.get(item_key)
+    if raw not in (1, -1):
+        raw = votes_by_index.get((section, index))
+    return raw if raw in (1, -1) else None
+
+
+@dataclass(frozen=True)
+class ProgramItemView:
+    index: int
+    item_key: str
+    text: str
+    vote: ItemVote | None
+
+
+@dataclass(frozen=True)
+class ProgramSectionView:
+    intro: str
+    items: tuple[ProgramItemView, ...]
+
+
+@dataclass(frozen=True)
+class ProgramView:
+    version: int
+    version_id: int
+    scope: str
+    approved: bool
+    program: FinalProgram
+    sections: dict[ProgramSectionKey, ProgramSectionView]
 
 
 @dataclass(frozen=True)
@@ -361,3 +416,108 @@ class TripService:
 
     def parse_program(self, data: dict[str, Any]) -> FinalProgram:
         return FinalProgram.model_validate(normalize_stored_program(data))
+
+    def _attach_feedback(
+        self,
+        parsed: ParsedProgram,
+        *,
+        trip_id: int,
+    ) -> dict[ProgramSectionKey, ProgramSectionView]:
+        votes_by_key = list_item_feedback(trip_id)
+        votes_by_index = list_item_feedback_by_index(trip_id)
+        sections: dict[ProgramSectionKey, ProgramSectionView] = {}
+        for key in SECTION_KEYS:
+            if key not in VOTABLE_SECTIONS:
+                continue
+            section = getattr(parsed, key)
+            items = tuple(
+                ProgramItemView(
+                    index=index,
+                    item_key=make_item_key(key, text),
+                    text=text,
+                    vote=_resolve_item_vote(
+                        section=key,
+                        index=index,
+                        text=text,
+                        votes_by_key=votes_by_key,
+                        votes_by_index=votes_by_index,
+                    ),
+                )
+                for index, text in enumerate(section.items)
+            )
+            sections[key] = ProgramSectionView(intro=section.intro, items=items)
+        return sections
+
+    def get_program_view(self, trip_id: int) -> ProgramView | None:
+        """Программа с разбивкой на пункты и сохранёнными оценками."""
+        details = self.get_trip_details(trip_id)
+        if details is None or details.latest_itinerary is None:
+            return None
+        latest = details.latest_itinerary
+        program = self.parse_program(latest["program"])
+        parsed = parse_program_sections(program.model_dump())
+        sections = self._attach_feedback(parsed, trip_id=trip_id)
+        sections["tickets"] = ProgramSectionView(intro=program.tickets, items=())
+        return ProgramView(
+            version=int(latest["version"]),
+            version_id=int(latest["id"]),
+            scope=latest["scope"],
+            approved=latest["approved"],
+            program=program,
+            sections=sections,
+        )
+
+    def set_item_feedback(
+        self,
+        trip_id: int,
+        *,
+        section: VotableSectionKey,
+        vote: ItemVote | None,
+        item_key: str | None = None,
+        item_index: int | None = None,
+        version_id: int | None = None,
+    ) -> None:
+        """Сохраняет, обновляет или снимает оценку пункта подборки (не для билетов)."""
+        if section not in VOTABLE_SECTIONS:
+            raise ValueError("Оценки для раздела «Билеты» не поддерживаются")
+        if get_trip(trip_id) is None:
+            raise ValueError("Поездка не найдена")
+
+        latest = get_latest_itinerary(trip_id)
+        if latest is None:
+            raise ValueError("Программа не найдена")
+        if version_id is not None and get_itinerary_version(trip_id, version_id) is None:
+            raise ValueError("Версия программы не найдена")
+
+        program = self.parse_program(latest["program"])
+        parsed = parse_program_sections(program.model_dump())
+        section_data = getattr(parsed, section)
+        resolved_key: str | None = None
+        matched_index: int | None = None
+
+        normalized_key = (item_key or "").strip()
+        if normalized_key:
+            for index, text in enumerate(section_data.items):
+                if make_item_key(section, text) == normalized_key:
+                    matched_index = index
+                    resolved_key = normalized_key
+                    break
+        elif item_index is not None:
+            if 0 <= item_index < len(section_data.items):
+                matched_index = item_index
+                resolved_key = make_item_key(section, section_data.items[item_index])
+
+        if matched_index is None or resolved_key is None:
+            raise ValueError("Пункт подборки не найден")
+
+        if vote is None:
+            delete_item_feedback(trip_id, section, resolved_key)
+            return
+        upsert_item_feedback(
+            trip_id,
+            int(latest["id"]),
+            section,
+            matched_index,
+            resolved_key,
+            vote,
+        )
