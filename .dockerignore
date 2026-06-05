@@ -20,3 +20,6 @@ htmlcov
 data/
 *.log
 .ipynb_checkpoints
+
+# Фронтенд собирается отдельным образом (web/Dockerfile); в API-контекст не нужен.
+web/

@@ -59,15 +59,22 @@ def _choose_rebuild_scope(*, has_program: bool) -> str:
 
 
 def _confirm_delete_trip(trip_id: int, *, city: str, dates: str) -> bool:
-    """Подтверждение удаления поездки."""
+    """Подтверждение удаления поездки (номер пункта — без путаницы раскладок)."""
     print(f"\nУдалить поездку #{trip_id}: {city}, {dates}?")
-    raw = input("Подтвердить удаление? [y/N]: ").strip().lower()
-    return raw in {"y", "yes", "д", "да"}
+    choice = _prompt_choice(
+        "Подтвердить удаление?",
+        [
+            ("yes", "Да, удалить"),
+            ("no", "Нет, отменить"),
+        ],
+        "no",
+    )
+    return choice == "yes"
 
 
 def _delete_trip_flow(service: TripService) -> None:
     """Выбор поездки из списка и удаление из БД."""
-    chosen = _choose_trip_from_list()
+    chosen = _choose_trip_from_list(prompt="ID поездки для удаления")
     if chosen is None:
         return
     trip = get_trip(chosen)
@@ -89,7 +96,7 @@ def _delete_trip_flow(service: TripService) -> None:
     print(f"Поездка #{chosen} удалена.")
 
 
-def _choose_trip_from_list() -> int | None:
+def _choose_trip_from_list(*, prompt: str = "ID поездки для продолжения") -> int | None:
     trips = list_trips()
     if not trips:
         print("Сохранённых поездок нет. Создайте новую.")
@@ -100,7 +107,7 @@ def _choose_trip_from_list() -> int | None:
             f"  [{trip.id}] {trip.city}, {trip.dates} "
             f"({trip.origin_city}) — {trip.status}"
         )
-    raw = _prompt_line("ID поездки для продолжения")
+    raw = _prompt_line(prompt)
     try:
         return int(raw)
     except ValueError:

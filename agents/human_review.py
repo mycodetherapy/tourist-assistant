@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import unicodedata
+
 _NO_APPROVE = frozenset({"n", "no", "н", "нет"})
 _YES_REBUILD = frozenset({"y", "yes", "д", "да"})
 
 
 def _normalize_answer(raw: str) -> str:
-    return raw.strip().lower().replace("ё", "е")
+    text = unicodedata.normalize("NFKC", raw.strip().lower()).replace("ё", "е")
+    return text.lstrip("\ufeff")
 
 
 def prompt_approve_program() -> bool:
