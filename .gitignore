@@ -50,6 +50,9 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
+# Frontend
+web/node_modules/
+
 # Локальная SQLite
 data/
 

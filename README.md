@@ -27,6 +27,43 @@ cp .env.example .env
 python3 main.py
 ```
 
+### Веб-интерфейс (FastAPI + React)
+
+Требования: Python 3.10+, Node.js 20+, те же ключи в `.env`.
+
+**Терминал 1 — API:**
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn api.main:app --reload --port 8000
+```
+
+**Терминал 2 — фронтенд:**
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`.
+
+| Экран | Действие |
+|-------|----------|
+| **Список поездок** | Все сохранённые поездки из SQLite |
+| **Новая поездка** | Wizard: маршрут → опросник → фоновая сборка (polling 1–2 мин) |
+| **Карточка поездки** | 4 вкладки программы, утверждение / черновик / пересбор |
+
+**Docker (веб + API):**
+
+```bash
+docker compose build api web
+docker compose up api web
+```
+
+UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health). CLI по-прежнему: `docker compose run --rm app`.
+
 ### Запуск в Docker (Docker Compose)
 
 Требования: [Docker](https://docs.docker.com/get-docker/) и Docker Compose v2.
@@ -224,7 +261,7 @@ LLM_OPENROUTER_PROVIDERS=DeepInfra
 
 Пунктирные рёбра — условные переходы (`lifehacks`, `tool_calls`, critic retry, HITL). Сплошные — фиксированные (`executor → researcher`, `writer → critic`).
 
-**CLI и БД:** `cli/app.py` вызывает `app.invoke`; `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions` (SQLite).
+**CLI, API и БД:** `cli/app.py` и `api/` вызывают общий `services/trip_service.py` → `app.invoke`; `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions` (SQLite). Веб: `web/` (React 19, Ant Design, TanStack Query).
 
 После изменения графа перегенерируйте PNG:
 
@@ -401,8 +438,11 @@ python3 -m scripts.metrics_report --limit 50
 
 ```
 tourist-assistant/
-├── main.py                 # Точка входа: python3 main.py
-├── cli/app.py              # Меню, опросник, invoke графа, сохранение в БД
+├── main.py                 # Точка входа CLI: python3 main.py
+├── api/                    # FastAPI REST для веб-UI
+├── services/               # TripService, RunManager — общий слой CLI + API
+├── web/                    # Vite + React 19, Ant Design, TanStack Query
+├── cli/app.py              # Меню, опросник, вызов TripService
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
 │   ├── schemas.py          # FinalProgram, CultureEventsInput, …

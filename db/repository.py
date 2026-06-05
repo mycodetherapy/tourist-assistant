@@ -409,6 +409,32 @@ def list_tool_runs(trip_id: int, limit: int = 50) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def mark_latest_itinerary_approved(trip_id: int) -> None:
+    """Помечает последнюю версию программы как утверждённую."""
+    now = _utc_now()
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM itinerary_versions
+            WHERE trip_id = ?
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (trip_id,),
+        ).fetchone()
+        if row is None:
+            return
+        conn.execute(
+            "UPDATE itinerary_versions SET approved = 1 WHERE id = ?",
+            (int(row["id"]),),
+        )
+        conn.execute(
+            "UPDATE trips SET status = ?, updated_at = ? WHERE id = ?",
+            ("approved", now, trip_id),
+        )
+        conn.commit()
+
+
 def get_latest_itinerary(trip_id: int) -> dict[str, Any] | None:
     """Последняя версия программы: version, scope, program (dict), approved."""
     with connect() as conn:

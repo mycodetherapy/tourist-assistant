@@ -54,3 +54,5 @@ urllib3==2.6.3
 uuid_utils==0.15.0
 xxhash==3.7.0
 zstandard==0.25.0
+fastapi==0.115.12
+uvicorn[standard]==0.34.0

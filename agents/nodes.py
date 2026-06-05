@@ -270,10 +270,15 @@ def critic_node(state: AgentState) -> dict[str, Any]:
 
 
 def human_review_node(state: AgentState) -> dict[str, Any]:
-    """Human-in-the-loop: утверждение программы y/n."""
+    """Human-in-the-loop: утверждение программы y/n или отложенный review для API."""
     print("\n--- Проверка программы ---")
     if state.get("critic_notes"):
         print(f"Замечания critic: {state['critic_notes']}")
+
+    if state.get("review_mode") == "deferred":
+        if state.get("trip_id") is not None:
+            update_trip_status(int(state["trip_id"]), "review")
+        return {"approved": False}
 
     if prompt_approve_program():
         print("✓ Программа утверждена.\n")
@@ -331,6 +336,8 @@ def route_after_critic(state: AgentState) -> Literal["human_review", "researcher
 
 
 def route_after_human(state: AgentState) -> Literal["researcher", "__end__"]:
+    if state.get("review_mode") == "deferred":
+        return "__end__"
     if state.get("approved"):
         return "__end__"
     return "researcher"
