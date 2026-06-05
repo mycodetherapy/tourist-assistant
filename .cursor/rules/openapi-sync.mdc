@@ -1,0 +1,55 @@
+---
+description: Синхронизировать docs/openapi.json перед коммитом при изменениях API
+alwaysApply: true
+---
+
+# OpenAPI / Swagger перед коммитом
+
+Перед **любым** `git commit` (или когда пользователь просит закоммитить) проверь, нужно ли обновить [`docs/openapi.json`](docs/openapi.json).
+
+## Когда обновлять
+
+Запусти `python3 scripts/export_openapi.py`, если менялись:
+
+- [`api/`](api/) — маршруты, схемы, `main.py`
+- [`api/schemas/`](api/schemas/) — request/response DTO
+- Pydantic-модели, влияющие на `response_model` / тела запросов API
+
+Если `docs/openapi.json` изменился после экспорта — добавь файл в коммит (`git add docs/openapi.json`).
+
+## Команда
+
+```bash
+python3 scripts/export_openapi.py
+```
+
+Используй `.venv/bin/python`, если venv активен.
+
+## Swagger UI (живой)
+
+При запущенном API:
+
+- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
+- ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- JSON: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
+
+## Git hook (локально)
+
+Один раз установить автообновление перед коммитом:
+
+```bash
+./scripts/install_git_hooks.sh
+```
+
+Hook перегенерирует `docs/openapi.json` и добавит в staging, если схема изменилась.
+
+## Чеклист перед коммитом
+
+- [ ] После правок `api/` выполнен `scripts/export_openapi.py`
+- [ ] `docs/openapi.json` в коммите, если отличается от сгенерированного
+- [ ] README упоминает `/docs`, если менялись инструкции по API
+
+## Запреты
+
+- Не редактировать `docs/openapi.json` вручную — только через `export_openapi.py`
+- Не коммитить устаревшую схему вместе с новыми эндпоинтами

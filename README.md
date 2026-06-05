@@ -49,6 +49,19 @@ npm run dev
 
 Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`.
 
+**Swagger (при запущенном API):**
+
+- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
+- ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+Статическая схема в репозитории: `docs/openapi.json` (обновление: `python3 scripts/export_openapi.py`).
+
+Один раз установить автообновление схемы перед коммитом:
+
+```bash
+./scripts/install_git_hooks.sh
+```
+
 | Экран | Действие |
 |-------|----------|
 | **Список поездок** | Все сохранённые поездки из SQLite |
@@ -440,6 +453,7 @@ python3 -m scripts.metrics_report --limit 50
 tourist-assistant/
 ├── main.py                 # Точка входа CLI: python3 main.py
 ├── api/                    # FastAPI REST для веб-UI
+├── docs/openapi.json       # OpenAPI 3 (scripts/export_openapi.py)
 ├── services/               # TripService, RunManager — общий слой CLI + API
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query
 ├── cli/app.py              # Меню, опросник, вызов TripService

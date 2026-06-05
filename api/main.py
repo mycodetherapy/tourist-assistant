@@ -26,9 +26,36 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+_OPENAPI_TAGS = [
+    {
+        "name": "trips",
+        "description": "Поездки: создание, программа, предпочтения, пересбор, HITL.",
+    },
+    {
+        "name": "runs",
+        "description": "Статус фоновых прогонов графа (polling).",
+    },
+    {
+        "name": "profile",
+        "description": "Сохранённый профиль предпочтений пользователя.",
+    },
+    {
+        "name": "health",
+        "description": "Проверка доступности сервиса.",
+    },
+]
+
 app = FastAPI(
     title="Туристический ассистент API",
+    description=(
+        "REST API веб-интерфейса: поездки в SQLite, асинхронная сборка "
+        "программы LangGraph, human-in-the-loop (утверждение / пересбор)."
+    ),
     version="1.0.0",
+    openapi_tags=_OPENAPI_TAGS,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
     lifespan=lifespan,
 )
 
@@ -49,11 +76,11 @@ app.include_router(runs.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
 
 
-@app.get("/health")
+@app.get("/health", tags=["health"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/health")
+@app.get("/api/health", tags=["health"])
 def api_health() -> dict[str, str]:
     return {"status": "ok"}

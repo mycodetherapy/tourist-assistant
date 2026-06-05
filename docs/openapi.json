@@ -1,0 +1,925 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Туристический ассистент API",
+    "description": "REST API веб-интерфейса: поездки в SQLite, асинхронная сборка программы LangGraph, human-in-the-loop (утверждение / пересбор).",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/trips": {
+      "get": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "List Trips",
+        "operationId": "list_trips_api_trips_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TripSummaryResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Trips Api Trips Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Create Trip",
+        "operationId": "create_trip_api_trips_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTripRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTripResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}": {
+      "get": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Get Trip",
+        "operationId": "get_trip_api_trips__trip_id__get",
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/program": {
+      "get": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Get Program",
+        "operationId": "get_program_api_trips__trip_id__program_get",
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/preferences": {
+      "get": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Get Preferences",
+        "operationId": "get_preferences_api_trips__trip_id__preferences_get",
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TripPreferences"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Preferences Api Trips  Trip Id  Preferences Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/runs": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Start Run",
+        "operationId": "start_run_api_trips__trip_id__runs_post",
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTripResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/review": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Submit Review",
+        "operationId": "submit_review_api_trips__trip_id__review_post",
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Get Run Status",
+        "operationId": "get_run_status_api_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profile": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Get Profile",
+        "operationId": "get_profile_api_profile_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Api Health",
+        "operationId": "api_health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Api Health Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateTripRequest": {
+        "properties": {
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "dates": {
+            "type": "string",
+            "title": "Dates"
+          },
+          "origin_city": {
+            "type": "string",
+            "title": "Origin City",
+            "default": "Москва"
+          },
+          "user_query": {
+            "type": "string",
+            "title": "User Query",
+            "default": "Составь культурную программу поездки"
+          },
+          "preferences": {
+            "$ref": "#/components/schemas/TripPreferences"
+          },
+          "start_run": {
+            "type": "boolean",
+            "title": "Start Run",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "city",
+          "dates",
+          "preferences"
+        ],
+        "title": "CreateTripRequest"
+      },
+      "CreateTripResponse": {
+        "properties": {
+          "trip_id": {
+            "type": "integer",
+            "title": "Trip Id"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trip_id"
+        ],
+        "title": "CreateTripResponse"
+      },
+      "FinalProgram": {
+        "properties": {
+          "tickets": {
+            "type": "string",
+            "title": "Tickets",
+            "description": "Билеты туда-обратно: самолёт, поезд (РЖД), автобус — со ссылками"
+          },
+          "events": {
+            "type": "string",
+            "title": "Events",
+            "description": "Музеи, выставки, мероприятия (желательно в одном районе для прогулок)"
+          },
+          "dining": {
+            "type": "string",
+            "title": "Dining",
+            "description": "Рестораны и кафе со ссылками, рядом с мероприятиями (пешая доступность)"
+          },
+          "lifehacks": {
+            "type": "string",
+            "title": "Lifehacks",
+            "description": "Полезные лайфхаки для туриста"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tickets",
+          "events",
+          "dining",
+          "lifehacks"
+        ],
+        "title": "FinalProgram",
+        "description": "Структурированная культурная программа поездки."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ProfileResponse": {
+        "properties": {
+          "preferences": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripPreferences"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "preferences"
+        ],
+        "title": "ProfileResponse"
+      },
+      "ProgramResponse": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "approved": {
+            "type": "boolean",
+            "title": "Approved"
+          },
+          "program": {
+            "$ref": "#/components/schemas/FinalProgram"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "scope",
+          "approved",
+          "program"
+        ],
+        "title": "ProgramResponse"
+      },
+      "ReviewRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "save_draft",
+              "rebuild"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ReviewRequest"
+      },
+      "ReviewResponse": {
+        "properties": {
+          "trip_id": {
+            "type": "integer",
+            "title": "Trip Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trip_id",
+          "status"
+        ],
+        "title": "ReviewResponse"
+      },
+      "RunStatusResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "trip_id": {
+            "type": "integer",
+            "title": "Trip Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "trip_id",
+          "status"
+        ],
+        "title": "RunStatusResponse"
+      },
+      "StartRunRequest": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "full",
+              "tickets",
+              "events",
+              "dining",
+              "lifehacks"
+            ],
+            "title": "Scope",
+            "default": "full"
+          }
+        },
+        "type": "object",
+        "title": "StartRunRequest"
+      },
+      "TripDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "dates": {
+            "type": "string",
+            "title": "Dates"
+          },
+          "origin_city": {
+            "type": "string",
+            "title": "Origin City"
+          },
+          "user_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Query"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "city",
+          "dates",
+          "origin_city",
+          "user_query",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TripDetailResponse"
+      },
+      "TripPreferences": {
+        "properties": {
+          "pace": {
+            "type": "string",
+            "enum": [
+              "relaxed",
+              "moderate",
+              "packed"
+            ],
+            "title": "Pace",
+            "description": "Темп поездки"
+          },
+          "budget": {
+            "type": "string",
+            "enum": [
+              "economy",
+              "medium",
+              "unlimited"
+            ],
+            "title": "Budget",
+            "description": "Бюджет на билеты и питание"
+          },
+          "interests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Interests",
+            "description": "Интересы: музеи, театр, архитектура, еда и т.д."
+          },
+          "cuisine": {
+            "type": "string",
+            "title": "Cuisine",
+            "description": "Предпочтения по кухне",
+            "default": ""
+          },
+          "min_restaurant_rating": {
+            "type": "number",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Min Restaurant Rating",
+            "description": "Минимальный рейтинг ресторанов",
+            "default": 4.0
+          },
+          "transport_preference": {
+            "type": "string",
+            "enum": [
+              "metro",
+              "taxi",
+              "walking",
+              "mixed"
+            ],
+            "title": "Transport Preference",
+            "description": "Как передвигаться по городу"
+          },
+          "travel_party": {
+            "type": "string",
+            "enum": [
+              "solo",
+              "couple",
+              "family",
+              "friends"
+            ],
+            "title": "Travel Party",
+            "description": "Состав группы"
+          },
+          "special_notes": {
+            "type": "string",
+            "title": "Special Notes",
+            "description": "Дополнительные пожелания",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "pace",
+          "budget",
+          "transport_preference",
+          "travel_party"
+        ],
+        "title": "TripPreferences",
+        "description": "Результат опросника перед планированием программы."
+      },
+      "TripSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "dates": {
+            "type": "string",
+            "title": "Dates"
+          },
+          "origin_city": {
+            "type": "string",
+            "title": "Origin City"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "city",
+          "dates",
+          "origin_city",
+          "status",
+          "updated_at"
+        ],
+        "title": "TripSummaryResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "trips",
+      "description": "Поездки: создание, программа, предпочтения, пересбор, HITL."
+    },
+    {
+      "name": "runs",
+      "description": "Статус фоновых прогонов графа (polling)."
+    },
+    {
+      "name": "profile",
+      "description": "Сохранённый профиль предпочтений пользователя."
+    },
+    {
+      "name": "health",
+      "description": "Проверка доступности сервиса."
+    }
+  ]
+}

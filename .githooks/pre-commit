@@ -1,0 +1,24 @@
+#!/bin/sh
+# Обновляет docs/openapi.json, если изменилась схема API.
+set -eu
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+if [ ! -f scripts/export_openapi.py ]; then
+  exit 0
+fi
+
+PYTHON="${ROOT}/.venv/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON=python3
+fi
+
+"$PYTHON" scripts/export_openapi.py
+
+if ! git diff --quiet -- docs/openapi.json 2>/dev/null; then
+  git add docs/openapi.json
+  echo "pre-commit: обновлён docs/openapi.json"
+fi
+
+exit 0
