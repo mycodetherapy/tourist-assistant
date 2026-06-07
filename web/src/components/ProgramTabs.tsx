@@ -145,10 +145,16 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
     <div className="space-y-3">
       {!legacy && hasRoutesProgram(data.program) && (
         <Alert
-          type="success"
+          type={
+            (data.program.routes_text || "").includes("(fallback)") ? "warning" : "success"
+          }
           showIcon
           message="Три варианта маршрута на всю поездку"
-          description="Оцените варианты A / B / C на вкладке «Маршруты». В каждом пункте есть ссылка на маршрут в Яндекс.Картах."
+          description={
+            (data.program.routes_text || "").includes("(fallback)")
+              ? "Использованы демо-точки: ключ Search API не работает. Запустите python3 scripts/test_yandex_maps.py и обновите .env."
+              : "Оцените варианты A / B / C. В каждом пункте — ссылка на маршрут в Яндекс.Картах."
+          }
         />
       )}
       <Tabs

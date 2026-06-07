@@ -202,7 +202,8 @@ python3 -m eval --suite smoke
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure`. Для альтернатив через VPN — `OpenAI` |
 | `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`, регион `ru-ru`) |
 | `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
-| `YANDEX_MAPS_API_KEY` | Нет | Geocoder + Search API Яндекс.Карт для пула POI и маршрутов; без ключа — демо-POI (`provider: fallback`) |
+| `YANDEX_MAPS_API_KEY` | Нет | HTTP Геокодер Яндекс.Карт (центр города). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
+| `YANDEX_SEARCH_API_KEY` | Нет | API **поиска организаций** (музеи, рестораны). Без него — Geocoder-fallback или демо-POI |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |

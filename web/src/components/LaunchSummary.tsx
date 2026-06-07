@@ -42,8 +42,10 @@ export function LaunchSummary({
         </Descriptions.Item>
       </Descriptions>
       <p className="text-sm text-neutral-500">
-        Без <code className="text-xs">YANDEX_MAPS_API_KEY</code> в <code className="text-xs">.env</code>{" "}
-        API подставит демо-POI — удобно для проверки интерфейса, но не реальные места.
+        Для реальных мест нужны ключи <code className="text-xs">YANDEX_MAPS_API_KEY</code> (Geocoder) и{" "}
+        <code className="text-xs">YANDEX_SEARCH_API_KEY</code> (поиск организаций) в{" "}
+        <code className="text-xs">.env</code>. Проверка:{" "}
+        <code className="text-xs">python3 scripts/test_yandex_maps.py Москва</code>
       </p>
     </div>
   );

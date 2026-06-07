@@ -52,7 +52,7 @@ def search_route_materials(city: str, dates: str) -> str:
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
     prefs = get_session_preferences()
-    materials = run_route_materials_search(
+    materials, api_warnings = run_route_materials_search(
         city=params.city,
         dates=params.dates,
         preferences=prefs,
@@ -76,7 +76,10 @@ def search_route_materials(city: str, dates: str) -> str:
             "Не выдумывай места и URL."
         ),
     }
-    if not materials.leisure_points:
+    if api_warnings:
+        payload["warnings"] = api_warnings
+        payload["warning"] = api_warnings[0]
+    elif not materials.leisure_points:
         payload["warning"] = "Пул мест пуст — проверьте YANDEX_MAPS_API_KEY или город."
     set_route_materials(materials.model_dump())
     print(

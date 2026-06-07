@@ -139,10 +139,23 @@ def build_fallback_route_program(materials: RouteMaterials) -> RouteProgram:
         )
         return case
 
-    indices = list(range(len(leisure)))
-    a_idx = indices[: min(3, len(indices))]
-    b_idx = indices[1 : min(4, len(indices))] or a_idx
-    c_idx = list(reversed(indices[: min(3, len(indices))])) or a_idx
+    n = len(leisure)
+    if n >= 9:
+        a_idx = list(range(0, 3))
+        b_idx = list(range(3, 6))
+        c_idx = list(range(6, 9))
+    elif n >= 6:
+        a_idx = [0, 1, 2]
+        b_idx = [3, 4, 5]
+        c_idx = [5, 4, 3]
+    elif n >= 3:
+        a_idx = [0, 1, 2]
+        b_idx = [2, 1, 0]
+        c_idx = [1, 2, 0]
+    else:
+        a_idx = list(range(n))
+        b_idx = list(reversed(range(n))) if n > 1 else a_idx
+        c_idx = a_idx
 
     program = RouteProgram(
         cases=[
