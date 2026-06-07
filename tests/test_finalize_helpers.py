@@ -1,4 +1,4 @@
-"""Тесты подготовки finalize (билеты из tool)."""
+"""Тесты подготовки finalize (билеты из tool, маршруты из materials)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import unittest
 
 from langchain_core.messages import HumanMessage, ToolMessage
 
+from models.routes import GeoPoint, PoiPoint, RouteMaterials
 from models.schemas import ProgramDraft
 
 from agents.finalize_helpers import (
@@ -19,6 +20,44 @@ from agents.finalize_helpers import (
     resolve_tickets_section,
 )
 from search.tickets_search import run_tickets_search
+
+
+def _materials_payload() -> dict:
+    materials = RouteMaterials(
+        city="Казань",
+        dates="июль",
+        provider="fallback",
+        leisure_points=[
+            PoiPoint(
+                poi_id="l1",
+                tag="museums",
+                name="Музей",
+                coordinates=GeoPoint(lon=49.1, lat=55.8),
+                maps_url="https://yandex.ru/maps/org/l1",
+            ),
+            PoiPoint(
+                poi_id="l2",
+                tag="landmarks",
+                name="Площадь",
+                coordinates=GeoPoint(lon=49.11, lat=55.81),
+                maps_url="https://yandex.ru/maps/org/l2",
+            ),
+            PoiPoint(
+                poi_id="l3",
+                tag="parks",
+                name="Парк",
+                coordinates=GeoPoint(lon=49.12, lat=55.82),
+                maps_url="https://yandex.ru/maps/org/l3",
+            ),
+        ],
+        dining_options=[],
+    )
+    return {
+        "materials": materials.model_dump(),
+        "materials_digest": "Музей, Площадь, Парк",
+        "leisure_count": 3,
+        "dining_count": 0,
+    }
 
 
 class TestFinalizeHelpers(unittest.TestCase):
@@ -65,72 +104,62 @@ class TestFinalizeHelpers(unittest.TestCase):
         self.assertIn("summary_for_llm", str(prepared[0].content))
         self.assertNotIn('"offers"', str(prepared[0].content))
 
-    def test_slim_events_drops_search_blob(self) -> None:
+    def test_slim_route_materials_drops_heavy_fields(self) -> None:
         heavy = {
-            "digest": "1. [Музей](https://example.com/m) — выставка",
+            "materials": _materials_payload()["materials"],
+            "materials_digest": "Музей",
             "search": {"results": [{"url": "x", "content": "y" * 5000}] * 40},
-            "results_count": 40,
         }
         msg = ToolMessage(
             content=json.dumps(heavy, ensure_ascii=False),
             tool_call_id="2",
-            name="search_culture_events",
+            name="search_route_materials",
         )
         slim = slim_tool_message_for_finalize(msg)
         data = json.loads(str(slim.content))
-        self.assertNotIn("search", data)
-        self.assertIn("digest", data)
+        self.assertEqual(data.get("category"), "route_materials")
+        self.assertIn("materials_digest", data)
 
-    def test_prepare_keeps_latest_tool_only(self) -> None:
+    def test_prepare_keeps_latest_route_materials_only(self) -> None:
         old = ToolMessage(
-            content=json.dumps({"digest": "старый"}, ensure_ascii=False),
+            content=json.dumps({"materials_digest": "старый"}, ensure_ascii=False),
             tool_call_id="a",
-            name="search_culture_events",
+            name="search_route_materials",
         )
         new = ToolMessage(
-            content=json.dumps({"digest": "новый"}, ensure_ascii=False),
+            content=json.dumps({"materials_digest": "новый"}, ensure_ascii=False),
             tool_call_id="b",
-            name="search_culture_events",
+            name="search_route_materials",
         )
-        out = prepare_finalize_messages([old, new], rebuild_scope="events")
+        out = prepare_finalize_messages([old, new], rebuild_scope="routes")
         self.assertEqual(len(out), 1)
         self.assertIsInstance(out[0], HumanMessage)
         self.assertIn("новый", str(out[0].content))
         self.assertNotIn("старый", str(out[0].content))
 
-    def test_fallback_draft_from_digest(self) -> None:
+    def test_fallback_draft_from_materials(self) -> None:
         messages = [
             ToolMessage(
-                content=json.dumps(
-                    {"digest": "1. [Музей](https://example.com/m) — тест"},
-                    ensure_ascii=False,
-                ),
-                tool_call_id="e",
-                name="search_culture_events",
-            ),
-            ToolMessage(
-                content=json.dumps(
-                    {"restaurants_digest": "1. [Кафе](https://example.com/c)"},
-                    ensure_ascii=False,
-                ),
-                tool_call_id="d",
-                name="search_dining",
+                content=json.dumps(_materials_payload(), ensure_ascii=False),
+                tool_call_id="m",
+                name="search_route_materials",
             ),
         ]
         draft = build_fallback_program_draft(messages, city="Казань", walking_area="центр")
-        self.assertIn("Музей", draft.events)
-        self.assertIn("Кафе", draft.dining)
-        self.assertFalse(hasattr(draft, "transport"))
+        self.assertEqual(len(draft.routes.cases), 3)
         self.assertIn("музей", draft.lifehacks.lower())
 
     def test_coerce_program_draft_from_parsed_wrapper(self) -> None:
         from unittest.mock import MagicMock
 
-        inner = ProgramDraft(events="Музей", dining="Кафе", lifehacks="Совет")
+        inner = ProgramDraft(
+            routes=build_fallback_program_draft([], city="Казань").routes,
+            lifehacks="Совет",
+        )
         wrapper = MagicMock()
         wrapper.parsed = inner
-        self.assertEqual(_coerce_program_draft(wrapper).events, "Музей")
-        self.assertEqual(_coerce_program_draft(inner).dining, "Кафе")
+        self.assertEqual(len(_coerce_program_draft(wrapper).routes.cases), 3)
+        self.assertEqual(_coerce_program_draft(inner).lifehacks, "Совет")
 
     def test_invoke_fallback_passes_city(self) -> None:
         from unittest.mock import MagicMock
@@ -147,12 +176,9 @@ class TestFinalizeHelpers(unittest.TestCase):
         )
         messages = [
             ToolMessage(
-                content=json.dumps(
-                    {"digest": "1. [Музей](https://example.com/m)"},
-                    ensure_ascii=False,
-                ),
-                tool_call_id="e",
-                name="search_culture_events",
+                content=json.dumps(_materials_payload(), ensure_ascii=False),
+                tool_call_id="m",
+                name="search_route_materials",
             ),
         ]
         draft = invoke_program_draft(
@@ -163,7 +189,7 @@ class TestFinalizeHelpers(unittest.TestCase):
             state_messages=messages,
             city="Казань",
         )
-        self.assertIn("Музей", draft.events)
+        self.assertEqual(len(draft.routes.cases), 3)
 
 
 if __name__ == "__main__":

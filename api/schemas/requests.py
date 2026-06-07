@@ -8,9 +8,9 @@ from pydantic import BaseModel, Field, model_validator
 
 from onboarding.preferences import TripPreferences
 
-RebuildScope = Literal["full", "tickets", "events", "dining", "lifehacks"]
+RebuildScope = Literal["full", "tickets", "routes", "lifehacks", "events", "dining"]
 ReviewAction = Literal["approve", "save_draft", "rebuild"]
-VotableSectionKey = Literal["events", "dining", "lifehacks"]
+VotableSectionKey = Literal["routes", "lifehacks", "events", "dining"]
 ItemVote = Literal[1, -1]
 
 

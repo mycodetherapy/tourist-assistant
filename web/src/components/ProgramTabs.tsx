@@ -12,12 +12,36 @@ interface ProgramTabsProps {
   votingDisabled?: boolean;
 }
 
-const TABS: { key: "tickets" | VotableSectionKey; label: string; votable: boolean }[] = [
-  { key: "tickets", label: "Билеты", votable: false },
-  { key: "events", label: "Мероприятия", votable: true },
-  { key: "dining", label: "Питание", votable: true },
-  { key: "lifehacks", label: "Лайфхаки", votable: true },
-];
+type TabKey = "tickets" | VotableSectionKey;
+
+interface TabDef {
+  key: TabKey;
+  label: string;
+  votable: boolean;
+}
+
+function isLegacyProgram(data: ProgramResponse): boolean {
+  const { program } = data;
+  const hasLegacy = Boolean(program.events?.trim() || program.dining?.trim());
+  const hasRoutes = Boolean(program.routes || program.routes_text?.trim());
+  return hasLegacy && !hasRoutes;
+}
+
+function buildTabs(data: ProgramResponse): TabDef[] {
+  if (isLegacyProgram(data)) {
+    return [
+      { key: "tickets", label: "Билеты", votable: false },
+      { key: "events", label: "Мероприятия", votable: true },
+      { key: "dining", label: "Питание", votable: true },
+      { key: "lifehacks", label: "Лайфхаки", votable: true },
+    ];
+  }
+  return [
+    { key: "tickets", label: "Билеты", votable: false },
+    { key: "routes", label: "Маршруты", votable: true },
+    { key: "lifehacks", label: "Лайфхаки", votable: true },
+  ];
+}
 
 function MarkdownBlock({ text, className = "mb-4" }: { text: string; className?: string }) {
   if (!text.trim()) {
@@ -42,6 +66,7 @@ function MarkdownBlock({ text, className = "mb-4" }: { text: string; className?:
 
 export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) {
   const queryClient = useQueryClient();
+  const tabs = buildTabs(data);
 
   const voteMutation = useMutation({
     mutationFn: (payload: {
@@ -104,7 +129,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
 
   return (
     <Tabs
-      items={TABS.map(({ key, label, votable }) => {
+      items={tabs.map(({ key, label, votable }) => {
         if (!votable) {
           return {
             key,

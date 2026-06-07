@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage, ToolMessage
 
+from models.routes import RouteMaterials, RouteProgram
 from models.schemas import ProgramDraft
 from models.tickets import TicketsSearchOutput
 from planning.rebuild import required_tools_for_scope, resolve_tool_name
@@ -163,23 +164,15 @@ def slim_tool_message_for_finalize(msg: ToolMessage) -> ToolMessage:
             "avia_api_status": data.get("avia_api_status"),
             "offers_count": data.get("offers_count"),
         }
-    elif name == "search_culture_events":
+    elif resolve_tool_name(name) == "search_route_materials":
         slim = {
-            "category": "events",
-            "digest": data.get("digest", ""),
-            "walking_area": data.get("walking_area", ""),
-            "results_count": data.get("results_count"),
-            "instruction": _truncate_text(str(data.get("instruction", "")), 400),
-            "warning": data.get("warning"),
-        }
-    elif name in ("search_dining", "search_dining_and_transport"):
-        slim = {
-            "category": "dining",
-            "restaurants_digest": _truncate_text(
-                str(data.get("restaurants_digest", "") or data.get("digest", "")), 3500
+            "category": "route_materials",
+            "materials_digest": _truncate_text(
+                str(data.get("materials_digest", "") or data.get("digest", "")), 6000
             ),
-            "walking_area": data.get("walking_area", ""),
-            "instruction": _truncate_text(str(data.get("instruction", "")), 400),
+            "leisure_count": data.get("leisure_count"),
+            "dining_count": data.get("dining_count"),
+            "instruction": _truncate_text(str(data.get("instruction", "")), 500),
             "warning": data.get("warning"),
         }
     else:
@@ -217,8 +210,7 @@ def _collect_latest_tool_messages(
         latest[name]
         for name in (
             "search_roundtrip_tickets",
-            "search_culture_events",
-            "search_dining",
+            "search_route_materials",
         )
         if name in latest
     ]
@@ -253,7 +245,14 @@ def prepare_finalize_messages(
     ]
 
 
-_DINING_TOOL_NAMES = frozenset({"search_dining", "search_dining_and_transport"})
+_MATERIALS_TOOL_NAMES = frozenset(
+    {
+        "search_route_materials",
+        "search_culture_events",
+        "search_dining",
+        "search_dining_and_transport",
+    }
+)
 
 
 def _tool_payload(messages: list[Any], tool_name: str) -> dict[str, Any]:
@@ -261,10 +260,11 @@ def _tool_payload(messages: list[Any], tool_name: str) -> dict[str, Any]:
         if not isinstance(msg, ToolMessage):
             continue
         name = msg.name or ""
-        if tool_name in _DINING_TOOL_NAMES:
-            if name not in _DINING_TOOL_NAMES:
+        canonical = resolve_tool_name(name)
+        if tool_name in _MATERIALS_TOOL_NAMES:
+            if canonical != "search_route_materials":
                 continue
-        elif name != tool_name:
+        elif canonical != tool_name:
             continue
         raw = msg.content if isinstance(msg.content, str) else str(msg.content)
         try:
@@ -276,55 +276,75 @@ def _tool_payload(messages: list[Any], tool_name: str) -> dict[str, Any]:
     return {}
 
 
+def load_route_materials(messages: list[Any]) -> RouteMaterials | None:
+    data = _tool_payload(messages, "search_route_materials")
+    raw = data.get("materials")
+    if isinstance(raw, dict):
+        try:
+            return RouteMaterials.model_validate(raw)
+        except Exception:
+            return None
+    return None
+
+
+def resolve_routes_program(
+    messages: list[Any],
+    draft_routes: dict[str, Any] | None,
+    *,
+    base_program: Optional[dict[str, Any]],
+    transport: str = "mixed",
+) -> tuple[RouteProgram, str]:
+    from agents.route_postprocess import (
+        build_fallback_route_program,
+        finalize_route_program,
+        format_routes_text,
+    )
+    from models.routes import RouteMaterials, RouteProgram
+
+    materials = load_route_materials(messages)
+    program: RouteProgram | None = None
+    if draft_routes:
+        try:
+            program = RouteProgram.model_validate(draft_routes)
+        except Exception:
+            program = None
+    if materials:
+        if program and program.cases:
+            program = finalize_route_program(program, materials, transport=transport)
+        else:
+            program = build_fallback_route_program(materials)
+    elif base_program and base_program.get("routes"):
+        try:
+            program = RouteProgram.model_validate(base_program["routes"])
+        except Exception:
+            program = None
+    if program is None:
+        program = RouteProgram(cases=[])
+    return program, format_routes_text(program)
+
+
 def build_fallback_program_draft(
     messages: list[Any],
     *,
     city: str,
     walking_area: str = "",
 ) -> ProgramDraft:
-    """Сборка черновика из digest без LLM (если ответ обрезан по length)."""
-    from search.digest_format import clean_events_display, format_events_digest
+    """Сборка черновика маршрутов без LLM (если ответ обрезан по length)."""
+    from agents.route_postprocess import build_fallback_route_program
+    from models.routes import RouteMaterials
 
-    events_data = _tool_payload(messages, "search_culture_events")
-    dining_data = _tool_payload(messages, "search_dining")
-
-    events_raw = str(events_data.get("digest", "")).strip()
-    if not events_raw:
-        search_block = events_data.get("search")
-        if isinstance(search_block, dict):
-            results = search_block.get("results")
-            if isinstance(results, list):
-                events_raw = format_events_digest(results)
-    events = clean_events_display(events_raw) if events_raw else (
-        "Мероприятия: уточните на сайтах музеев города."
-    )
-
-    dining = _truncate_text(
-        str(dining_data.get("restaurants_digest", "") or dining_data.get("digest", "")),
-        3500,
-    )
-    if not dining:
-        dining = "Питание: см. restaurants_digest в повторном поиске."
-
-    area = (
-        walking_area
-        or str(events_data.get("walking_area", ""))
-        or str(dining_data.get("walking_area", ""))
-        or "центр"
-    )
+    materials = load_route_materials(messages)
+    if materials is None:
+        materials = RouteMaterials(city=city, dates="")
+    routes = build_fallback_route_program(materials)
     from agents.lifehacks_quality import build_default_lifehacks
 
     lifehacks = build_default_lifehacks(
         city=city,
-        walking_area=area,
+        walking_area=walking_area or "центр",
         search_context=walking_area,
     )
-
-    return ProgramDraft(
-        events=events,
-        dining=dining,
-        lifehacks=lifehacks,
-    )
+    return ProgramDraft(routes=routes, lifehacks=lifehacks)
 
 
 def _coerce_program_draft(result: Any) -> ProgramDraft:

@@ -5,30 +5,26 @@ from __future__ import annotations
 from typing import Any
 
 from langchain_core.messages import AIMessage, ToolMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from models.routes import RouteProgram
 from models.tickets import TicketsSearchInput  # контракт билетов — models/tickets.py
 
-PROGRAM_SECTION_KEYS = ("tickets", "events", "dining", "lifehacks")
+PROGRAM_SECTION_KEYS = ("tickets", "routes", "lifehacks")
 _LEGACY_PROGRAM_KEYS = ("transport",)
 
 
-class CultureEventsInput(BaseModel):
-    """Параметры поиска культурных мероприятий и музеев."""
+class RouteMaterialsInput(BaseModel):
+    """Параметры поиска пула мест для маршрутов."""
 
     city: str = Field(..., description="Город пребывания")
     dates: str = Field(..., description="Даты поездки")
 
 
-class DiningInput(BaseModel):
-    """Параметры поиска ресторанов и кафе."""
-
-    city: str = Field(..., description="Город пребывания")
-    dates: str = Field(..., description="Даты поездки")
-
-
-# Обратная совместимость импортов
-DiningTransportInput = DiningInput
+# Обратная совместимость
+CultureEventsInput = RouteMaterialsInput
+DiningInput = RouteMaterialsInput
+DiningTransportInput = RouteMaterialsInput
 
 
 class PlannerContext(BaseModel):
@@ -41,15 +37,11 @@ class PlannerContext(BaseModel):
 
 
 class ProgramDraft(BaseModel):
-    """Секции программы от LLM (без билетов — их подставляет finalize из tool)."""
+    """Маршруты и лайфхаки от LLM (билеты — из tool)."""
 
-    events: str = Field(
+    routes: RouteProgram = Field(
         ...,
-        description="Музеи, выставки, мероприятия (желательно в одном районе для прогулок)",
-    )
-    dining: str = Field(
-        ...,
-        description="Рестораны и кафе со ссылками, рядом с мероприятиями (пешая доступность)",
+        description="Ровно 3 варианта маршрута A/B/C из poi_id пула materials",
     )
     lifehacks: str = Field(..., description="Полезные лайфхаки для туриста")
 
@@ -61,20 +53,48 @@ class FinalProgram(BaseModel):
         ...,
         description="Билеты туда-обратно: самолёт, поезд (РЖД), автобус — со ссылками",
     )
-    events: str = Field(
-        ...,
-        description="Музеи, выставки, мероприятия (желательно в одном районе для прогулок)",
+    routes: RouteProgram | dict[str, Any] | None = Field(
+        default=None,
+        description="Три варианта маршрута на всю поездку",
     )
-    dining: str = Field(
-        ...,
-        description="Рестораны и кафе со ссылками, рядом с мероприятиями (пешая доступность)",
-    )
+    routes_text: str = Field(default="", description="Markdown-представление маршрутов")
     lifehacks: str = Field(..., description="Полезные лайфхаки для туриста")
+    events: str = Field(default="", description="Legacy: мероприятия")
+    dining: str = Field(default="", description="Legacy: питание")
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_routes(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        raw = data.get("routes")
+        if isinstance(raw, dict) and raw.get("cases") is not None:
+            try:
+                data["routes"] = RouteProgram.model_validate(raw).model_dump()
+            except Exception:
+                pass
+        return data
+
+    def routes_model(self) -> RouteProgram | None:
+        if self.routes is None:
+            return None
+        if isinstance(self.routes, RouteProgram):
+            return self.routes
+        if isinstance(self.routes, dict):
+            try:
+                return RouteProgram.model_validate(self.routes)
+            except Exception:
+                return None
+        return None
 
 
 def normalize_stored_program(data: dict[str, Any]) -> dict[str, Any]:
     """Убирает устаревшие ключи (например transport) из JSON в SQLite."""
     return {k: v for k, v in data.items() if k not in _LEGACY_PROGRAM_KEYS}
+
+
+def is_legacy_program(data: dict[str, Any]) -> bool:
+    return bool(data.get("events") or data.get("dining")) and not data.get("routes")
 
 
 class PlannerNodeOutput(BaseModel):

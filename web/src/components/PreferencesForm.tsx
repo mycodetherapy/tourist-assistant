@@ -1,9 +1,10 @@
 import { Checkbox, Form, Input, InputNumber, Select } from "antd";
-import type { TripPreferences } from "../api/types";
+import type { LeisureTag, TripPreferences } from "../api/types";
 
 export const DEFAULT_PREFERENCES: TripPreferences = {
   pace: "moderate",
   budget: "medium",
+  leisure_categories: ["landmarks", "museums", "exhibitions"],
   interests: ["музеи", "архитектура", "выставки"],
   cuisine: "любая местная",
   min_restaurant_rating: 4.5,
@@ -11,6 +12,16 @@ export const DEFAULT_PREFERENCES: TripPreferences = {
   travel_party: "couple",
   special_notes: "",
 };
+
+const LEISURE_OPTIONS: { value: LeisureTag; label: string; locked?: boolean }[] = [
+  { value: "landmarks", label: "Достопримечательности", locked: true },
+  { value: "museums", label: "Музеи" },
+  { value: "exhibitions", label: "Выставки" },
+  { value: "galleries", label: "Галереи" },
+  { value: "philharmonic", label: "Филармонии" },
+  { value: "theaters", label: "Театры" },
+  { value: "parks", label: "Парки" },
+];
 
 interface PreferencesFormProps {
   initialValues?: TripPreferences;
@@ -54,13 +65,18 @@ export function PreferencesForm({
           ]}
         />
       </Form.Item>
-      <Form.Item name="interests" label="Интересы">
-        <Select
-          mode="tags"
-          disabled={useSavedProfile}
-          placeholder="музеи, архитектура, выставки"
-          tokenSeparators={[","]}
-        />
+      <Form.Item
+        name="leisure_categories"
+        label="Досуг (Яндекс.Карты)"
+        rules={[{ required: true }]}
+      >
+        <Checkbox.Group disabled={useSavedProfile} className="flex flex-col gap-1">
+          {LEISURE_OPTIONS.map(({ value, label, locked }) => (
+            <Checkbox key={value} value={value} disabled={locked}>
+              {label}
+            </Checkbox>
+          ))}
+        </Checkbox.Group>
       </Form.Item>
       <Form.Item name="cuisine" label="Кухня">
         <Input disabled={useSavedProfile} />

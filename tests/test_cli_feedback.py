@@ -59,7 +59,7 @@ class TestCliFeedbackSession(unittest.TestCase):
             scope="full",
         )
 
-    @patch("builtins.input", side_effect=["да", "1", "0 +", "", ""])
+    @patch("builtins.input", side_effect=["да", "3", "0 +", "", ""])
     def test_offer_and_vote_before_review(self, _input: object) -> None:
         offer_feedback_before_review(
             self.service,
@@ -70,7 +70,7 @@ class TestCliFeedbackSession(unittest.TestCase):
         view = self.service.build_program_view(self.trip_id, self.program)
         self.assertEqual(view.sections["events"].items[0].vote, 1)
 
-    @patch("builtins.input", side_effect=["1", "0 +", "", ""])
+    @patch("builtins.input", side_effect=["3", "0 +", "", ""])
     def test_vote_with_program_data_before_db_version(self, _input: object) -> None:
         trip_id = create_trip("Казань", "август 2026", "Москва", "новая")
         program = {

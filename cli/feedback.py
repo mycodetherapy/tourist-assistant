@@ -10,6 +10,7 @@ from program.parse_items import VOTABLE_SECTIONS, VotableSectionKey
 from services.trip_service import ItemVote, ProgramView, TripService
 
 _SECTION_TITLES: dict[VotableSectionKey, str] = {
+    "routes": "Маршруты",
     "events": "Мероприятия",
     "dining": "Питание",
     "lifehacks": "Лайфхаки",

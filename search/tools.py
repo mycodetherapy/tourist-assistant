@@ -8,28 +8,20 @@ from typing import Any
 from langchain_core.tools import tool
 from pydantic import ValidationError
 
-from config import settings
-from models.schemas import CultureEventsInput, DiningInput
+from models.schemas import RouteMaterialsInput
+from models.routes import RouteMaterials
+from search.context import get_session_preferences, set_route_materials
 from search.tickets_search import run_tickets_search
-from onboarding.preferences import (
-    budget_query_suffix,
-    interests_query_suffix,
-    restaurant_rating_suffix,
-)
-from search.context import enrich_query, get_session_preferences
-from search.web import (
-    format_search_digest,
-    run_search_tool,
-    tourist_area,
-    web_search_multi,
-)
+from search.yandex.materials import format_materials_digest, run_route_materials_search
 
 __all__ = [
     "TOOLS",
     "TOOL_MAP",
+    "search_route_materials",
+    "search_roundtrip_tickets",
+    # legacy aliases
     "search_culture_events",
     "search_dining",
-    "search_roundtrip_tickets",
 ]
 
 
@@ -49,112 +41,68 @@ def search_roundtrip_tickets(
 
 
 @tool
-def search_culture_events(city: str, dates: str) -> str:
+def search_route_materials(city: str, dates: str) -> str:
     """
-    Поиск музеев, выставок и мероприятий через Афиша / Кассир.ру.
-    Запрашивает актуальную афишу из веб-поиска.
+    Единый пул мест досуга и ресторанов на Яндекс.Картах для всей поездки.
+    Категории досуга — из опросника (leisure_categories). Координаты в каждом POI.
     """
     try:
-        params = CultureEventsInput(city=city, dates=dates)
+        params = RouteMaterialsInput(city=city, dates=dates)
     except ValidationError as exc:
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
-    area = tourist_area(params.city)
     prefs = get_session_preferences()
-    interest_hint = interests_query_suffix(prefs.interests) if prefs else ""
-    queries = [
-        enrich_query(
-            f"афиша {params.city} музеи выставки {params.dates} {interest_hint}".strip()
-        ),
-        enrich_query(f"куда сходить {params.city} {params.dates} kassir.ru {interest_hint}".strip()),
-        enrich_query(f"топ музеи {params.city} режим работы билеты"),
-        enrich_query(f"достопримечательности {params.city} {area} пешая прогулка маршрут"),
-        enrich_query(f"музеи {params.city} {area} рядом друг с другом"),
-    ]
-    payload_str = run_search_tool(
-        params.model_dump(),
-        queries,
-        ["Афиша", "Кассир.ру"],
-        kind="events",
+    materials = run_route_materials_search(
+        city=params.city,
+        dates=params.dates,
+        preferences=prefs,
     )
-    payload = json.loads(payload_str)
-    payload["walking_area"] = area
-    payload["instruction"] = (
-        f"{payload.get('instruction', '')} "
-        f"Мероприятия предпочтительно в районе: {area}. "
-        "Укажи, какие объекты находятся в 10–15 минутах пешком друг от друга."
+    digest = format_materials_digest(materials)
+    payload = {
+        "schema_version": 1,
+        "category": "route_materials",
+        "provider": materials.provider,
+        "live_data": True,
+        "params": params.model_dump(),
+        "materials": materials.model_dump(),
+        "leisure_count": len(materials.leisure_points),
+        "dining_count": len(materials.dining_options),
+        "materials_digest": digest,
+        "digest": digest,
+        "instruction": (
+            "Собери 3 варианта маршрута (A, B, C) на всю поездку. "
+            "Используй ТОЛЬКО poi_id из materials_digest. "
+            "В каждом варианте: ≥3 leisure, ≥2 dining, transit_note для прогулок. "
+            "Не выдумывай места и URL."
+        ),
+    }
+    if not materials.leisure_points:
+        payload["warning"] = "Пул мест пуст — проверьте YANDEX_MAPS_API_KEY или город."
+    set_route_materials(materials.model_dump())
+    print(
+        f"  → route materials: {len(materials.leisure_points)} досуг, "
+        f"{len(materials.dining_options)} ресторанов ({materials.provider})"
     )
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 @tool
+def search_culture_events(city: str, dates: str) -> str:
+    """Устарело: делегирует search_route_materials."""
+    return search_route_materials.invoke({"city": city, "dates": dates})
+
+
+@tool
 def search_dining(city: str, dates: str) -> str:
-    """
-    Поиск ресторанов и кафе (много ссылок, рядом с музеями).
-    2GIS, Яндекс.Карты, TripAdvisor — в пешой доступности от мероприятий.
-    """
-    try:
-        params = DiningInput(city=city, dates=dates)
-    except ValidationError as exc:
-        return json.dumps({"error": str(exc)}, ensure_ascii=False)
-
-    area = tourist_area(params.city)
-    prefs = get_session_preferences()
-    rating_hint = (
-        restaurant_rating_suffix(prefs.min_restaurant_rating) if prefs else "лучшие отзывы"
-    )
-    cuisine_hint = prefs.cuisine if prefs and prefs.cuisine else ""
-    restaurant_queries = [
-        enrich_query(
-            f"лучшие рестораны {params.city} {area} TripAdvisor {rating_hint} {cuisine_hint}".strip()
-        ),
-        enrich_query(f"рестораны {params.city} {area} 2gis рейтинг {rating_hint}".strip()),
-        enrich_query(f"кафе где поесть {params.city} центр yandex maps {cuisine_hint}".strip()),
-        enrich_query(
-            f"рестораны рядом Эрмитаж Невский {params.city} {rating_hint}"
-            if "петербург" in params.city.lower()
-            else f"рестораны рядом достопримечательности {params.city} {area} {rating_hint}"
-        ),
-        enrich_query(f"топ кафе {params.city} исторический центр отзывы {rating_hint}".strip()),
-    ]
-
-    cities = [params.city]
-    rest_data = web_search_multi(restaurant_queries, kind="restaurants", cities=cities)
-    rest_results = rest_data.get("results", [])
-
-    print(
-        f"  → поиск [restaurants]: {len(rest_results)} ссылок "
-        f"({rest_data.get('provider')})"
-    )
-
-    payload = {
-        "services": ["2GIS", "Яндекс.Карты", "TripAdvisor"],
-        "params": params.model_dump(),
-        "walking_area": area,
-        "live_data": True,
-        "restaurants_count": len(rest_results),
-        "restaurants_digest": format_search_digest(
-            rest_results[: settings.DIGEST_LIMITS["restaurants"]]
-        ),
-        "digest": format_search_digest(rest_results[: settings.DIGEST_LIMITS["restaurants"]]),
-        "search": {"restaurants": rest_data},
-        "instruction": (
-            f"Рестораны подбирай в районе {area} — в 5–15 минутах пешком от музеев "
-            "из search_culture_events. В разделе питания дай минимум 6–8 заведений "
-            "со ссылками из restaurants_digest (название + ссылка + район/улица). "
-            "Группируй «утро: музей → обед рядом»."
-        ),
-    }
-    if not rest_results:
-        payload["warning"] = "Мало ресторанов в поиске — укажите ссылки из digest вручную."
-    return json.dumps(payload, ensure_ascii=False, indent=2)
+    """Устарело: делегирует search_route_materials."""
+    return search_route_materials.invoke({"city": city, "dates": dates})
 
 
 TOOLS = [
     search_roundtrip_tickets,
-    search_culture_events,
-    search_dining,
+    search_route_materials,
 ]
 TOOL_MAP: dict[str, Any] = {t.name: t for t in TOOLS}
-# Старые tool_calls в истории чата
-TOOL_MAP["search_dining_and_transport"] = search_dining
+TOOL_MAP["search_culture_events"] = search_route_materials
+TOOL_MAP["search_dining"] = search_route_materials
+TOOL_MAP["search_dining_and_transport"] = search_route_materials

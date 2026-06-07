@@ -577,27 +577,49 @@
             "title": "Tickets",
             "description": "Билеты туда-обратно: самолёт, поезд (РЖД), автобус — со ссылками"
           },
-          "events": {
-            "type": "string",
-            "title": "Events",
-            "description": "Музеи, выставки, мероприятия (желательно в одном районе для прогулок)"
+          "routes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RouteProgram"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routes",
+            "description": "Три варианта маршрута на всю поездку"
           },
-          "dining": {
+          "routes_text": {
             "type": "string",
-            "title": "Dining",
-            "description": "Рестораны и кафе со ссылками, рядом с мероприятиями (пешая доступность)"
+            "title": "Routes Text",
+            "description": "Markdown-представление маршрутов",
+            "default": ""
           },
           "lifehacks": {
             "type": "string",
             "title": "Lifehacks",
             "description": "Полезные лайфхаки для туриста"
+          },
+          "events": {
+            "type": "string",
+            "title": "Events",
+            "description": "Legacy: мероприятия",
+            "default": ""
+          },
+          "dining": {
+            "type": "string",
+            "title": "Dining",
+            "description": "Legacy: питание",
+            "default": ""
           }
         },
         "type": "object",
         "required": [
           "tickets",
-          "events",
-          "dining",
           "lifehacks"
         ],
         "title": "FinalProgram",
@@ -632,9 +654,10 @@
           "section": {
             "type": "string",
             "enum": [
+              "routes",
+              "lifehacks",
               "events",
-              "dining",
-              "lifehacks"
+              "dining"
             ],
             "title": "Section"
           },
@@ -843,6 +866,74 @@
         ],
         "title": "ReviewResponse"
       },
+      "RouteProgram": {
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Schema Version",
+            "default": 1
+          },
+          "materials_summary": {
+            "type": "string",
+            "title": "Materials Summary",
+            "default": ""
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/TripRouteCase"
+            },
+            "type": "array",
+            "title": "Cases"
+          }
+        },
+        "type": "object",
+        "title": "RouteProgram"
+      },
+      "RouteStop": {
+        "properties": {
+          "order": {
+            "type": "integer",
+            "title": "Order"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "leisure",
+              "dining",
+              "transit_note"
+            ],
+            "title": "Kind"
+          },
+          "poi_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poi Id"
+          },
+          "time_hint": {
+            "type": "string",
+            "title": "Time Hint",
+            "default": ""
+          },
+          "narrative": {
+            "type": "string",
+            "title": "Narrative",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "order",
+          "kind"
+        ],
+        "title": "RouteStop"
+      },
       "RunStatusResponse": {
         "properties": {
           "run_id": {
@@ -901,9 +992,10 @@
             "enum": [
               "full",
               "tickets",
+              "routes",
+              "lifehacks",
               "events",
-              "dining",
-              "lifehacks"
+              "dining"
             ],
             "title": "Scope",
             "default": "full"
@@ -917,22 +1009,26 @@
           "tickets": {
             "$ref": "#/components/schemas/ProgramSectionResponse"
           },
+          "routes": {
+            "$ref": "#/components/schemas/ProgramSectionResponse"
+          },
+          "lifehacks": {
+            "$ref": "#/components/schemas/ProgramSectionResponse"
+          },
           "events": {
             "$ref": "#/components/schemas/ProgramSectionResponse"
           },
           "dining": {
-            "$ref": "#/components/schemas/ProgramSectionResponse"
-          },
-          "lifehacks": {
             "$ref": "#/components/schemas/ProgramSectionResponse"
           }
         },
         "type": "object",
         "required": [
           "tickets",
+          "routes",
+          "lifehacks",
           "events",
-          "dining",
-          "lifehacks"
+          "dining"
         ],
         "title": "StructuredProgramResponse"
       },
@@ -1013,13 +1109,30 @@
             "title": "Budget",
             "description": "Бюджет на билеты и питание"
           },
+          "leisure_categories": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "landmarks",
+                "museums",
+                "exhibitions",
+                "galleries",
+                "philharmonic",
+                "theaters",
+                "parks"
+              ]
+            },
+            "type": "array",
+            "title": "Leisure Categories",
+            "description": "Категории досуга для поиска на Яндекс.Картах"
+          },
           "interests": {
             "items": {
               "type": "string"
             },
             "type": "array",
             "title": "Interests",
-            "description": "Интересы: музеи, театр, архитектура, еда и т.д."
+            "description": "Устарело: свободные интересы (миграция профиля)"
           },
           "cuisine": {
             "type": "string",
@@ -1073,6 +1186,46 @@
         ],
         "title": "TripPreferences",
         "description": "Результат опросника перед планированием программы."
+      },
+      "TripRouteCase": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ],
+            "title": "Case Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "stops": {
+            "items": {
+              "$ref": "#/components/schemas/RouteStop"
+            },
+            "type": "array",
+            "title": "Stops"
+          },
+          "maps_route_url": {
+            "type": "string",
+            "title": "Maps Route Url",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "title",
+          "summary"
+        ],
+        "title": "TripRouteCase"
       },
       "TripSummaryResponse": {
         "properties": {

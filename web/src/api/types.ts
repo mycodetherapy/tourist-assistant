@@ -1,6 +1,21 @@
-export type RebuildScope = "full" | "tickets" | "events" | "dining" | "lifehacks";
+export type RebuildScope =
+  | "full"
+  | "tickets"
+  | "routes"
+  | "lifehacks"
+  | "events"
+  | "dining";
 export type ReviewAction = "approve" | "save_draft" | "rebuild";
 export type RunStatusName = "queued" | "running" | "completed" | "failed";
+
+export type LeisureTag =
+  | "landmarks"
+  | "museums"
+  | "exhibitions"
+  | "galleries"
+  | "philharmonic"
+  | "theaters"
+  | "parks";
 
 export interface TripSummary {
   id: number;
@@ -25,6 +40,7 @@ export interface TripDetail {
 export interface TripPreferences {
   pace: "relaxed" | "moderate" | "packed";
   budget: "economy" | "medium" | "unlimited";
+  leisure_categories?: LeisureTag[];
   interests: string[];
   cuisine: string;
   min_restaurant_rating: number;
@@ -35,13 +51,20 @@ export interface TripPreferences {
 
 export interface FinalProgram {
   tickets: string;
-  events: string;
-  dining: string;
+  routes?: Record<string, unknown> | null;
+  routes_text?: string;
   lifehacks: string;
+  events?: string;
+  dining?: string;
 }
 
-export type ProgramSectionKey = "tickets" | "events" | "dining" | "lifehacks";
-export type VotableSectionKey = "events" | "dining" | "lifehacks";
+export type ProgramSectionKey =
+  | "tickets"
+  | "routes"
+  | "lifehacks"
+  | "events"
+  | "dining";
+export type VotableSectionKey = "routes" | "lifehacks" | "events" | "dining";
 export type ItemVote = 1 | -1;
 
 export interface ProgramItem {
@@ -58,9 +81,10 @@ export interface ProgramSection {
 
 export interface StructuredProgram {
   tickets: ProgramSection;
+  routes: ProgramSection;
+  lifehacks: ProgramSection;
   events: ProgramSection;
   dining: ProgramSection;
-  lifehacks: ProgramSection;
 }
 
 export interface ProgramResponse {

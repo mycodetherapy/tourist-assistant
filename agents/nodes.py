@@ -10,9 +10,9 @@ from agents.critic import run_critic
 from agents.finalize_helpers import (
     invoke_program_draft,
     prepare_finalize_messages,
+    resolve_routes_program,
     resolve_tickets_section,
 )
-from agents.section_quality import resolve_text_section
 from agents.human_review import prompt_approve_program, prompt_reject_action
 from agents.llm import get_llm_final, get_llm_with_tools
 from agents.print_program import print_final_program
@@ -59,16 +59,14 @@ def _build_planner_system_prompt(ctx: PlannerContext, rebuild_scope: str) -> str
         "Ты — туристический ассистент. Составляешь культурную программу поездки.\n"
         f"Город поездки: {ctx.city}. Даты: {ctx.dates}. Город вылета: {ctx.origin_city}."
         f"{prefs_block}\n"
-        "Инструменты: tickets=самолёт+поезд+автобус, events=музеи (в одном районе), "
-        "dining=restaurants_digest (много ссылок, рядом с музеями). "
-        "Цены — только из digest, иначе «уточните на сайте» + ссылка.\n\n"
+        "Инструменты: tickets=билеты; route_materials=единый пул мест досуга и ресторанов "
+        "(Яндекс.Карты, poi_id + координаты). Цены — только из tool JSON.\n\n"
         "Обязанности:\n"
-        "1. Билеты: из JSON search_roundtrip_tickets (offers, summary_for_llm), не выдумывай ссылки.\n"
-        "2. Музеи/афиша в пешой доступности (search_culture_events).\n"
-        "3. Рестораны со ссылками рядом с музеями (search_dining).\n\n"
+        "1. Билеты: search_roundtrip_tickets, не выдумывай ссылки.\n"
+        "2. Маршруты: search_route_materials — пул POI на всю поездку.\n\n"
         f"{tools_hint}\n"
-        f"Для билетов: origin_city={ctx.origin_city}, destination_city={ctx.city}, dates={ctx.dates}. "
-        f"Для афиши и ресторанов: city={ctx.city}, dates={ctx.dates}."
+        f"Билеты: origin={ctx.origin_city}, destination={ctx.city}, dates={ctx.dates}. "
+        f"Материалы маршрута: city={ctx.city}, dates={ctx.dates}."
     )
 
 
@@ -168,17 +166,11 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
 
     system = SystemMessage(
         content=(
-            "Составь программу по ToolMessage (без раздела билетов — он уже готов).\n"
-            "- events: 5–8 музеев/выставок. Формат строки: "
-            "`N. [Название](https://ссылка) — даты, 1–2 предложения` (как в питании). "
-            "Не голые URL и не ленты afisha.ru/events. Группируй по району.\n"
-            "- dining: минимум 6–8 ресторанов/кафе со ссылками из restaurants_digest; "
-            "у каждого укажи район и «рядом с …» (музей из events).\n"
-            "- lifehacks: ТОЛЬКО 4–7 коротких советов (маршрут дня, бронь столика, обувь, темп). "
-            "До 800 символов. Без списков музеев/ресторанов и без ссылок. "
-            "Без meta-текста («Let me», «Final output», JSON).\n"
-            "Для events/dining — факты из digest, кратко (каждое поле до ~2000 символов). "
-            "Без UI-текста сайтов.\n"
+            "Составь программу по ToolMessage (билеты уже готовы).\n"
+            "- routes: РОВНО 3 варианта маршрута (case_id A, B, C) на всю поездку. "
+            "Только poi_id из materials_digest. В каждом: ≥3 leisure, ≥2 dining, transit_note. "
+            "maps_route_url оставь пустым — заполнит пост-процессор.\n"
+            "- lifehacks: 4–7 коротких советов, до 800 символов, без ссылок.\n"
             f"Город: {ctx.city}. Даты: {ctx.dates}. Вылет из: {ctx.origin_city}."
             f"{prefs_note}{scope_note}"
         )
@@ -200,33 +192,25 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
         walking_area=ctx.search_context or "",
     )
     draft_fields = draft.model_dump()
-    draft_fields["events"] = resolve_text_section(
-        "events",
-        draft_fields.get("events", ""),
-        messages=state["messages"],
-        base_program=base_program,
-        tool_name="search_culture_events",
-    )
-    if rebuild_scope in ("full", "dining"):
-        dining_payload = resolve_text_section(
-            "dining",
-            draft_fields.get("dining", ""),
-            messages=state["messages"],
+    prefs = state.get("preferences") or {}
+    transport = str(prefs.get("transport_preference") or "mixed")
+    if rebuild_scope in ("full", "routes", "events", "dining"):
+        routes_program, routes_text = resolve_routes_program(
+            state["messages"],
+            draft_fields.get("routes"),
             base_program=base_program,
-            tool_name="search_dining",
-            digest_key="restaurants_digest",
+            transport=transport,
         )
-        draft_fields["dining"] = dining_payload
+        draft_fields["routes"] = routes_program.model_dump()
+        draft_fields["routes_text"] = routes_text
     if rebuild_scope in ("full", "lifehacks"):
-        draft_fields["lifehacks"] = resolve_text_section(
-            "lifehacks",
+        from agents.lifehacks_quality import clean_lifehacks_display
+
+        draft_fields["lifehacks"] = clean_lifehacks_display(
             draft_fields.get("lifehacks", ""),
-            messages=state["messages"],
-            base_program=base_program,
-            tool_name=None,
             city=ctx.city,
-            search_context=ctx.search_context or "",
             walking_area=ctx.search_context or "",
+            search_context=ctx.search_context or "",
         )
 
     full_draft = {**draft_fields, "tickets": tickets_body}
@@ -234,11 +218,8 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     merged["tickets"] = tickets_body
     program = FinalProgram.model_validate(normalize_stored_program(merged))
     program_dump = program.model_dump()
-    from search.digest_format import clean_events_display
-
     from agents.lifehacks_quality import clean_lifehacks_display
 
-    program_dump["events"] = clean_events_display(program_dump.get("events", ""))
     program_dump["lifehacks"] = clean_lifehacks_display(
         program_dump.get("lifehacks", ""),
         city=ctx.city,
@@ -249,10 +230,10 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
 
     print_final_program(program)
 
+    routes_body = program.routes_text or ""
     summary = (
         f"## Билеты\n{program.tickets}\n\n"
-        f"## Мероприятия\n{program.events}\n\n"
-        f"## Питание\n{program.dining}\n\n"
+        f"## Маршруты\n{routes_body}\n\n"
         f"## Лайфхаки\n{program.lifehacks}"
     )
     final_message = AIMessage(content=summary)

@@ -35,6 +35,24 @@ def _program_response(view: ProgramView) -> ProgramResponse:
                 for i in view.sections["tickets"].items
             ],
         ),
+        routes=ProgramSectionResponse(
+            intro=view.sections["routes"].intro,
+            items=[
+                ProgramItemResponse(
+                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
+                )
+                for i in view.sections["routes"].items
+            ],
+        ),
+        lifehacks=ProgramSectionResponse(
+            intro=view.sections["lifehacks"].intro,
+            items=[
+                ProgramItemResponse(
+                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
+                )
+                for i in view.sections["lifehacks"].items
+            ],
+        ),
         events=ProgramSectionResponse(
             intro=view.sections["events"].intro,
             items=[
@@ -51,15 +69,6 @@ def _program_response(view: ProgramView) -> ProgramResponse:
                     index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
                 )
                 for i in view.sections["dining"].items
-            ],
-        ),
-        lifehacks=ProgramSectionResponse(
-            intro=view.sections["lifehacks"].intro,
-            items=[
-                ProgramItemResponse(
-                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
-                )
-                for i in view.sections["lifehacks"].items
             ],
         ),
     )

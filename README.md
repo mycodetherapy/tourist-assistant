@@ -1,6 +1,6 @@
 # Туристический ассистент (LangGraph)
 
-Агент составляет **культурную программу поездки** по городу и датам: билеты туда-обратно (самолёт, поезд, автобус), музеи и мероприятия, рестораны в пешей доступности от достопримечательностей и лайфхаки. **Билеты** — структурированные **deep links** с датами и маршрутом (`search_roundtrip_tickets`, JSON `schema_version=1`). **Афиша и рестораны** — из **веб-поиска** (Tavily или DuckDuckGo `ddgs`). Перед планированием — **опросник** (7 вопросов при первом запуске); поездки, предпочтения и версии программы хранятся в **SQLite**.
+Агент составляет **культурную программу поездки** по городу и датам: билеты туда-обратно (самолёт, поезд, автобус), **три альтернативных маршрута** на всю поездку (варианты A/B/C) с досугом и ресторанами из **Яндекс.Карт**, и лайфхаки. **Билеты** — структурированные **deep links** (`search_roundtrip_tickets`, JSON `schema_version=1`). **Маршруты** — общий пул POI (`search_route_materials`) + structured `routes` и markdown `routes_text`; ссылки на маршрут в картах собирает код (`maps_route_url`). Перед планированием — **опросник** (темп, бюджет, категории досуга, кухня…); поездки, предпочтения и версии программы хранятся в **SQLite**. Старые программы с разделами `events`/`dining` по-прежнему отображаются в вебе и CLI.
 
 ## Быстрый старт
 
@@ -66,7 +66,7 @@ npm run dev
 |-------|----------|
 | **Список поездок** | Все сохранённые поездки из SQLite |
 | **Новая поездка** | Wizard: маршрут → опросник → фоновая сборка (polling 1–2 мин) |
-| **Карточка поездки** | 4 вкладки программы, 👍/👎 у мероприятий / ресторанов / лайфхаков, утверждение / черновик / пересбор / удаление |
+| **Карточка поездки** | Вкладки: билеты, маршруты (A/B/C), лайфхаки; 👍/👎 у вариантов маршрута и лайфхаков; утверждение / черновик / пересбор / удаление |
 
 **Docker (веб + API):**
 
@@ -77,7 +77,7 @@ docker compose up api web
 
 UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health). CLI по-прежнему: `docker compose run --rm app`.
 
-**Оценки пунктов (👍/👎):** только для **мероприятий, питания и лайфхаков** (билеты — структурированный API, без голосования). Веб: клик → `PUT /api/trips/{id}/program/feedback`; CLI: пункт меню «Оценить пункты» или опционально перед утверждением. Хранение: `program_item_feedback` в `data/trips.db`, ключ по тексту пункта. При пересборе раздела оценки **сбрасываются** у изменённых пунктов; у неизменённых — сохраняются. После `docker compose build api web` перезапустите оба контейнера.
+**Оценки пунктов (👍/👎):** для **вариантов маршрута и лайфхаков** (билеты — без голосования). В legacy-программах — также мероприятия и питание. Веб: клик → `PUT /api/trips/{id}/program/feedback`; CLI: пункт меню «Оценить пункты» или опционально перед утверждением. Хранение: `program_item_feedback` в `data/trips.db`, ключ по тексту пункта. При пересборе раздела оценки **сбрасываются** у изменённых пунктов; у неизменённых — сохраняются. После `docker compose build api web` перезапустите оба контейнера.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -149,7 +149,7 @@ docker compose run --rm app python -m eval --suite smoke
 - **Первый запуск** — полные 7 вопросов (темп, бюджет, интересы, кухня, рейтинг ресторанов, транспорт, состав группы).
 - **Повторный запуск** — по умолчанию берутся сохранённые предпочтения (`user_profile` в SQLite); опрос только если ответить «да» на «Пройти опрос заново?».
 
-**Частичный пересбор** (режим «Продолжить»): `full`, `tickets`, `events`, `dining`, `lifehacks` (лайфхаки — без нового веб-поиска).
+**Частичный пересбор** (режим «Продолжить»): `full`, `tickets`, `routes`, `lifehacks` (лайфхаки — без нового поиска). Scope `events`/`dining` в API — алиасы на `routes`.
 
 После сборки программы: разделы **Билеты**, **Мероприятия**, **Питание**, **Лайфхаки** (обычно 1–2 минуты).
 
@@ -202,6 +202,7 @@ python3 -m eval --suite smoke
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure`. Для альтернатив через VPN — `OpenAI` |
 | `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`, регион `ru-ru`) |
 | `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
+| `YANDEX_MAPS_API_KEY` | Нет | Geocoder + Search API Яндекс.Карт для пула POI и маршрутов; без ключа — демо-POI (`provider: fallback`) |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
@@ -299,8 +300,7 @@ python3 scripts/render_graph.py
 | Инструмент | Что ищет |
 |------------|----------|
 | `search_roundtrip_tickets` | Deep links + опционально API авиа (`TRAVELPAYOUTS_API_KEY`); JSON `offers[]`, `schema_version=1` |
-| `search_culture_events` | Афиша, музеи, выставки (по району) |
-| `search_dining` | Рестораны и кафе (много ссылок, рядом с музеями) |
+| `search_route_materials` | Пул мест досуга (теги из опросника) и ресторанов рядом с ними; `search/yandex/*`, ключ `YANDEX_MAPS_API_KEY` |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
@@ -323,7 +323,7 @@ python3 scripts/render_graph.py
 
 ### Какую задачу решает агент?
 
-По городу, датам, предпочтениям (опросник) и городу отправления агент **собирает актуальную информацию из интернета**, формирует **структурированную программу** из четырёх разделов и сохраняет версии в SQLite. Пользователь **утверждает** результат или запрашивает доработку.
+По городу, датам, предпочтениям (опросник) и городу отправления агент **собирает актуальную информацию** (билеты — агрегаторы/API; маршруты — Яндекс.Карты), формирует **структурированную программу** (билеты, `routes` + `routes_text`, лайфхаки) и сохраняет версии в SQLite. Пользователь **утверждает** результат или запрашивает доработку.
 
 ### Кто будет пользоваться агентом?
 
@@ -343,10 +343,10 @@ python3 scripts/render_graph.py
 | **РЖД / Tutu.ru** | Deep links на жд (`ticket.rzd.ru`, `tutu.ru/poezda/…`) |
 | **Bus.tutu.ru** | Deep links на автобус (в одну сторону) |
 | **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
-| **Афиша / Kassir.ru** | Мероприятия |
-| **2GIS / Яндекс.Карты / TripAdvisor** | Рестораны и транспорт |
+| **Яндекс.Карты API** | Geocoder + Search (`YANDEX_MAPS_API_KEY`): POI досуга и рестораны |
+| **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок |
 
-Билеты: `search/ticket_links.py` (deep links) + `search/providers/avia.py` (API при `TRAVELPAYOUTS_API_KEY`). Контракт — `models/tickets.py`. Афиша и рестораны — веб-поиск как раньше.
+Билеты: `search/ticket_links.py` + `search/providers/avia.py`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`; LLM выбирает только `poi_id` из whitelist пула.
 
 ### Почему нужен именно агент, а не workflow?
 
@@ -445,8 +445,8 @@ python3 -m scripts.metrics_report --limit 50
 
 | Критерий | Приемлемый результат |
 |----------|----------------------|
-| **Полнота программы** | Все 4 раздела; в «Билетах» блоки из `offers` (3 для РФ, для зарубежа — самолёт) |
-| **Опора на поиск** | В «Питании» ≥ 6 ресторанов со ссылками из digest; мероприятия сгруппированы по району |
+| **Полнота программы** | Билеты, 3 варианта маршрута A/B/C, лайфхаки; в билетах блоки из `offers` (3 для РФ, для зарубежа — самолёт) |
+| **Опора на поиск** | В каждом варианте ≥3 leisure и ≥2 dining из пула materials; у каждого варианта `maps_route_url` |
 | **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят; в «Продолжить» видна поездка с версией программы |
 
 ---
@@ -464,7 +464,8 @@ tourist-assistant/
 ├── cli/feedback.py         # 👍/👎 пунктов программы в терминале
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
-│   ├── schemas.py          # FinalProgram, CultureEventsInput, …
+│   ├── schemas.py          # FinalProgram, ProgramDraft, RouteMaterialsInput
+│   ├── routes.py           # RouteMaterials, TripRouteCase, RouteProgram
 │   ├── tickets.py          # TicketsSearchInput/Output, TicketOffer
 │   └── state.py            # AgentState
 ├── input_validation.py     # sanitize_and_validate
@@ -472,6 +473,7 @@ tourist-assistant/
 ├── search/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool, TOOLS, TOOL_MAP
+│   ├── yandex/             # Geocoder, leisure/dining search, maps_route_url
 │   ├── tickets_search.py   # оркестрация билетов
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
 │   ├── transport_codes.py  # коды Tutu/РЖД для URL

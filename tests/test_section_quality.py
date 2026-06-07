@@ -9,9 +9,77 @@ from agents.critic import run_critic
 from agents.section_quality import (
     critic_program_issues,
     is_garbage_section,
-    resolve_text_section,
 )
 from langchain_core.messages import ToolMessage
+from models.routes import (
+    DiningOption,
+    GeoPoint,
+    PoiPoint,
+    RouteMaterials,
+    RouteProgram,
+    RouteStop,
+    TripRouteCase,
+)
+from agents.route_postprocess import finalize_route_program
+
+
+def _sample_routes_program() -> dict:
+    materials = RouteMaterials(
+        city="Казань",
+        dates="июль",
+        provider="fallback",
+        leisure_points=[
+            PoiPoint(
+                poi_id=f"l{i}",
+                tag="landmarks",
+                name=f"Место {i}",
+                coordinates=GeoPoint(lon=49.1 + i * 0.01, lat=55.8),
+                maps_url=f"https://yandex.ru/maps/org/l{i}",
+            )
+            for i in range(5)
+        ],
+        dining_options=[
+            DiningOption(
+                poi_id=f"d{i}",
+                anchor_poi_id=f"l{i}",
+                name=f"Ресторан {i}",
+                coordinates=GeoPoint(lon=49.2 + i * 0.01, lat=55.81),
+                maps_url=f"https://yandex.ru/maps/org/d{i}",
+            )
+            for i in range(3)
+        ],
+    )
+    cases = []
+    offsets = {"A": 0, "B": 2, "C": 4}
+    for case_id, title in (("A", "A"), ("B", "B"), ("C", "C")):
+        stops = []
+        order = 1
+        base = offsets[case_id]
+        for j in range(3):
+            i = (base + j) % 5
+            stops.append(
+                RouteStop(
+                    order=order,
+                    kind="leisure",
+                    poi_id=f"l{i}",
+                    narrative=f"Место {i}",
+                )
+            )
+            order += 1
+            stops.append(
+                RouteStop(
+                    order=order,
+                    kind="dining",
+                    poi_id=f"d{min(i, 2)}",
+                    narrative=f"Ресторан {i}",
+                )
+            )
+            order += 1
+        cases.append(
+            TripRouteCase(case_id=case_id, title=title, summary="тест", stops=stops)
+        )
+    program = finalize_route_program(RouteProgram(cases=cases), materials)
+    return program.model_dump()
 
 
 class TestSectionQuality(unittest.TestCase):
@@ -26,55 +94,34 @@ class TestSectionQuality(unittest.TestCase):
         )
         self.assertFalse(is_garbage_section(text, "events"))
 
-    def test_critic_fails_garbage_events_scope(self) -> None:
+    def test_critic_fails_garbage_routes_scope(self) -> None:
         state = {
-            "rebuild_scope": "events",
+            "rebuild_scope": "routes",
             "messages": [
-                ToolMessage(content="{}", tool_call_id="1", name="search_culture_events"),
+                ToolMessage(content="{}", tool_call_id="1", name="search_route_materials"),
             ],
             "program": {
-                "events": ":[{",
+                "routes": {"cases": []},
+                "routes_text": "",
                 "tickets": "ok",
-                "dining": "x",
                 "lifehacks": "x",
             },
         }
         passed, notes = run_critic(state)
         self.assertFalse(passed)
-        self.assertIn("events", notes)
+        self.assertIn("routes", notes)
 
-    def test_resolve_events_from_digest(self) -> None:
-        payload = {
-            "digest": (
-                "Музей А — выставки https://a.ru\n"
-                "Музей B — постоянная экспозиция https://b.ru\n"
-                "Музей C — афиша https://c.ru\n"
-            ),
-            "live_data": True,
-        }
-        messages = [
-            ToolMessage(
-                content=json.dumps(payload, ensure_ascii=False),
-                tool_call_id="1",
-                name="search_culture_events",
-            )
-        ]
-        resolved = resolve_text_section(
-            "events",
-            ":[{",
-            messages=messages,
-            base_program=None,
-            tool_name="search_culture_events",
-        )
-        self.assertIn("](https://a.ru)", resolved)
-        self.assertFalse(is_garbage_section(resolved, "events"))
-
-    def test_critic_program_issues_events_links(self) -> None:
+    def test_critic_program_issues_routes_ok(self) -> None:
+        routes = _sample_routes_program()
         issues = critic_program_issues(
-            {"events": "коротко"},
-            "events",
+            {
+                "routes": routes,
+                "routes_text": "## Вариант A\nтест " * 20,
+                "lifehacks": "Совет один. Совет два. Совет три.",
+            },
+            "routes",
         )
-        self.assertTrue(any("ссылок" in i or "JSON" in i or "пуст" in i for i in issues))
+        self.assertEqual(issues, [])
 
     def test_critic_tickets_international_only_plane(self) -> None:
         program = {

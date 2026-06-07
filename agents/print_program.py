@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
-from models.schemas import FinalProgram
+from models.schemas import FinalProgram, is_legacy_program
 
 
 def print_final_program(program: FinalProgram) -> None:
     """Печатает финальную программу в консоль по разделам."""
-    sections = [
-        ("Билеты", program.tickets),
-        ("Мероприятия", program.events),
-        ("Питание", program.dining),
-        ("Лайфхаки", program.lifehacks),
-    ]
+    dump = program.model_dump()
+    if is_legacy_program(dump):
+        sections = [
+            ("Билеты", program.tickets),
+            ("Мероприятия", program.events),
+            ("Питание", program.dining),
+            ("Лайфхаки", program.lifehacks),
+        ]
+    else:
+        sections = [
+            ("Билеты", program.tickets),
+            ("Маршруты", program.routes_text or ""),
+            ("Лайфхаки", program.lifehacks),
+        ]
     print("\n" + "=" * 60)
     print("КУЛЬТУРНАЯ ПРОГРАММА ПОЕЗДКИ")
     print("=" * 60)

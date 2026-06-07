@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from models.schemas import FinalProgram
 
-ProgramSectionKey = Literal["tickets", "events", "dining", "lifehacks"]
+ProgramSectionKey = Literal["tickets", "routes", "lifehacks", "events", "dining"]
 ItemVote = Literal[1, -1]
 from onboarding.preferences import TripPreferences
 
@@ -54,9 +54,10 @@ class ProgramSectionResponse(BaseModel):
 
 class StructuredProgramResponse(BaseModel):
     tickets: ProgramSectionResponse
+    routes: ProgramSectionResponse
+    lifehacks: ProgramSectionResponse
     events: ProgramSectionResponse
     dining: ProgramSectionResponse
-    lifehacks: ProgramSectionResponse
 
 
 class ProgramResponse(BaseModel):

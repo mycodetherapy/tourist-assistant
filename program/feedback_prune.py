@@ -10,8 +10,9 @@ from program.parse_items import VOTABLE_SECTIONS, VotableSectionKey, parse_progr
 
 _SCOPE_AFFECTED: dict[str, tuple[VotableSectionKey, ...]] = {
     "full": VOTABLE_SECTIONS,
-    "events": ("events",),
-    "dining": ("dining",),
+    "routes": ("routes",),
+    "events": ("routes", "events"),
+    "dining": ("routes", "dining"),
     "lifehacks": ("lifehacks",),
     "tickets": (),
 }

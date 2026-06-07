@@ -1,5 +1,25 @@
-import type { TripPreferences } from "../api/types";
+import type { LeisureTag, TripPreferences } from "../api/types";
 import { DEFAULT_PREFERENCES } from "../components/PreferencesForm";
+
+const ALL_LEISURE: LeisureTag[] = [
+  "landmarks",
+  "museums",
+  "exhibitions",
+  "galleries",
+  "philharmonic",
+  "theaters",
+  "parks",
+];
+
+function normalizeLeisureCategories(raw: unknown): LeisureTag[] {
+  const selected = Array.isArray(raw)
+    ? raw.map(String).filter((tag): tag is LeisureTag => ALL_LEISURE.includes(tag as LeisureTag))
+    : [];
+  const withLandmarks = selected.includes("landmarks")
+    ? selected
+    : (["landmarks", ...selected] as LeisureTag[]);
+  return [...new Set(withLandmarks)];
+}
 
 /** Нормализует значения Ant Design Form перед POST /api/trips. */
 export function normalizeTripPreferences(
@@ -21,6 +41,9 @@ export function normalizeTripPreferences(
     transport_preference:
       raw?.transport_preference ?? DEFAULT_PREFERENCES.transport_preference,
     travel_party: raw?.travel_party ?? DEFAULT_PREFERENCES.travel_party,
+    leisure_categories: normalizeLeisureCategories(
+      raw?.leisure_categories ?? DEFAULT_PREFERENCES.leisure_categories,
+    ),
     interests: Array.isArray(raw?.interests)
       ? raw.interests.map(String).filter(Boolean)
       : DEFAULT_PREFERENCES.interests,

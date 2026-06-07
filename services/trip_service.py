@@ -53,8 +53,8 @@ from program.parse_items import (
 from search.context import set_session
 
 ReviewAction = Literal["approve", "save_draft", "rebuild"]
-ProgramSectionKey = Literal["tickets", "events", "dining", "lifehacks"]
-VotableSectionKey = Literal["events", "dining", "lifehacks"]
+ProgramSectionKey = Literal["tickets", "routes", "lifehacks", "events", "dining"]
+VotableSectionKey = Literal["routes", "lifehacks", "events", "dining"]
 ItemVote = Literal[1, -1]
 
 

@@ -4,23 +4,27 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
-ProgramSectionKey = Literal["tickets", "events", "dining", "lifehacks"]
+from models.schemas import is_legacy_program
+
+ProgramSectionKey = Literal["tickets", "routes", "lifehacks", "events", "dining"]
 SECTION_KEYS: tuple[ProgramSectionKey, ...] = (
     "tickets",
+    "routes",
+    "lifehacks",
     "events",
     "dining",
-    "lifehacks",
 )
 
-VotableSectionKey = Literal["events", "dining", "lifehacks"]
-VOTABLE_SECTIONS: tuple[VotableSectionKey, ...] = ("events", "dining", "lifehacks")
+VotableSectionKey = Literal["routes", "lifehacks", "events", "dining"]
+VOTABLE_SECTIONS: tuple[VotableSectionKey, ...] = ("routes", "lifehacks", "events", "dining")
 
 _NUMBERED_ITEM = re.compile(r"^\d+\.\s+")
 _DASH_ITEM = re.compile(r"^-\s+")
 _MODE_HEADER = re.compile(r"^\*\*.+\*\*:?\s*$")
 _CONTINUATION = re.compile(r"^(\s{2,}|·\s)")
+_ROUTE_HEADER = re.compile(r"^##\s+Вариант\s+([ABC]):", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -32,9 +36,10 @@ class ParsedSection:
 @dataclass(frozen=True)
 class ParsedProgram:
     tickets: ParsedSection
+    routes: ParsedSection
+    lifehacks: ParsedSection
     events: ParsedSection
     dining: ParsedSection
-    lifehacks: ParsedSection
 
 
 def _is_continuation(line: str) -> bool:
@@ -42,7 +47,6 @@ def _is_continuation(line: str) -> bool:
 
 
 def _has_numbered_items(text: str) -> bool:
-    """Есть ли строки вида «1. …» (проверка построчно, не только с начала текста)."""
     return any(_NUMBERED_ITEM.match(line) for line in text.splitlines())
 
 
@@ -120,14 +124,74 @@ def _split_paragraph(text: str) -> ParsedSection:
     return ParsedSection(intro="", items=(stripped,))
 
 
+def _parse_routes_from_structured(program: dict[str, Any]) -> ParsedSection | None:
+    routes = program.get("routes")
+    if not isinstance(routes, dict):
+        return None
+    cases = routes.get("cases")
+    if not isinstance(cases, list) or not cases:
+        return None
+    intro = str(program.get("routes_text", "")).split("##")[0].strip()
+    items: list[str] = []
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        case_id = case.get("case_id", "?")
+        title = case.get("title", "")
+        summary = case.get("summary", "")
+        url = case.get("maps_route_url", "")
+        block = f"**Вариант {case_id}: {title}**\n\n{summary}"
+        if url:
+            block += f"\n\n[Открыть маршрут в Яндекс.Картах]({url})"
+        stops = case.get("stops")
+        if isinstance(stops, list):
+            for stop in stops:
+                if not isinstance(stop, dict):
+                    continue
+                narrative = str(stop.get("narrative", "")).strip()
+                hint = str(stop.get("time_hint", "")).strip()
+                if narrative:
+                    line = f"- {narrative}"
+                    if hint:
+                        line += f" ({hint})"
+                    block += f"\n{line}"
+        items.append(block.strip())
+    return ParsedSection(intro=intro, items=tuple(items))
+
+
+def _parse_routes_from_text(text: str) -> ParsedSection:
+    normalized = (text or "").strip()
+    if not normalized:
+        return ParsedSection(intro="", items=())
+    chunks: list[str] = []
+    current: list[str] = []
+    intro_lines: list[str] = []
+    for line in normalized.splitlines():
+        if _ROUTE_HEADER.match(line):
+            if current:
+                chunks.append("\n".join(current).strip())
+            current = [line]
+        elif current:
+            current.append(line)
+        else:
+            intro_lines.append(line)
+    if current:
+        chunks.append("\n".join(current).strip())
+    if not chunks:
+        return ParsedSection(intro=normalized, items=())
+    return ParsedSection(intro="\n".join(intro_lines).strip(), items=tuple(chunks))
+
+
 def parse_section(section: ProgramSectionKey, text: str) -> ParsedSection:
-    """Возвращает вводный блок и список пунктов для голосования."""
     normalized = (text or "").strip()
     if not normalized:
         return ParsedSection(intro="", items=())
 
     if section == "tickets":
         return _split_dash(normalized, merge_continuations=True)
+
+    if section == "routes":
+        return _parse_routes_from_text(normalized)
 
     if section == "dining":
         if _has_numbered_items(normalized):
@@ -139,7 +203,6 @@ def parse_section(section: ProgramSectionKey, text: str) -> ParsedSection:
             return _split_numbered(normalized)
         return _split_paragraph(normalized)
 
-    # events
     if _has_numbered_items(normalized):
         return _split_numbered(normalized)
     if _DASH_ITEM.search(normalized):
@@ -147,11 +210,22 @@ def parse_section(section: ProgramSectionKey, text: str) -> ParsedSection:
     return _split_lines(normalized)
 
 
-def parse_program_sections(program: dict[str, str]) -> ParsedProgram:
-    """Разбирает все четыре секции FinalProgram."""
+def parse_program_sections(program: dict[str, Any]) -> ParsedProgram:
+    routes_structured = _parse_routes_from_structured(program)
+    routes_text = str(program.get("routes_text", "")).strip()
+    if routes_structured:
+        routes = routes_structured
+    elif routes_text:
+        routes = _parse_routes_from_text(routes_text)
+    else:
+        routes = ParsedSection(intro="", items=())
+
+    empty = ParsedSection(intro="", items=())
+    legacy = is_legacy_program(program)
     return ParsedProgram(
         tickets=parse_section("tickets", program.get("tickets", "")),
-        events=parse_section("events", program.get("events", "")),
-        dining=parse_section("dining", program.get("dining", "")),
+        routes=routes,
         lifehacks=parse_section("lifehacks", program.get("lifehacks", "")),
+        events=parse_section("events", program.get("events", "")) if legacy else empty,
+        dining=parse_section("dining", program.get("dining", "")) if legacy else empty,
     )

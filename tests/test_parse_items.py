@@ -69,6 +69,30 @@ class TestParseItems(unittest.TestCase):
         self.assertEqual(len(parsed.tickets.items), 1)
         self.assertEqual(len(parsed.events.items), 1)
 
+    def test_parse_routes_structured(self) -> None:
+        program = {
+            "routes": {
+                "cases": [
+                    {
+                        "case_id": "A",
+                        "title": "Классика",
+                        "summary": "Кратко",
+                        "maps_route_url": "https://yandex.ru/maps/?rtext=1",
+                        "stops": [
+                            {"order": 1, "kind": "leisure", "narrative": "Музей", "time_hint": "утро"}
+                        ],
+                    }
+                ]
+            },
+            "routes_text": "Пул мест\n\n## Вариант A: Классика",
+            "tickets": "",
+            "lifehacks": "",
+        }
+        parsed = parse_program_sections(program)
+        self.assertEqual(len(parsed.routes.items), 1)
+        self.assertIn("Классика", parsed.routes.items[0])
+        self.assertEqual(len(parsed.events.items), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
