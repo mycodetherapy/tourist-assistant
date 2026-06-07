@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Alert, Tabs, notification } from "antd";
+import { Alert, Tabs, Tag, notification } from "antd";
 import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
@@ -20,11 +20,22 @@ interface TabDef {
   votable: boolean;
 }
 
+function routeCaseCount(program: ProgramResponse["program"]): number {
+  const routes = program.routes;
+  if (routes && typeof routes === "object" && Array.isArray((routes as { cases?: unknown }).cases)) {
+    return (routes as { cases: unknown[] }).cases.length;
+  }
+  return 0;
+}
+
+function hasRoutesProgram(program: ProgramResponse["program"]): boolean {
+  return routeCaseCount(program) > 0 || Boolean(program.routes_text?.trim());
+}
+
 function isLegacyProgram(data: ProgramResponse): boolean {
   const { program } = data;
   const hasLegacy = Boolean(program.events?.trim() || program.dining?.trim());
-  const hasRoutes = Boolean(program.routes || program.routes_text?.trim());
-  return hasLegacy && !hasRoutes;
+  return hasLegacy && !hasRoutesProgram(program);
 }
 
 function buildTabs(data: ProgramResponse): TabDef[] {
@@ -36,9 +47,11 @@ function buildTabs(data: ProgramResponse): TabDef[] {
       { key: "lifehacks", label: "Лайфхаки", votable: true },
     ];
   }
+  const count = routeCaseCount(data.program);
+  const routesLabel = count > 0 ? `Маршруты (${count})` : "Маршруты";
   return [
     { key: "tickets", label: "Билеты", votable: false },
-    { key: "routes", label: "Маршруты", votable: true },
+    { key: "routes", label: routesLabel, votable: true },
     { key: "lifehacks", label: "Лайфхаки", votable: true },
   ];
 }
@@ -52,7 +65,7 @@ function MarkdownBlock({ text, className = "mb-4" }: { text: string; className?:
       <ReactMarkdown
         components={{
           a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer">
+            <a href={href} target="_blank" rel="noreferrer" className="text-blue-600 underline">
               {children}
             </a>
           ),
@@ -67,6 +80,7 @@ function MarkdownBlock({ text, className = "mb-4" }: { text: string; className?:
 export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) {
   const queryClient = useQueryClient();
   const tabs = buildTabs(data);
+  const legacy = isLegacyProgram(data);
 
   const voteMutation = useMutation({
     mutationFn: (payload: {
@@ -128,51 +142,75 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
   };
 
   return (
-    <Tabs
-      items={tabs.map(({ key, label, votable }) => {
-        if (!votable) {
+    <div className="space-y-3">
+      {!legacy && hasRoutesProgram(data.program) && (
+        <Alert
+          type="success"
+          showIcon
+          message="Три варианта маршрута на всю поездку"
+          description="Оцените варианты A / B / C на вкладке «Маршруты». В каждом пункте есть ссылка на маршрут в Яндекс.Картах."
+        />
+      )}
+      <Tabs
+        items={tabs.map(({ key, label, votable }) => {
+          if (!votable) {
+            return {
+              key,
+              label,
+              children: <MarkdownBlock text={data.program.tickets} className="" />,
+            };
+          }
+
+          const sectionKey = key as VotableSectionKey;
+          const section = data.sections[sectionKey];
+          const routesFallback =
+            sectionKey === "routes" &&
+            section.items.length === 0 &&
+            data.program.routes_text?.trim()
+              ? data.program.routes_text
+              : "";
+
           return {
             key,
             label,
-            children: <MarkdownBlock text={data.program.tickets} className="" />,
+            children: (
+              <div>
+                <MarkdownBlock text={section.intro} />
+                {section.items.length === 0 && routesFallback ? (
+                  <MarkdownBlock text={routesFallback} />
+                ) : section.items.length === 0 ? (
+                  <p className="text-gray-500">Нет пунктов в этой секции.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {section.items.map((item) => (
+                      <li
+                        key={`${sectionKey}-${item.item_key}`}
+                        className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          {sectionKey === "routes" && (
+                            <Tag color="blue" className="mb-2">
+                              Вариант
+                            </Tag>
+                          )}
+                          <MarkdownBlock text={item.text} className="" />
+                        </div>
+                        <ItemVoteButtons
+                          vote={item.vote}
+                          disabled={votingDisabled || voteMutation.isPending}
+                          onVote={(vote) =>
+                            handleVote(sectionKey, item.index, item.item_key, vote)
+                          }
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ),
           };
-        }
-
-        const sectionKey = key as VotableSectionKey;
-        const section = data.sections[sectionKey];
-        return {
-          key,
-          label,
-          children: (
-            <div>
-              <MarkdownBlock text={section.intro} />
-              {section.items.length === 0 ? (
-                <p className="text-gray-500">Нет пунктов в этой секции.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {section.items.map((item) => (
-                    <li
-                      key={`${sectionKey}-${item.item_key}`}
-                      className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white px-3 py-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <MarkdownBlock text={item.text} className="" />
-                      </div>
-                      <ItemVoteButtons
-                        vote={item.vote}
-                        disabled={votingDisabled || voteMutation.isPending}
-                        onVote={(vote) =>
-                          handleVote(sectionKey, item.index, item.item_key, vote)
-                        }
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ),
-        };
-      })}
-    />
+        })}
+      />
+    </div>
   );
 }

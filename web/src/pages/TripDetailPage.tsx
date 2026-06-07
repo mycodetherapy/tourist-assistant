@@ -1,16 +1,18 @@
 import { DeleteOutlined } from "@ant-design/icons";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Card, Empty, Popconfirm, Space, notification } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getErrorMessage } from "../api/client";
 import type { RebuildScope, ReviewAction } from "../api/types";
-import { deleteTrip, startRun, submitReview } from "../api/trips";
+import { deleteTrip, fetchPreferences, startRun, submitReview } from "../api/trips";
 import { BuildingOverlay } from "../components/BuildingOverlay";
 import { ProgramTabs } from "../components/ProgramTabs";
 import { RebuildScopeSelect } from "../components/RebuildScopeSelect";
 import { ReviewActions } from "../components/ReviewActions";
 import { TripMetaCard } from "../components/TripMetaCard";
+import { LEISURE_LABELS } from "../utils/leisure";
+import { normalizeLeisureCategories } from "../utils/preferences";
 import { useRunPolling } from "../hooks/useRunPolling";
 import { useTrip, useTripProgram } from "../hooks/useTrip";
 
@@ -26,6 +28,11 @@ export function TripDetailPage() {
   const navigate = useNavigate();
 
   const tripQuery = useTrip(tripId);
+  const prefsQuery = useQuery({
+    queryKey: ["trips", tripId, "preferences"],
+    queryFn: () => fetchPreferences(tripId),
+    enabled: Number.isFinite(tripId),
+  });
   const runQuery = useRunPolling(activeRunId);
 
   const reviewMutation = useMutation({
@@ -138,6 +145,22 @@ export function TripDetailPage() {
       </div>
 
       <TripMetaCard trip={trip} />
+
+      {prefsQuery.data && (
+        <Alert
+          type="info"
+          showIcon
+          className="mb-0"
+          message="Категории досуга для этой поездки"
+          description={
+            <span>
+              {normalizeLeisureCategories(prefsQuery.data.leisure_categories)
+                .map((tag) => LEISURE_LABELS[tag])
+                .join(", ")}
+            </span>
+          }
+        />
+      )}
 
       <BuildingOverlay visible={isBuilding} runStatus={runQuery.data?.status} />
 

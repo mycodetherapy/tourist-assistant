@@ -11,7 +11,7 @@ const ALL_LEISURE: LeisureTag[] = [
   "parks",
 ];
 
-function normalizeLeisureCategories(raw: unknown): LeisureTag[] {
+export function normalizeLeisureCategories(raw: unknown): LeisureTag[] {
   const selected = Array.isArray(raw)
     ? raw.map(String).filter((tag): tag is LeisureTag => ALL_LEISURE.includes(tag as LeisureTag))
     : [];

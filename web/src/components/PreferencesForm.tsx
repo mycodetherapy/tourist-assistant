@@ -1,5 +1,7 @@
-import { Checkbox, Form, Input, InputNumber, Select } from "antd";
-import type { LeisureTag, TripPreferences } from "../api/types";
+import { Checkbox, Form, Input, InputNumber, Select, Typography } from "antd";
+import type { TripPreferences } from "../api/types";
+import { LEISURE_LABELS, OPTIONAL_LEISURE_TAGS } from "../utils/leisure";
+import { normalizeLeisureCategories } from "../utils/preferences";
 
 export const DEFAULT_PREFERENCES: TripPreferences = {
   pace: "moderate",
@@ -12,16 +14,6 @@ export const DEFAULT_PREFERENCES: TripPreferences = {
   travel_party: "couple",
   special_notes: "",
 };
-
-const LEISURE_OPTIONS: { value: LeisureTag; label: string; locked?: boolean }[] = [
-  { value: "landmarks", label: "Достопримечательности", locked: true },
-  { value: "museums", label: "Музеи" },
-  { value: "exhibitions", label: "Выставки" },
-  { value: "galleries", label: "Галереи" },
-  { value: "philharmonic", label: "Филармонии" },
-  { value: "theaters", label: "Театры" },
-  { value: "parks", label: "Парки" },
-];
 
 interface PreferencesFormProps {
   initialValues?: TripPreferences;
@@ -67,13 +59,31 @@ export function PreferencesForm({
       </Form.Item>
       <Form.Item
         name="leisure_categories"
-        label="Досуг (Яндекс.Карты)"
-        rules={[{ required: true }]}
+        label="Категории досуга"
+        normalize={normalizeLeisureCategories}
+        rules={[
+          {
+            validator: async (_, value) => {
+              const cats = normalizeLeisureCategories(value);
+              if (cats.length < 1) {
+                throw new Error("Выберите хотя бы одну категорию");
+              }
+            },
+          },
+        ]}
+        extra={
+          <Typography.Text type="secondary">
+            Поиск мест на Яндекс.Картах. {LEISURE_LABELS.landmarks} включены всегда.
+          </Typography.Text>
+        }
       >
         <Checkbox.Group disabled={useSavedProfile} className="flex flex-col gap-1">
-          {LEISURE_OPTIONS.map(({ value, label, locked }) => (
-            <Checkbox key={value} value={value} disabled={locked}>
-              {label}
+          <Checkbox value="landmarks" checked disabled>
+            {LEISURE_LABELS.landmarks} (всегда)
+          </Checkbox>
+          {OPTIONAL_LEISURE_TAGS.map((value) => (
+            <Checkbox key={value} value={value}>
+              {LEISURE_LABELS[value]}
             </Checkbox>
           ))}
         </Checkbox.Group>

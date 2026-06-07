@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { getErrorMessage } from "../api/client";
 import type { TripPreferences } from "../api/types";
 import { createTrip, fetchProfile } from "../api/trips";
+import { LaunchSummary } from "../components/LaunchSummary";
 import {
   DEFAULT_PREFERENCES,
   PreferencesForm,
@@ -35,8 +36,9 @@ export function NewTripPage() {
 
   useEffect(() => {
     if (profileQuery.data?.preferences) {
-      setSavedPrefs(profileQuery.data.preferences);
-      prefsForm.setFieldsValue(profileQuery.data.preferences);
+      const normalized = normalizeTripPreferences(profileQuery.data.preferences);
+      setSavedPrefs(normalized);
+      prefsForm.setFieldsValue(normalized);
       setUseSavedProfile(true);
     }
   }, [profileQuery.data, prefsForm]);
@@ -151,11 +153,13 @@ export function NewTripPage() {
         </Form>
       )}
 
-      {step === 2 && (
-        <p className="text-neutral-600">
-          Нажмите «Собрать программу» — агент запустит поиск и сформирует план поездки.
-          Это займёт 1–2 минуты.
-        </p>
+      {step === 2 && tripDraft && prefsDraft && (
+        <LaunchSummary
+          city={tripDraft.city}
+          dates={tripDraft.dates}
+          originCity={tripDraft.origin_city?.trim() || "Москва"}
+          preferences={prefsDraft}
+        />
       )}
 
       <div className="mt-6 flex gap-3">
