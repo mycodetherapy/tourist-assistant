@@ -38,6 +38,25 @@ class TestPreferences(unittest.TestCase):
         self.assertGreater(len(enriched), len("афиша Москва"))
         clear_search_context()
 
+    def test_null_rating_coerced(self) -> None:
+        prefs = TripPreferences.model_validate(
+            {
+                "pace": "moderate",
+                "budget": "medium",
+                "min_restaurant_rating": None,
+                "transport_preference": "mixed",
+                "travel_party": "couple",
+            }
+        )
+        self.assertEqual(prefs.min_restaurant_rating, 4.0)
+
+    def test_legacy_profile_dict_gets_defaults(self) -> None:
+        prefs = TripPreferences.model_validate(
+            {"pace": "packed", "budget": "medium", "interests": ["театр"]}
+        )
+        self.assertEqual(prefs.transport_preference, "mixed")
+        self.assertEqual(prefs.travel_party, "couple")
+
 
 if __name__ == "__main__":
     unittest.main()

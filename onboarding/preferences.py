@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, Field, model_validator
 
 
 class TripPreferences(BaseModel):
@@ -41,6 +43,28 @@ class TripPreferences(BaseModel):
         default="",
         description="Дополнительные пожелания",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_missing_fields(cls, data: Any) -> Any:
+        """Старые записи в SQLite и null из веб-формы (InputNumber)."""
+        if not isinstance(data, dict):
+            return data
+        defaults: dict[str, Any] = {
+            "pace": "moderate",
+            "budget": "medium",
+            "transport_preference": "mixed",
+            "travel_party": "couple",
+            "interests": [],
+            "cuisine": "",
+            "special_notes": "",
+            "min_restaurant_rating": 4.0,
+        }
+        merged = {**defaults, **data}
+        rating = merged.get("min_restaurant_rating")
+        if rating is None or rating == "":
+            merged["min_restaurant_rating"] = 4.0
+        return merged
 
 
 _PACE_RU = {

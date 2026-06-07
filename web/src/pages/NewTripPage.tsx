@@ -9,6 +9,7 @@ import {
   DEFAULT_PREFERENCES,
   PreferencesForm,
 } from "../components/PreferencesForm";
+import { normalizeTripPreferences } from "../utils/preferences";
 
 interface TripFormValues {
   city: string;
@@ -24,6 +25,8 @@ export function NewTripPage() {
   const [prefsForm] = Form.useForm<TripPreferences>();
   const [useSavedProfile, setUseSavedProfile] = useState(false);
   const [savedPrefs, setSavedPrefs] = useState<TripPreferences | null>(null);
+  const [tripDraft, setTripDraft] = useState<TripFormValues | null>(null);
+  const [prefsDraft, setPrefsDraft] = useState<TripPreferences | null>(null);
 
   const profileQuery = useQuery({
     queryKey: ["profile"],
@@ -47,32 +50,48 @@ export function NewTripPage() {
       navigate(url);
     },
     onError: (error) => {
-      notification.error({ message: "Ошибка", description: getErrorMessage(error) });
+      notification.error({ title: "Ошибка", description: getErrorMessage(error) });
     },
   });
 
   const handleNext = async () => {
     if (step === 0) {
-      await tripForm.validateFields();
+      const values = await tripForm.validateFields();
+      setTripDraft(values);
       setStep(1);
       return;
     }
     if (step === 1) {
-      await prefsForm.validateFields();
+      const rawPrefs =
+        useSavedProfile && savedPrefs ? savedPrefs : await prefsForm.validateFields();
+      setPrefsDraft(normalizeTripPreferences(rawPrefs));
       setStep(2);
     }
   };
 
   const handleSubmit = async () => {
-    const tripValues = await tripForm.validateFields();
-    const prefsValues =
-      useSavedProfile && savedPrefs ? savedPrefs : await prefsForm.validateFields();
+    const tripValues = tripDraft ?? (await tripForm.validateFields());
+    const prefsRaw =
+      useSavedProfile && savedPrefs
+        ? savedPrefs
+        : prefsDraft ?? normalizeTripPreferences(await prefsForm.validateFields());
+
+    if (!tripValues.city?.trim() || !tripValues.dates?.trim()) {
+      notification.error({
+        title: "Ошибка",
+        description: "Заполните город и даты на шаге «Маршрут».",
+      });
+      setStep(0);
+      return;
+    }
 
     createMutation.mutate({
-      ...tripValues,
-      origin_city: tripValues.origin_city || "Москва",
-      user_query: tripValues.user_query || "Составь культурную программу поездки",
-      preferences: prefsValues,
+      city: tripValues.city.trim(),
+      dates: tripValues.dates.trim(),
+      origin_city: tripValues.origin_city?.trim() || "Москва",
+      user_query:
+        tripValues.user_query?.trim() || "Составь культурную программу поездки",
+      preferences: normalizeTripPreferences(prefsRaw),
       start_run: true,
     });
   };
@@ -94,6 +113,7 @@ export function NewTripPage() {
         <Form
           form={tripForm}
           layout="vertical"
+          preserve
           initialValues={{
             origin_city: "Москва",
             user_query: "Составь культурную программу поездки",
@@ -119,6 +139,7 @@ export function NewTripPage() {
         <Form
           form={prefsForm}
           layout="vertical"
+          preserve
           initialValues={DEFAULT_PREFERENCES}
           className="max-w-lg"
         >
