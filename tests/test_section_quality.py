@@ -12,15 +12,11 @@ from agents.section_quality import (
 )
 from langchain_core.messages import ToolMessage
 from models.routes import (
-    DiningOption,
     GeoPoint,
     PoiPoint,
     RouteMaterials,
-    RouteProgram,
-    RouteStop,
-    TripRouteCase,
 )
-from agents.route_postprocess import finalize_route_program
+from agents.route_postprocess import build_fallback_route_program, finalize_route_program
 
 
 def _sample_routes_program() -> dict:
@@ -33,52 +29,14 @@ def _sample_routes_program() -> dict:
                 poi_id=f"l{i}",
                 tag="landmarks",
                 name=f"Место {i}",
-                coordinates=GeoPoint(lon=49.1 + i * 0.01, lat=55.8),
+                coordinates=GeoPoint(lon=49.1 + i * 0.008, lat=55.8 + (i % 2) * 0.004),
                 maps_url=f"https://yandex.ru/maps/org/l{i}",
             )
-            for i in range(5)
+            for i in range(8)
         ],
-        dining_options=[
-            DiningOption(
-                poi_id=f"d{i}",
-                anchor_poi_id=f"l{i}",
-                name=f"Ресторан {i}",
-                coordinates=GeoPoint(lon=49.2 + i * 0.01, lat=55.81),
-                maps_url=f"https://yandex.ru/maps/org/d{i}",
-            )
-            for i in range(3)
-        ],
+        dining_options=[],
     )
-    cases = []
-    offsets = {"A": 0, "B": 2, "C": 4}
-    for case_id, title in (("A", "A"), ("B", "B"), ("C", "C")):
-        stops = []
-        order = 1
-        base = offsets[case_id]
-        for j in range(3):
-            i = (base + j) % 5
-            stops.append(
-                RouteStop(
-                    order=order,
-                    kind="leisure",
-                    poi_id=f"l{i}",
-                    narrative=f"Место {i}",
-                )
-            )
-            order += 1
-            stops.append(
-                RouteStop(
-                    order=order,
-                    kind="dining",
-                    poi_id=f"d{min(i, 2)}",
-                    narrative=f"Ресторан {i}",
-                )
-            )
-            order += 1
-        cases.append(
-            TripRouteCase(case_id=case_id, title=title, summary="тест", stops=stops)
-        )
-    program = finalize_route_program(RouteProgram(cases=cases), materials)
+    program = build_fallback_route_program(materials)
     return program.model_dump()
 
 

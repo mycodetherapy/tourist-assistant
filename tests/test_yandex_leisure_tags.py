@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from search.yandex.leisure_tags import (
+    geocode_queries_for_tag,
     leisure_pool_limit,
     normalize_leisure_categories,
     search_text_for_tag,
@@ -31,6 +32,11 @@ class TestYandexLeisureTags(unittest.TestCase):
         text = search_text_for_tag("museums", "Казань")
         self.assertIn("Казань", text)
         self.assertIn("музей", text.lower())
+
+    def test_geocode_queries_for_tag(self) -> None:
+        queries = geocode_queries_for_tag("museums", "Казань")
+        self.assertGreaterEqual(len(queries), 2)
+        self.assertTrue(any("Казань" in q for q in queries))
 
 
 if __name__ == "__main__":

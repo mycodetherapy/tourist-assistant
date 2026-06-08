@@ -1,7 +1,8 @@
-"""Парсинг GeoJSON из Search API в PoiPoint / DiningOption."""
+"""Парсинг ответов Geocoder / GeoJSON в PoiPoint / DiningOption."""
 
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
@@ -10,11 +11,16 @@ from models.routes import DiningOption, GeoPoint, LeisureTag, PoiPoint
 _ORG_ID_RE = re.compile(r"/org/[^/]+/(\d+)")
 
 
-def _extract_org_id(url: str, fallback: str) -> str:
+def _stable_id(prefix: str, name: str, coords: GeoPoint) -> str:
+    raw = f"{name}:{coords.lon:.5f}:{coords.lat:.5f}"
+    return f"{prefix}_{hashlib.sha1(raw.encode()).hexdigest()[:10]}"
+
+
+def _extract_org_id(url: str, name: str, coords: GeoPoint, prefix: str) -> str:
     match = _ORG_ID_RE.search(url or "")
     if match:
         return match.group(1)
-    return fallback
+    return _stable_id(prefix, name, coords)
 
 
 def _coords_from_feature(feature: dict[str, Any]) -> GeoPoint | None:
@@ -41,7 +47,7 @@ def feature_to_poi(feature: dict[str, Any], *, tag: LeisureTag) -> PoiPoint | No
     url = str(meta.get("url") or props.get("uri") or "").strip()
     if not url:
         url = f"https://yandex.ru/maps/?pt={coords.lon},{coords.lat}&z=16"
-    poi_id = _extract_org_id(url, f"{tag}_{name[:20]}")
+    poi_id = _extract_org_id(url, name, coords, tag)
     rating_raw = meta.get("rating")
     rating: float | None = None
     if isinstance(rating_raw, dict):
@@ -77,7 +83,7 @@ def feature_to_dining(
     url = str(meta.get("url") or props.get("uri") or "").strip()
     if not url:
         url = f"https://yandex.ru/maps/?pt={coords.lon},{coords.lat}&z=17"
-    poi_id = _extract_org_id(url, f"food_{anchor_poi_id}_{name[:12]}")
+    poi_id = _extract_org_id(url, name, coords, f"food_{anchor_poi_id[:8]}")
     rating_raw = meta.get("rating")
     rating: float | None = None
     if isinstance(rating_raw, dict):

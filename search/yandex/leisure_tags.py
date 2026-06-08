@@ -59,6 +59,39 @@ def search_text_for_tag(tag: LeisureTag, city: str) -> str:
     return f"{spec.search_query} {city}"
 
 
+def geocode_queries_for_tag(tag: LeisureTag, city: str) -> list[str]:
+    """Несколько запросов в HTTP Геокодер (без платного Search API)."""
+    spec = TAG_SPECS[tag]
+    q = spec.search_query
+    label = spec.label_ru
+    queries = [
+        f"{q} {city}, Россия",
+        f"{label} {city}, Россия",
+    ]
+    extras: dict[LeisureTag, list[str]] = {
+        "landmarks": [
+            f"главная площадь, {city}, Россия",
+            f"исторический центр, {city}, Россия",
+            f"набережная, {city}, Россия",
+        ],
+        "museums": [
+            f"государственный музей, {city}, Россия",
+            f"художественный музей, {city}, Россия",
+        ],
+        "galleries": [
+            f"художественная галерея, {city}, Россия",
+        ],
+        "theaters": [f"театр, {city}, Россия"],
+        "parks": [f"парк культуры, {city}, Россия", f"сквер, {city}, Россия"],
+        "philharmonic": [f"филармония, {city}, Россия"],
+        "exhibitions": [f"выставочный центр, {city}, Россия"],
+    }
+    for item in extras.get(tag, []):
+        if item not in queries:
+            queries.append(item)
+    return queries
+
+
 def leisure_pool_limit(pace: str) -> int:
     if pace == "relaxed":
         return 8

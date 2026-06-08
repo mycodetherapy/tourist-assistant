@@ -146,7 +146,7 @@ docker compose run --rm app python -m eval --suite smoke
 
 **Опросник предпочтений**
 
-- **Первый запуск** — полные 7 вопросов (темп, бюджет, интересы, кухня, рейтинг ресторанов, транспорт, состав группы).
+- **Первый запуск** — 8 вопросов (темп, бюджет, **категории досуга**, интересы, кухня, рейтинг ресторанов, транспорт, состав группы).
 - **Повторный запуск** — по умолчанию берутся сохранённые предпочтения (`user_profile` в SQLite); опрос только если ответить «да» на «Пройти опрос заново?».
 
 **Частичный пересбор** (режим «Продолжить»): `full`, `tickets`, `routes`, `lifehacks` (лайфхаки — без нового поиска). Scope `events`/`dining` в API — алиасы на `routes`.
@@ -202,8 +202,7 @@ python3 -m eval --suite smoke
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure`. Для альтернатив через VPN — `OpenAI` |
 | `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`, регион `ru-ru`) |
 | `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
-| `YANDEX_MAPS_API_KEY` | Нет | HTTP Геокодер Яндекс.Карт (центр города). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
-| `YANDEX_SEARCH_API_KEY` | Нет | API **поиска организаций** (музеи, рестораны). Без него — Geocoder-fallback или демо-POI |
+| `YANDEX_MAPS_API_KEY` | Нет | Ключ **API Геокодера** (не JavaScript API) — центр города и поиск POI. `python3 scripts/test_yandex_maps.py Москва` |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
@@ -301,7 +300,7 @@ python3 scripts/render_graph.py
 | Инструмент | Что ищет |
 |------------|----------|
 | `search_roundtrip_tickets` | Deep links + опционально API авиа (`TRAVELPAYOUTS_API_KEY`); JSON `offers[]`, `schema_version=1` |
-| `search_route_materials` | Пул мест досуга (теги из опросника) и ресторанов рядом с ними; `search/yandex/*`, ключ `YANDEX_MAPS_API_KEY` |
+| `search_route_materials` | Пул POI через HTTP Геокодер (ключ API Геокодера); `search/yandex/*` |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
@@ -344,7 +343,7 @@ python3 scripts/render_graph.py
 | **РЖД / Tutu.ru** | Deep links на жд (`ticket.rzd.ru`, `tutu.ru/poezda/…`) |
 | **Bus.tutu.ru** | Deep links на автобус (в одну сторону) |
 | **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
-| **Яндекс.Карты API** | Geocoder + Search (`YANDEX_MAPS_API_KEY`): POI досуга и рестораны |
+| **Яндекс.Карты API** | API Геокодера (`YANDEX_MAPS_API_KEY`): POI и рестораны |
 | **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок |
 
 Билеты: `search/ticket_links.py` + `search/providers/avia.py`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`; LLM выбирает только `poi_id` из whitelist пула.
@@ -447,7 +446,7 @@ python3 -m scripts.metrics_report --limit 50
 | Критерий | Приемлемый результат |
 |----------|----------------------|
 | **Полнота программы** | Билеты, 3 варианта маршрута A/B/C, лайфхаки; в билетах блоки из `offers` (3 для РФ, для зарубежа — самолёт) |
-| **Опора на поиск** | В каждом варианте ≥3 leisure и ≥2 dining из пула materials; у каждого варианта `maps_route_url` |
+| **Опора на поиск** | Маршруты A/B/C: 3 / 4–5 / 5–7 leisure-точек из пула (`maps_route_url` по координатам); питание — вручную «Искать вдоль маршрута» в Яндекс.Картах |
 | **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят; в «Продолжить» видна поездка с версией программы |
 
 ---
@@ -474,7 +473,7 @@ tourist-assistant/
 ├── search/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool, TOOLS, TOOL_MAP
-│   ├── yandex/             # Geocoder, leisure/dining search, maps_route_url
+│   ├── yandex/             # Geocoder, POI filters, city seeds, maps_route_url
 │   ├── tickets_search.py   # оркестрация билетов
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
 │   ├── transport_codes.py  # коды Tutu/РЖД для URL

@@ -78,7 +78,7 @@ export function PreferencesForm({
         }
       >
         <Checkbox.Group disabled={useSavedProfile} className="flex flex-col gap-1">
-          <Checkbox value="landmarks" checked disabled>
+          <Checkbox value="landmarks" disabled>
             {LEISURE_LABELS.landmarks} (всегда)
           </Checkbox>
           {OPTIONAL_LEISURE_TAGS.map((value) => (

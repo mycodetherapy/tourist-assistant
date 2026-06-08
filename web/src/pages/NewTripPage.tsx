@@ -143,7 +143,7 @@ export function NewTripPage() {
           layout="vertical"
           preserve
           initialValues={DEFAULT_PREFERENCES}
-          className="max-w-lg"
+          className="max-w-xl"
         >
           <PreferencesForm
             initialValues={savedPrefs ?? undefined}

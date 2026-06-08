@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from onboarding.preferences import TripPreferences
 from models.routes import RouteMaterials
-from search.yandex.client import check_api_access, get_api_key
+from search.yandex.client import YandexApiStatus, check_api_access, get_api_key
+from search.yandex.demo import has_real_leisure
 from search.yandex.dining_search import search_dining_near_leisure
 from search.yandex.leisure_search import search_leisure_points
 from search.yandex.leisure_tags import normalize_leisure_categories
@@ -30,26 +31,26 @@ def format_materials_digest(materials: RouteMaterials) -> str:
     return "\n".join(lines)
 
 
-def _materials_warnings(status: object, leisure_count: int) -> list[str]:
+def _materials_warnings(status: YandexApiStatus, leisure_count: int) -> list[str]:
     warnings: list[str] = []
     if not get_api_key():
         warnings.append(
-            "YANDEX_MAPS_API_KEY не задан — используются демо-точки для проверки UI."
+            "YANDEX_MAPS_API_KEY не задан — демо-точки. "
+            "Нужен ключ продукта «API Геокодера»."
         )
         return warnings
-    if not status.geocoder_ok and not status.search_ok:
+    if not status.geocoder_ok:
         warnings.append(
-            "Ключ Яндекс.Карт не принят API (403). Проверьте ключ в "
-            "https://developer.tech.yandex.ru/ и перезапустите API."
+            "API Геокодера не принял ключ (403). В кабинете подключите "
+            "продукт «API Геокодера» (не JavaScript API) и перезапустите API."
         )
-    elif not status.search_ok:
+    elif not status.places_ok:
         warnings.append(
-            "Search API (поиск организаций) недоступен для этого ключа. "
-            "Нужен продукт «Поиск по организациям» или отдельный YANDEX_SEARCH_API_KEY. "
-            "Пока используется Geocoder / демо-точки."
+            "Геокодер отвечает, но мало POI по шаблонным запросам — "
+            "попробуйте другой город или категории досуга."
         )
     if leisure_count == 0:
-        warnings.append("Пул мест пуст — маршруты будут собраны из заглушек в центре города.")
+        warnings.append("Пул мест пуст — маршруты соберутся из демо-точек.")
     return warnings
 
 
@@ -88,7 +89,7 @@ def run_route_materials_search(
         pace=prefs.pace,
         cuisine_hint=prefs.cuisine,
     )
-    if leisure and (status.search_ok or status.geocoder_ok):
+    if leisure and status.geocoder_ok and has_real_leisure(leisure):
         provider = "yandex_maps"
     else:
         provider = "fallback"

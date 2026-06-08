@@ -42,9 +42,8 @@ export function LaunchSummary({
         </Descriptions.Item>
       </Descriptions>
       <p className="text-sm text-neutral-500">
-        Для реальных мест нужны ключи <code className="text-xs">YANDEX_MAPS_API_KEY</code> (Geocoder) и{" "}
-        <code className="text-xs">YANDEX_SEARCH_API_KEY</code> (поиск организаций) в{" "}
-        <code className="text-xs">.env</code>. Проверка:{" "}
+        Для реальных мест нужен ключ <code className="text-xs">YANDEX_MAPS_API_KEY</code>{" "}
+        (продукт «API Геокодера», не JavaScript API) в <code className="text-xs">.env</code>. Проверка:{" "}
         <code className="text-xs">python3 scripts/test_yandex_maps.py Москва</code>
       </p>
     </div>

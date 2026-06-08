@@ -70,9 +70,9 @@ def search_route_materials(city: str, dates: str) -> str:
         "materials_digest": digest,
         "digest": digest,
         "instruction": (
-            "Собери 3 варианта маршрута (A, B, C) на всю поездку. "
+            "Собери 3 пеших маршрута: A ~4 км (3 точки), B 5–6 км (4–5), C 7–8 км (5–7). "
             "Используй ТОЛЬКО poi_id из materials_digest. "
-            "В каждом варианте: ≥3 leisure, ≥2 dining, transit_note для прогулок. "
+            "transit_note для прогулки; dining на карту не добавляй. "
             "Не выдумывай места и URL."
         ),
     }

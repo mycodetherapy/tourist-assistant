@@ -52,6 +52,35 @@ class TestRoutePostprocess(unittest.TestCase):
         text = format_routes_text(program)
         self.assertIn("## Вариант A", text)
 
+    def test_route_variants_grow_in_stops(self) -> None:
+        materials = RouteMaterials(
+            city="Москва",
+            dates="июнь",
+            provider="fallback",
+            leisure_points=[
+                PoiPoint(
+                    poi_id=f"l{i}",
+                    tag="landmarks",
+                    name=f"POI {i}",
+                    coordinates=GeoPoint(lon=37.60 + i * 0.008, lat=55.75 + (i % 2) * 0.004),
+                    maps_url=f"https://yandex.ru/maps/org/l{i}",
+                )
+                for i in range(8)
+            ],
+            dining_options=[],
+        )
+        program = build_fallback_route_program(materials)
+        counts = [
+            len([s for s in case.stops if s.kind == "leisure"])
+            for case in program.cases
+        ]
+        self.assertEqual(len(counts), 3)
+        self.assertLessEqual(counts[0], counts[1])
+        self.assertLessEqual(counts[1], counts[2])
+        self.assertEqual(counts[0], 3)
+        self.assertGreaterEqual(counts[1], 4)
+        self.assertGreaterEqual(counts[2], 5)
+
     def test_overlap_ratio_differs_for_distinct_cases(self) -> None:
         a = TripRouteCase(
             case_id="A",

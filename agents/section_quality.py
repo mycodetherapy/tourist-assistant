@@ -65,18 +65,17 @@ def _routes_issues(program: dict[str, Any]) -> list[str]:
     found = {c.case_id for c in routes.cases}
     if found != ids:
         issues.append(f"ожидались case_id A/B/C, получено {sorted(found)}")
+    _MIN_LEISURE = {"A": 3, "B": 4, "C": 5}
     for case in routes.cases:
         leisure = sum(1 for s in case.stops if s.kind == "leisure")
-        dining = sum(1 for s in case.stops if s.kind == "dining")
-        if leisure < 3:
-            issues.append(f"вариант {case.case_id}: {leisure} leisure (нужно ≥3)")
-        if dining < 2:
-            issues.append(f"вариант {case.case_id}: {dining} dining (нужно ≥2)")
+        need = _MIN_LEISURE.get(case.case_id, 2)
+        if leisure < need:
+            issues.append(f"вариант {case.case_id}: {leisure} leisure (нужно ≥{need})")
         if not case.maps_route_url:
             issues.append(f"вариант {case.case_id}: нет maps_route_url")
-    if len(routes.cases) >= 2:
-        if leisure_overlap_ratio(routes.cases[0], routes.cases[1]) > 0.85:
-            issues.append("варианты A и B слишком похожи")
+    if len(routes.cases) >= 3:
+        if leisure_overlap_ratio(routes.cases[0], routes.cases[2]) > 0.85:
+            issues.append("варианты A и C слишком похожи")
     if text and is_garbage_section(text, "routes_text"):
         issues.append("routes_text похож на обломок JSON")
     return issues
