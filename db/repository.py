@@ -286,12 +286,20 @@ def prune_stale_item_feedback(
     trip_id: int,
     program: dict[str, Any],
     scope: str,
+    *,
+    reset_route_stops: bool = False,
 ) -> int:
     """Удаляет оценки пересобранных пунктов; возвращает число удалённых."""
     from program.feedback_prune import find_stale_feedback_keys
 
     existing = list_item_feedback_pairs(trip_id)
-    stale = find_stale_feedback_keys(program, scope, existing=existing)
+    stale = find_stale_feedback_keys(
+        program,
+        scope,
+        existing=existing,
+        trip_id=trip_id,
+        reset_route_stops=reset_route_stops,
+    )
     for section, item_key in stale:
         delete_item_feedback(trip_id, section, item_key)
     return len(stale)
@@ -305,7 +313,10 @@ def save_itinerary_version(
     approved: bool = False,
 ) -> int:
     """Сохраняет версию программы; возвращает id записи itinerary_versions."""
-    prune_stale_item_feedback(trip_id, program, scope)
+    reset_stops = scope in ("routes", "full", "events", "dining")
+    prune_stale_item_feedback(
+        trip_id, program, scope, reset_route_stops=reset_stops
+    )
     version = next_version_number(trip_id)
     now = _utc_now()
     program_json = json.dumps(program, ensure_ascii=False)
@@ -561,6 +572,21 @@ def list_item_feedback(trip_id: int) -> dict[str, int]:
             ORDER BY updated_at ASC, id ASC
             """,
             (trip_id,),
+        ).fetchall()
+    return {row["item_key"]: int(row["vote"]) for row in rows}
+
+
+def list_item_feedback_by_section(trip_id: int, section: str) -> dict[str, int]:
+    """Оценки одной секции: {item_key: vote}."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT item_key, vote
+            FROM program_item_feedback
+            WHERE trip_id = ? AND section = ?
+            ORDER BY updated_at ASC, id ASC
+            """,
+            (trip_id, section),
         ).fetchall()
     return {row["item_key"]: int(row["vote"]) for row in rows}
 

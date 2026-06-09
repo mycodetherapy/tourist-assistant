@@ -10,48 +10,49 @@ from search.yandex.landmark_discovery import (
     infer_tag_for_name,
 )
 
+_CITY = "Самара"
+
 
 class TestLandmarkDiscovery(unittest.TestCase):
     def test_extracts_named_places_from_snippets(self) -> None:
         payload = {
             "answer": (
-                "1. Национальная художественная галерея Республики Марий Эл\n"
-                "2. набережная Брюгге\n"
-                "3. парк культуры и отдыха имени 400-летия Йошкар-Олы"
+                "1. Самарский художественный музей\n"
+                "2. Волжская набережная\n"
+                "3. парк культуры и отдыха имени Горького"
             ),
             "results": [
                 {
-                    "title": "Площадь Республики Пресвятой Девы Марии — Йошкар-Ола",
+                    "title": "Площадь Куйбышева — Самара",
                     "snippet": "Рядом находится Центральный парк культуры и отдыха.",
                 },
             ],
         }
-        names = extract_landmark_names(payload, city="Йошкар-Ола")
+        names = extract_landmark_names(payload, city=_CITY)
         joined = " | ".join(names)
-        self.assertIn("набережная Брюгге", joined)
+        self.assertIn("Волжская набережная", joined)
         self.assertTrue(
-            any("400-летия" in n or "парк культуры" in n.lower() for n in names)
+            any("парк культуры" in n.lower() for n in names)
         )
         self.assertTrue(
-            any("галере" in n.lower() for n in names)
+            any("музе" in n.lower() for n in names)
             or any("площад" in n.lower() for n in names)
         )
 
-    def test_geocode_query_appends_city(self) -> None:
+    def test_geocode_query_appends_city_when_absent(self) -> None:
         self.assertEqual(
-            geocode_query_for_name("набережная Брюгге", "Йошкар-Ола"),
-            "набережная Брюгге Йошкар-Ола",
+            geocode_query_for_name("Волжская набережная", _CITY),
+            "Волжская набережная Самара",
         )
+
+    def test_geocode_query_keeps_name_when_city_present(self) -> None:
         self.assertEqual(
-            geocode_query_for_name(
-                "парк культуры и отдыха имени 400-летия Йошкар-Олы",
-                "Йошкар-Ола",
-            ),
-            "парк культуры и отдыха имени 400-летия Йошкар-Олы",
+            geocode_query_for_name("парк культуры и отдыха Самара", _CITY),
+            "парк культуры и отдыха Самара",
         )
 
     def test_infer_tag_from_name(self) -> None:
-        self.assertEqual(infer_tag_for_name("набережная Брюгге"), "embankments")
+        self.assertEqual(infer_tag_for_name("Волжская набережная"), "embankments")
         self.assertEqual(infer_tag_for_name("Центральный парк"), "parks")
         self.assertEqual(infer_tag_for_name("Республиканский музей"), "museums")
 
@@ -64,24 +65,24 @@ class TestLandmarkDiscovery(unittest.TestCase):
         digest = format_landmark_discovery_digest(
             LandmarkDiscoveryTrace(
                 provider="tavily",
-                queries=["достопримечательности Йошкар-Ола"],
+                queries=[f"достопримечательности {_CITY}"],
                 results_count=2,
                 raw_results_count=5,
                 search_results=[
                     {
                         "title": "Что посмотреть",
                         "url": "https://example.com",
-                        "snippet": "набережная Брюгге",
+                        "snippet": "Волжская набережная",
                     }
                 ],
-                landmark_names=["набережная Брюгге"],
+                landmark_names=["Волжская набережная"],
                 geocode_queries=[
-                    {"name": "набережная Брюгге", "query": "набережная Брюгге Йошкар-Ола"}
+                    {"name": "Волжская набережная", "query": "Волжская набережная Самара"}
                 ],
             )
         )
         self.assertIn("tavily", digest)
-        self.assertIn("набережная Брюгге", digest)
+        self.assertIn("Волжская набережная", digest)
         self.assertIn("match", digest)
 
 

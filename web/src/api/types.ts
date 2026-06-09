@@ -56,7 +56,7 @@ export type ProgramSectionKey =
   | "lifehacks"
   | "events"
   | "dining";
-export type VotableSectionKey = "routes" | "lifehacks" | "events" | "dining";
+export type VotableSectionKey = "routes" | "route_stops" | "lifehacks" | "events" | "dining";
 export type ItemVote = 1 | -1;
 
 export interface ProgramItem {
@@ -64,6 +64,7 @@ export interface ProgramItem {
   item_key: string;
   text: string;
   vote: ItemVote | null;
+  poi_id?: string | null;
 }
 
 export interface ProgramSection {
@@ -74,6 +75,7 @@ export interface ProgramSection {
 export interface StructuredProgram {
   tickets: ProgramSection;
   routes: ProgramSection;
+  route_stops: ProgramSection;
   lifehacks: ProgramSection;
   events: ProgramSection;
   dining: ProgramSection;

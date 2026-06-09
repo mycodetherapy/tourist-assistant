@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 
 from models.routes import GeoPoint, LeisureTag, PoiPoint
-from search.osm.nominatim import resolve_city_center
+from search.osm.nominatim import fetch_nominatim_embankments, resolve_city_center
 from search.osm.overpass import fetch_overpass_leisure
 from search.poi_collect import merge_poi_pools, rank_leisure_pool
 from search.poi_match import match_names_to_pool, strong_match_ids
@@ -24,7 +24,8 @@ def _use_discovery() -> bool:
 
 
 def _use_overpass() -> bool:
-    return os.getenv("POI_USE_OVERPASS", "true").lower() in {"1", "true", "yes"}
+    # Overpass отключён по умолчанию: публичные инстансы из РФ отвечают слишком долго.
+    return os.getenv("POI_USE_OVERPASS", "false").lower() in {"1", "true", "yes"}
 
 
 @dataclass
@@ -50,24 +51,30 @@ def search_leisure_points(
     geo_center = GeoPoint(lon=center.lon, lat=center.lat)
     osm_points: list[PoiPoint] = []
     wikidata_points: list[PoiPoint] = []
+    embankment_points: list[PoiPoint] = []
     fetch_osm = _use_overpass()
     fetch_wd = _use_wikidata()
-    min_wd_to_skip_osm = min(limit, max(limit - 5, 12))
 
     if fetch_wd:
         wikidata_points = fetch_wikidata_leisure(
-            city, center, wikidata_id=center.wikidata_id, max_items=max(limit * 2, 30)
+            city,
+            center,
+            wikidata_id=center.wikidata_id,
+            max_items=max(limit * 2, 30),
+            pool_target=limit,
         )
-    if fetch_osm and len(wikidata_points) < min_wd_to_skip_osm:
+    if fetch_osm:
         osm_points = fetch_overpass_leisure(
             city, center, max_elements=max(limit * 4, 40)
         )
+    embankment_points = fetch_nominatim_embankments(city, center, max_items=4)
 
     pool = merge_poi_pools(
-        [osm_points, wikidata_points],
+        [osm_points, wikidata_points, embankment_points],
         center=geo_center,
         city=city,
         max_items=max(limit * 5, 80),
+        pool_target=limit,
     )
 
     discovery_trace: dict | None = None
@@ -107,6 +114,7 @@ def search_leisure_points(
                 "center": "nominatim",
                 "osm_count": len(osm_points),
                 "wikidata_count": len(wikidata_points),
+                "embankment_count": len(embankment_points),
                 "pool_count": len(pool),
             },
         )
@@ -118,6 +126,7 @@ def search_leisure_points(
             "center": "nominatim",
             "osm_count": len(osm_points),
             "wikidata_count": len(wikidata_points),
+            "embankment_count": len(embankment_points),
             "pool_count": len(pool),
             "matched_count": len(boosted_ids),
         },

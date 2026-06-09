@@ -77,7 +77,7 @@ docker compose up api web
 
 UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health). CLI по-прежнему: `docker compose run --rm app`.
 
-**Оценки пунктов (👍/👎):** для **вариантов маршрута и лайфхаков** (билеты — без голосования). В legacy-программах — также мероприятия и питание. Веб: клик → `PUT /api/trips/{id}/program/feedback`; CLI: пункт меню «Оценить пункты» или опционально перед утверждением. Хранение: `program_item_feedback` в `data/trips.db`, ключ по тексту пункта. При пересборе раздела оценки **сбрасываются** у изменённых пунктов; у неизменённых — сохраняются. **Partial rebuild маршрутов (`routes`):** лайкнутые варианты остаются сверху списка без изменений; LLM генерирует **3 новых** (N-A/N-B/N-C). Повторный клик по 👍/👎 **снимает оценку** (нейтрально, LLM не учится). 👎 — негативный пример для LLM. Оценки привязаны к **тексту пункта** (не к индексу); устаревшие сбрасываются при пересборке и при загрузке программы. После `docker compose build api web` перезапустите оба контейнера.
+**Оценки пунктов (👍/👎):** для **вариантов маршрута и лайфхаков** (билеты — без голосования). В legacy-программах — также мероприятия и питание. Веб: клик → `PUT /api/trips/{id}/program/feedback`; CLI: пункт меню «Оценить пункты» или опционально перед утверждением. Хранение: `program_item_feedback` в `data/trips.db`, ключ по тексту пункта. При пересборе раздела оценки **сбрасываются** у изменённых пунктов; у неизменённых — сохраняются. **Partial rebuild маршрутов (`routes`):** лайкнутые варианты остаются сверху списка без изменений; LLM генерирует **3 новых** (N-A/N-B/N-C). **Полная пересборка (`full`):** лайк маршрута — мягкий ориентир (длина, мотивы), LLM подбирает новые poi_id. Повторный клик по 👍/👎 **снимает оценку** (нейтрально). Оценки маршрута — по тексту варианта; **оценки остановок** — по `poi_id` (👍 учитываются при подборе новых мест, 👎 исключают точку и похожие по типу/названию). Оценки остановок **сохраняются до пересборки** (снимок в начале графа), после сохранения новой программы сбрасываются. Лимит: **10** лайков маршрутов и **40** лайков остановок на поездку. После `docker compose build api web` перезапустите оба контейнера.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -151,7 +151,7 @@ docker compose run --rm app python -m eval --suite smoke
 
 **Частичный пересбор** (режим «Продолжить»): `full`, `tickets`, `routes`, `lifehacks`. Scope `events`/`dining` в API — алиасы на `routes`.
 
-- **`full`** — новый поиск билетов и POI (`search_route_materials` до ~25 точек); пул сохраняется в SQLite (`section_artifacts`, секция `route_materials`).
+- **`full`** — новый поиск билетов и POI (`search_route_materials` до ~35 точек); пул сохраняется в SQLite (`section_artifacts`, секция `route_materials`).
 - **`routes`** / **`events`** / **`dining`** — **без нового поиска**: A/B/C пересобираются из сохранённого пула по `poi_id`. Ссылки на карты (`maps_route_url`) заново собираются пост-процессором из координат пула. Для старых поездок без кэша пул восстанавливается из предыдущих маршрутов (координаты из `maps_route_url`). Если пула нет — critic попросит выполнить **`full`**.
 - **`lifehacks`** — без веб-поиска (как раньше).
 
@@ -208,9 +208,10 @@ python3 -m eval --suite smoke
 | `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
 | `POI_USE_WIKIDATA` | Нет | `true` (по умолчанию) — дополнять пул из Wikidata SPARQL |
 | `POI_USE_DISCOVERY` | Нет | `true` (по умолчанию) — веб-поиск названий и fuzzy-match к OSM-пулу |
-| `POI_USE_OVERPASS` | Нет | `true` — OSM Overpass; при достаточном Wikidata-пуле запрос пропускается |
-| `OVERPASS_URL` | Нет | Overpass API, по умолчанию `https://overpass-api.de/api/interpreter` |
-| `OVERPASS_TIMEOUT` | Нет | Таймаут запроса Overpass в секундах (по умолчанию `20`) |
+| `POI_USE_OVERPASS` | Нет | `false` по умолчанию (Overpass из РФ отвечает слишком долго); `true` — включить OSM Overpass |
+| `OVERPASS_URL` | Нет | Один URL Overpass; если не задан — цепочка зеркал: `overpass.kumi.systems` → `overpass.private.coffee` → `overpass-api.de` (рекомендация OSM-сообщества для РФ) |
+| `OVERPASS_URLS` | Нет | Список зеркал через запятую (альтернатива `OVERPASS_URL`) |
+| `OVERPASS_TIMEOUT` | Нет | Таймаут Overpass QL `[timeout:…]` в секундах (по умолчанию `60`) |
 | `NOMINATIM_URL` | Нет | Центр/bbox города, по умолчанию `https://nominatim.openstreetmap.org` |
 | `NOMINATIM_USER_AGENT` | Нет | User-Agent для Nominatim (обязателен по ToS OSM) |
 | `YANDEX_MAPS_API_KEY` | Нет | Legacy: API Геокодера **не используется для POI**. Проверка пула: `python3 scripts/test_yandex_maps.py Самара` |
@@ -311,7 +312,7 @@ python3 scripts/render_graph.py
 | Инструмент | Что ищет |
 |------------|----------|
 | `search_roundtrip_tickets` | Deep links + опционально API авиа (`TRAVELPAYOUTS_API_KEY`); JSON `offers[]`, `schema_version=1` |
-| `search_route_materials` | Полный пул POI (до 25): Overpass + Wikidata + discovery; темп влияет только на длину A/B/C |
+| `search_route_materials` | Полный пул POI (до 35): Wikidata (strict → soft backfill, набережные по SPARQL) + discovery; Overpass опционально (`POI_USE_OVERPASS=true`) |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
@@ -446,7 +447,7 @@ python3 -m scripts.metrics_report --limit 50
 | **Prompt-injection во вводе** | `input_validation.sanitize_and_validate` |
 | **Галлюцинации цен** | Билеты: только `offers` из tool; афиша/рестораны — цены из `digest` |
 | **Нет прямых рейсов** | В `summary_for_llm` — стыковки на агрегаторах; ссылки с IATA и датами |
-| **Зарубежный маршрут** (Москва → Стамбул и т.п.) | IATA из `search/city_codes.py`; в билетах только «Самолёт»; critic не требует жд/автобус |
+| **Зарубежный маршрут** (Москва → Стамбул и т.п.) | IATA из `search/city_codes.py`; POI через Nominatim/Overpass **без** суффикса «Россия»; в билетах только «Самолёт»; critic не требует жд/автобус |
 | **Critic не прошёл** | До 2 повторов researcher; затем всё равно HITL с замечаниями |
 | **Пользователь не утвердил (n)** | Пересбор или сохранение черновика (`status=review`) |
 | **Повторный запуск без опросника** | `user_profile` + `trip_preferences`; fallback из последней поездки |
@@ -507,6 +508,7 @@ tourist-assistant/
 ├── program/parse_items.py  # разбор markdown-секций на пункты (голосование)
 ├── program/feedback_prune.py  # сброс оценок пересобранных пунктов
 ├── program/route_feedback.py  # лайкнутые маршруты при partial rebuild
+├── program/route_stops.py     # голосование за POI-остановки
 ├── db/                     # schema.sql, repository (в т.ч. program_item_feedback)
 ├── onboarding/             # опросник, TripPreferences
 ├── observability/tracing.py

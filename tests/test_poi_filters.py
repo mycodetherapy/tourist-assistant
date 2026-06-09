@@ -8,10 +8,13 @@ from urllib.parse import unquote
 from models.routes import GeoPoint
 from search.yandex.poi_filters import (
     is_acceptable_place_name,
+    is_embankment_poi_name,
     is_generic_street_name,
     is_landmark_poi_name,
     is_transport_hub,
+    poi_name_conflict,
     route_name_key,
+    wikidata_poi_name_conflict,
 )
 from search.yandex.route_url import build_maps_route_url
 
@@ -46,25 +49,74 @@ class TestPoiFilters(unittest.TestCase):
         self.assertTrue(is_landmark_poi_name("Сусанинская площадь"))
         self.assertTrue(is_landmark_poi_name("Торговые ряды"))
         self.assertTrue(is_landmark_poi_name("Богоявленско-Анастасин монастырь"))
-        self.assertTrue(is_landmark_poi_name("набережная Брюгге"))
+        self.assertTrue(is_landmark_poi_name("Волжская набережная"))
+
+    def test_accepts_pedestrian_streets_by_tag(self) -> None:
+        from models.routes import PoiPoint
+        from search.yandex.poi_filters import is_leisure_route_poi
+
+        poi = PoiPoint(
+            poi_id="osm_way_1",
+            tag="pedestrian_streets",
+            name="улица Баумана",
+            coordinates=GeoPoint(lon=49.12, lat=55.79),
+            maps_url="https://example.com",
+        )
+        self.assertTrue(is_leisure_route_poi(poi, city_hint="Казань"))
+        poi_pokrov = poi.model_copy(
+            update={"name": "Большая Покровская улица", "poi_id": "osm_way_2"}
+        )
+        self.assertTrue(is_leisure_route_poi(poi_pokrov, city_hint="Нижний Новгород"))
+
+    def test_embankment_name_accepted(self) -> None:
+        self.assertTrue(is_embankment_poi_name("Волжская набережная", city_hint="Самара"))
+        self.assertTrue(is_embankment_poi_name("набережная Казанки", city_hint="Казань"))
+        self.assertFalse(is_embankment_poi_name("Верхне-Набережная улица"))
+
+    def test_relaxed_wikidata_conflict_only_exact_name_key(self) -> None:
+        a = GeoPoint(lon=47.8915, lat=56.6317)
+        b = GeoPoint(lon=47.8916, lat=56.6318)
+        self.assertFalse(
+            wikidata_poi_name_conflict(
+                "Марийский национальный театр драмы",
+                "Марийский театр оперы и балета",
+            )
+        )
+        self.assertTrue(
+            poi_name_conflict(
+                "Марийский национальный театр драмы",
+                a,
+                "Марийский театр оперы и балета",
+                b,
+            )
+        )
+        self.assertFalse(
+            poi_name_conflict(
+                "Марийский национальный театр драмы",
+                a,
+                "Марийский театр оперы и балета",
+                b,
+                relaxed=True,
+            )
+        )
 
     def test_accepts_named_embankment_geo_member(self) -> None:
         from search.yandex.poi_filters import is_acceptable_geo_member
 
         member = {
             "GeoObject": {
-                "name": "набережная Брюгге",
-                "Point": {"pos": "47.89 56.63"},
+                "name": "Волжская набережная",
+                "Point": {"pos": "50.15 53.20"},
                 "metaDataProperty": {
                     "GeocoderMetaData": {
                         "kind": "street",
-                        "text": "Россия, Республика Марий Эл, Йошкар-Ола, набережная Брюгге",
+                        "text": "Россия, Самарская область, Самара, Волжская набережная",
                     }
                 },
             }
         }
         self.assertTrue(
-            is_acceptable_geo_member(member, city_hint="Йошкар-Ола")
+            is_acceptable_geo_member(member, city_hint="Самара")
         )
 
     def test_route_url_uses_coordinates(self) -> None:

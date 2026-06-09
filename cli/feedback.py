@@ -11,10 +11,15 @@ from services.trip_service import ItemVote, ProgramView, TripService
 
 _SECTION_TITLES: dict[VotableSectionKey, str] = {
     "routes": "Маршруты",
+    "route_stops": "Остановки маршрута",
     "events": "Мероприятия",
     "dining": "Питание",
     "lifehacks": "Лайфхаки",
 }
+
+_CLI_VOTABLE_SECTIONS: tuple[VotableSectionKey, ...] = tuple(
+    s for s in VOTABLE_SECTIONS if s != "route_stops"
+)
 
 _VOTE_MARK: dict[ItemVote | None, str] = {1: "👍", -1: "👎", None: "—"}
 
@@ -56,8 +61,10 @@ def print_votable_sections(view: ProgramView) -> None:
     print("\n--- Билеты ---")
     print(tickets.intro or "(пусто)")
     print("(голосование недоступно для билетов)")
-    for section_key in VOTABLE_SECTIONS:
-        section = view.sections[section_key]
+    for section_key in _CLI_VOTABLE_SECTIONS:
+        section = view.sections.get(section_key)
+        if section is None:
+            continue
         print(f"\n--- {_SECTION_TITLES[section_key]} ---")
         if section.intro:
             print(section.intro)
@@ -143,7 +150,7 @@ def run_feedback_session(
     scope: str = "full",
 ) -> None:
     """Интерактивная оценка пунктов до выхода пользователя."""
-    section_options = [(key, _SECTION_TITLES[key]) for key in VOTABLE_SECTIONS]
+    section_options = [(key, _SECTION_TITLES[key]) for key in _CLI_VOTABLE_SECTIONS]
     while True:
         view = _load_view(service, trip_id, program_data=program_data, scope=scope)
         if view is None:

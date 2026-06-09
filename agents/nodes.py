@@ -200,11 +200,34 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     )
     route_feedback_ctx = None
     trip_id = state.get("trip_id")
-    if rebuild_scope == "routes" and base_program and trip_id is not None:
+    feedback_snapshot = state.get("route_feedback_snapshot")
+    if feedback_snapshot:
+        from models.routes import TripRouteCase
+        from program.route_feedback import RouteFeedbackContext
+
+        liked = tuple(
+            TripRouteCase.model_validate(raw)
+            for raw in feedback_snapshot.get("liked_cases") or []
+        )
+        route_feedback_ctx = RouteFeedbackContext(
+            liked_cases=liked,
+            llm_instructions=str(feedback_snapshot.get("llm_instructions") or ""),
+            preferred_poi_ids=frozenset(
+                feedback_snapshot.get("preferred_poi_ids") or []
+            ),
+            banned_poi_ids=frozenset(
+                feedback_snapshot.get("banned_poi_ids") or []
+            ),
+        )
+    elif (
+        rebuild_scope in ("full", "routes", "events", "dining")
+        and base_program
+        and trip_id is not None
+    ):
         from program.route_feedback import build_route_feedback_context
 
         route_feedback_ctx = build_route_feedback_context(
-            base_program, int(trip_id)
+            base_program, int(trip_id), rebuild_scope=rebuild_scope
         )
 
     routes_instruction = (
@@ -213,7 +236,7 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
         "A — компактный, B — средний, C — длинный. narrative — название места. "
         "maps_route_url оставь пустым — заполнит пост-процессор.\n"
     )
-    if route_feedback_ctx and route_feedback_ctx.liked_cases:
+    if route_feedback_ctx and route_feedback_ctx.liked_cases and rebuild_scope == "routes":
         routes_instruction = (
             "- routes: РОВНО 3 НОВЫх пеших маршрута A/B/C (компактный/средний/длинный). "
             "Лайкнутые варианты сохранятся автоматически — не дублируй их poi_id. "
@@ -221,10 +244,17 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
             "maps_route_url оставь пустым.\n"
             f"{route_feedback_ctx.llm_instructions}"
         )
+    elif route_feedback_ctx and route_feedback_ctx.liked_cases:
+        routes_instruction = (
+            "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
+            "Ориентируйся на параметры лайкнутых вариантов ниже (длина, мотивы); "
+            "poi_id выбирай из materials_digest — можно новые места похожего типа.\n"
+            f"{route_feedback_ctx.llm_instructions}"
+        )
     elif route_feedback_ctx:
         routes_instruction = (
             "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
-            "Только leisure poi_id из materials_digest.\n"
+            "Учти оценки остановок ниже при выборе poi_id из materials_digest.\n"
             f"{route_feedback_ctx.llm_instructions}"
         )
 
@@ -271,6 +301,7 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
             trip_id=int(trip_id) if trip_id is not None else None,
             dates=ctx.dates,
             rebuild_scope=rebuild_scope,
+            route_feedback_snapshot=feedback_snapshot,
         )
         if trip_id is not None and rebuild_scope == "full":
             materials = load_route_materials(

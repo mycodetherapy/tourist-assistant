@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 
-from models.routes import GeoPoint
+from models.routes import GeoPoint, PoiPoint
 
 # Транспорт и инфраструктура — не точки пешего маршрута по городу
 _TRANSPORT_NAME_RE = re.compile(
@@ -63,6 +63,10 @@ _LEISURE_NAME_HINTS = (
     "набереж",
     "сквер",
     "бульвар",
+    "пешеходн",
+    "покровск",
+    "бауман",
+    "променад",
     "монаст",
     "колокольн",
     "каланч",
@@ -79,6 +83,32 @@ _LEISURE_NAME_HINTS = (
     "костел",
     "сад ",
     "сад,",
+    # EN/TR подписи в OSM/Wikidata за рубежом
+    "museum",
+    "gallery",
+    "park",
+    "mosque",
+    "palace",
+    "church",
+    "cathedral",
+    "monument",
+    "square",
+    "basilica",
+    "cistern",
+    "bazaar",
+    "tower",
+    "fortress",
+    "synagogue",
+    "theatre",
+    "theater",
+    "camii",
+    "cami",
+    "kilise",
+    "saray",
+    "cami-i",
+    "tomb",
+    "fountain",
+    "hamam",
 )
 
 
@@ -111,6 +141,15 @@ def is_generic_street_name(name: str) -> bool:
     return False
 
 
+def walkable_radius_km(city: str = "") -> float:
+    """Радиус пулa POI от центра; для крупных зарубежных городов — шире."""
+    from search.city_codes import is_foreign_destination
+
+    if city and is_foreign_destination(city):
+        return 7.5
+    return 4.5
+
+
 def is_city_only_name(name: str, *, city_hint: str = "") -> bool:
     """Только название города — не точка маршрута."""
     n = _normalize_name(name)
@@ -118,7 +157,75 @@ def is_city_only_name(name: str, *, city_hint: str = "") -> bool:
         return True
     if city_hint and n == _normalize_name(city_hint):
         return True
-    return n in {"кострома", "москва", "санкт-петербург", "спб", "казань", "сочи"}
+    return n in {
+        "кострома",
+        "москва",
+        "санкт-петербург",
+        "спб",
+        "казань",
+        "сочи",
+        "стамбул",
+        "istanbul",
+    }
+
+
+def is_pedestrian_street_osm_tags(tags: dict[str, str]) -> bool:
+    """OSM-теги пешеходной зоны с именованным объектом."""
+    highway = str(tags.get("highway") or "").lower()
+    if highway == "pedestrian" and str(tags.get("name") or "").strip():
+        return True
+    if str(tags.get("place") or "").lower() == "square" and str(tags.get("name") or "").strip():
+        return True
+    if str(tags.get("leisure") or "").lower() == "pedestrian_area":
+        return True
+    return False
+
+
+def is_temple_osm_tags(tags: dict[str, str]) -> bool:
+    """OSM-теги храма, собора или монастыря."""
+    historic = str(tags.get("historic") or "").lower()
+    building = str(tags.get("building") or "").lower()
+    amenity = str(tags.get("amenity") or "").lower()
+    if historic in {"church", "monastery", "cathedral", "wayside_shrine"}:
+        return True
+    if building in {
+        "cathedral",
+        "church",
+        "chapel",
+        "mosque",
+        "synagogue",
+        "monastery",
+        "temple",
+    }:
+        return True
+    if amenity in {"place_of_worship", "monastery"}:
+        return True
+    return False
+
+
+def is_acceptable_pedestrian_street(name: str, *, city_hint: str = "") -> bool:
+    """Именованная пешеходная улица/бульвар — допускаем «улица X» в названии."""
+    cleaned = name.strip()
+    if not cleaned or len(cleaned) < 3:
+        return False
+    if city_hint and _normalize_name(cleaned) == _normalize_name(city_hint):
+        return False
+    if is_transport_hub(cleaned):
+        return False
+    if is_generic_area(cleaned):
+        return False
+    if _HOUSE_SUFFIX_RE.search(cleaned):
+        return False
+    return True
+
+
+def is_leisure_route_poi(poi: PoiPoint, *, city_hint: str = "") -> bool:
+    """POI подходит для пешего маршрута (включая пешеходные улицы по тегу)."""
+    if poi.tag == "pedestrian_streets":
+        return is_acceptable_pedestrian_street(poi.name, city_hint=city_hint)
+    if poi.tag == "embankments":
+        return is_embankment_poi_name(poi.name, city_hint=city_hint)
+    return is_landmark_poi_name(poi.name, city_hint=city_hint)
 
 
 def is_landmark_poi_name(name: str, *, city_hint: str = "") -> bool:
@@ -157,13 +264,45 @@ def route_name_key(name: str) -> str:
     return n.strip()
 
 
+_EMBANKMENT_NAME_RE = re.compile(
+    r"набереж|embankment|promenade|waterfront|riverside|river\s+walk|"
+    r"ufer|kordon|corso",
+    re.IGNORECASE,
+)
+
+
+def is_embankment_poi_name(name: str, *, city_hint: str = "") -> bool:
+    """Именованная набережная/променад — точка живописного маршрута."""
+    cleaned = name.strip()
+    if not cleaned or not _EMBANKMENT_NAME_RE.search(cleaned):
+        return False
+    if is_city_only_name(cleaned, city_hint=city_hint):
+        return False
+    if is_transport_hub(cleaned) or is_generic_area(cleaned):
+        return False
+    if _EMBANKMENT_STREET_RE.search(cleaned):
+        return False
+    if _HOUSE_SUFFIX_RE.search(cleaned):
+        return False
+    return True
+
+
+def wikidata_poi_name_conflict(name_a: str, name_b: str) -> bool:
+    """Мягкая дедупликация Wikidata: только одинаковый ключ подписи."""
+    return route_name_key(name_a) == route_name_key(name_b)
+
+
 def poi_name_conflict(
     name_a: str,
     coords_a: GeoPoint,
     name_b: str,
     coords_b: GeoPoint,
+    *,
+    relaxed: bool = False,
 ) -> bool:
     """Одинаковые или слишком близкие подписи на маршруте."""
+    if relaxed:
+        return wikidata_poi_name_conflict(name_a, name_b)
     ka, kb = route_name_key(name_a), route_name_key(name_b)
     if ka == kb:
         return True

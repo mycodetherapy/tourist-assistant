@@ -24,53 +24,33 @@ from services.trip_service import TripService
 router = APIRouter(prefix="/trips", tags=["trips"])
 
 
+def _map_section(view: ProgramView, key: str) -> ProgramSectionResponse:
+    section = view.sections.get(key)  # type: ignore[arg-type]
+    if section is None:
+        return ProgramSectionResponse(intro="", items=[])
+    return ProgramSectionResponse(
+        intro=section.intro,
+        items=[
+            ProgramItemResponse(
+                index=i.index,
+                item_key=i.item_key,
+                text=i.text,
+                vote=i.vote,
+                poi_id=i.poi_id,
+            )
+            for i in section.items
+        ],
+    )
+
+
 def _program_response(view: ProgramView) -> ProgramResponse:
     sections = StructuredProgramResponse(
-        tickets=ProgramSectionResponse(
-            intro=view.sections["tickets"].intro,
-            items=[
-                ProgramItemResponse(
-                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
-                )
-                for i in view.sections["tickets"].items
-            ],
-        ),
-        routes=ProgramSectionResponse(
-            intro=view.sections["routes"].intro,
-            items=[
-                ProgramItemResponse(
-                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
-                )
-                for i in view.sections["routes"].items
-            ],
-        ),
-        lifehacks=ProgramSectionResponse(
-            intro=view.sections["lifehacks"].intro,
-            items=[
-                ProgramItemResponse(
-                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
-                )
-                for i in view.sections["lifehacks"].items
-            ],
-        ),
-        events=ProgramSectionResponse(
-            intro=view.sections["events"].intro,
-            items=[
-                ProgramItemResponse(
-                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
-                )
-                for i in view.sections["events"].items
-            ],
-        ),
-        dining=ProgramSectionResponse(
-            intro=view.sections["dining"].intro,
-            items=[
-                ProgramItemResponse(
-                    index=i.index, item_key=i.item_key, text=i.text, vote=i.vote
-                )
-                for i in view.sections["dining"].items
-            ],
-        ),
+        tickets=_map_section(view, "tickets"),
+        routes=_map_section(view, "routes"),
+        route_stops=_map_section(view, "route_stops"),
+        lifehacks=_map_section(view, "lifehacks"),
+        events=_map_section(view, "events"),
+        dining=_map_section(view, "dining"),
     )
     return ProgramResponse(
         version=view.version,

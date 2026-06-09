@@ -45,6 +45,7 @@ class ProgramItemResponse(BaseModel):
     item_key: str
     text: str
     vote: ItemVote | None = None
+    poi_id: str | None = None
 
 
 class ProgramSectionResponse(BaseModel):
@@ -55,6 +56,7 @@ class ProgramSectionResponse(BaseModel):
 class StructuredProgramResponse(BaseModel):
     tickets: ProgramSectionResponse
     routes: ProgramSectionResponse
+    route_stops: ProgramSectionResponse
     lifehacks: ProgramSectionResponse
     events: ProgramSectionResponse
     dining: ProgramSectionResponse

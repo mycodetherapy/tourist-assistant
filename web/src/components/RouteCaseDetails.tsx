@@ -1,14 +1,30 @@
+import type { ItemVote } from "../api/types";
 import type { TripRouteCase } from "../api/routeTypes";
+import { ItemVoteButtons } from "./ItemVoteButtons";
 
 function stripRouteParens(text: string): string {
   return text.replace(/\s*\([^)]*\)/g, "").trim();
 }
 
-interface RouteCaseDetailsProps {
-  routeCase: TripRouteCase;
+export interface RouteStopVoteInfo {
+  item_key: string;
+  index: number;
+  vote: ItemVote | null;
 }
 
-export function RouteCaseDetails({ routeCase }: RouteCaseDetailsProps) {
+interface RouteCaseDetailsProps {
+  routeCase: TripRouteCase;
+  stopVotes?: Map<string, RouteStopVoteInfo>;
+  onStopVote?: (poiId: string, itemKey: string, index: number, vote: ItemVote | null) => void;
+  votingDisabled?: boolean;
+}
+
+export function RouteCaseDetails({
+  routeCase,
+  stopVotes,
+  onStopVote,
+  votingDisabled,
+}: RouteCaseDetailsProps) {
   const leisureStops = routeCase.stops.filter((stop) => stop.kind === "leisure");
 
   return (
@@ -32,12 +48,33 @@ export function RouteCaseDetails({ routeCase }: RouteCaseDetailsProps) {
         </p>
       ) : null}
       {leisureStops.length > 0 ? (
-        <ul className="my-1 list-inside list-disc space-y-0 pl-0.5">
-          {leisureStops.map((stop) => (
-            <li key={`${stop.order}-${stop.poi_id ?? stop.narrative}`} className="marker:text-gray-400">
-              {stop.narrative}
-            </li>
-          ))}
+        <ul className="my-1 list-none space-y-0.5 pl-0">
+          {leisureStops.map((stop) => {
+            const poiId = stop.poi_id ?? "";
+            const voteInfo = poiId ? stopVotes?.get(poiId) : undefined;
+            const canVote = Boolean(poiId && voteInfo && onStopVote);
+            return (
+              <li
+                key={`${stop.order}-${poiId || stop.narrative}`}
+                className="flex items-center gap-1"
+              >
+                <span className="shrink-0 text-gray-400" aria-hidden>
+                  •
+                </span>
+                <span>{stop.narrative}</span>
+                {canVote ? (
+                  <ItemVoteButtons
+                    horizontal
+                    vote={voteInfo!.vote}
+                    disabled={votingDisabled}
+                    onVote={(vote) =>
+                      onStopVote!(poiId, voteInfo!.item_key, voteInfo!.index, vote)
+                    }
+                  />
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       <p className="mb-0 mt-1 text-xs text-gray-500">

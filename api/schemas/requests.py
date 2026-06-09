@@ -10,7 +10,7 @@ from onboarding.preferences import TripPreferences
 
 RebuildScope = Literal["full", "tickets", "routes", "lifehacks", "events", "dining"]
 ReviewAction = Literal["approve", "save_draft", "rebuild"]
-VotableSectionKey = Literal["routes", "lifehacks", "events", "dining"]
+VotableSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
 ItemVote = Literal[1, -1]
 
 

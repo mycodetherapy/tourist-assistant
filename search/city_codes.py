@@ -148,6 +148,117 @@ _CITY_IATA: dict[str, str] = {
     "los angeles": "LAX",
 }
 
+# Зарубежные направления из _CITY_IATA (не добавляем «, Россия» в геокодинг).
+_FOREIGN_CITY_KEYS: frozenset[str] = frozenset(
+    k
+    for k in _CITY_IATA
+    if k
+    in {
+        "стамбул",
+        "istanbul",
+        "анталья",
+        "antalya",
+        "дубай",
+        "dubai",
+        "бангкок",
+        "bangkok",
+        "пхукет",
+        "phuket",
+        "париж",
+        "paris",
+        "рим",
+        "rome",
+        "барселона",
+        "barcelona",
+        "лондон",
+        "london",
+        "прага",
+        "prague",
+        "берлин",
+        "berlin",
+        "белград",
+        "belgrade",
+        "тбилиси",
+        "tbilisi",
+        "ереван",
+        "yerevan",
+        "баку",
+        "baku",
+        "минск",
+        "minsk",
+        "астана",
+        "astana",
+        "алматы",
+        "almaty",
+        "ташкент",
+        "tashkent",
+        "бишкек",
+        "bishkek",
+        "душанбе",
+        "dushanbe",
+        "вена",
+        "vienna",
+        "амстердам",
+        "amsterdam",
+        "афины",
+        "athens",
+        "милан",
+        "milan",
+        "будапешт",
+        "budapest",
+        "варшава",
+        "warsaw",
+        "хельсинки",
+        "helsinki",
+        "стокгольм",
+        "stockholm",
+        "тель-авив",
+        "tel aviv",
+        "каир",
+        "cairo",
+        "хургада",
+        "hurghada",
+        "шарм-эль-шейх",
+        "шарм эль шейх",
+        "sharm el sheikh",
+        "бали",
+        "bali",
+        "денпасар",
+        "пекин",
+        "beijing",
+        "шанхай",
+        "shanghai",
+        "сеул",
+        "seoul",
+        "токио",
+        "tokyo",
+        "нью-йорк",
+        "new york",
+        "майами",
+        "miami",
+        "лос-анджелес",
+        "los angeles",
+    }
+)
+
+
+def is_foreign_destination(city: str) -> bool:
+    """Зарубежный город — геокодинг без суффикса «, Россия»."""
+    key = normalize_city_name(city)
+    if key in _FOREIGN_CITY_KEYS:
+        return True
+    return any(name in key or key in name for name in _FOREIGN_CITY_KEYS)
+
+
+def geocode_place_queries(city: str) -> tuple[str, ...]:
+    """Варианты запроса Nominatim/Overpass: сначала без страны, для РФ — с «Россия»."""
+    cleaned = city.strip()
+    if not cleaned:
+        return ()
+    if is_foreign_destination(cleaned):
+        return (cleaned,)
+    return (cleaned, f"{cleaned}, Россия")
+
 
 def normalize_city_name(city: str) -> str:
     text = city.lower().strip().replace("ё", "е")

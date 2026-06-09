@@ -43,7 +43,7 @@ from observability import (
 )
 from onboarding import TripPreferences, build_search_context
 from planning import human_message_for_scope
-from program.item_key import make_item_key
+from program.item_key import make_item_key, make_route_stop_key
 from program.parse_items import (
     SECTION_KEYS,
     VOTABLE_SECTIONS,
@@ -53,8 +53,8 @@ from program.parse_items import (
 from search.context import set_session
 
 ReviewAction = Literal["approve", "save_draft", "rebuild"]
-ProgramSectionKey = Literal["tickets", "routes", "lifehacks", "events", "dining"]
-VotableSectionKey = Literal["routes", "lifehacks", "events", "dining"]
+ProgramSectionKey = Literal["tickets", "routes", "route_stops", "lifehacks", "events", "dining"]
+VotableSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
 ItemVote = Literal[1, -1]
 
 
@@ -79,6 +79,7 @@ class ProgramItemView:
     item_key: str
     text: str
     vote: ItemVote | None
+    poi_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -178,6 +179,14 @@ class TripService:
         }
         if base_program is not None:
             state["base_program"] = base_program
+            if rebuild_scope in ("full", "routes", "events", "dining"):
+                from program.route_feedback import snapshot_route_feedback
+
+                snapshot = snapshot_route_feedback(
+                    base_program, trip_id, rebuild_scope
+                )
+                if snapshot is not None:
+                    state["route_feedback_snapshot"] = snapshot
         return state
 
     def prepare_continue_trip(
@@ -444,12 +453,32 @@ class TripService:
         parsed: ParsedProgram,
         *,
         trip_id: int,
+        program_data: dict[str, Any],
     ) -> dict[ProgramSectionKey, ProgramSectionView]:
         votes_by_key = list_item_feedback(trip_id)
         votes_by_index = list_item_feedback_by_index(trip_id)
         sections: dict[ProgramSectionKey, ProgramSectionView] = {}
-        for key in SECTION_KEYS:
-            if key not in VOTABLE_SECTIONS:
+        for key in VOTABLE_SECTIONS:
+            if key == "route_stops":
+                from program.route_stops import collect_route_stop_poi_ids
+
+                poi_labels = collect_route_stop_poi_ids(program_data)
+                items = tuple(
+                    ProgramItemView(
+                        index=index,
+                        item_key=make_route_stop_key(poi_id),
+                        text=f"{label} [{poi_id}]",
+                        vote=(
+                            int(v)
+                            if (v := votes_by_key.get(make_route_stop_key(poi_id)))
+                            in (1, -1)
+                            else None
+                        ),
+                        poi_id=poi_id,
+                    )
+                    for index, (poi_id, label) in enumerate(poi_labels.items())
+                )
+                sections[key] = ProgramSectionView(intro="", items=items)
                 continue
             section = getattr(parsed, key)
             items = tuple(
@@ -483,7 +512,9 @@ class TripService:
         """Программа из dict (например state графа) с оценками из БД."""
         program = self.parse_program(program_data)
         parsed = parse_program_sections(program.model_dump())
-        sections = self._attach_feedback(parsed, trip_id=trip_id)
+        sections = self._attach_feedback(
+            parsed, trip_id=trip_id, program_data=program_data
+        )
         sections["tickets"] = ProgramSectionView(intro=program.tickets, items=())
         return ProgramView(
             version=version,
@@ -513,9 +544,6 @@ class TripService:
             transport=str(prefs.get("transport_preference") or "mixed"),
             pace=str(prefs.get("pace") or "moderate"),
         )
-        from db.repository import prune_stale_item_feedback
-
-        prune_stale_item_feedback(trip_id, program_data, scope="full")
         return self.build_program_view(
             trip_id,
             program_data,
@@ -556,17 +584,33 @@ class TripService:
         resolved_key: str | None = None
         matched_index: int | None = None
 
-        normalized_key = (item_key or "").strip()
-        if normalized_key:
-            for index, text in enumerate(section_data.items):
-                if make_item_key(section, text) == normalized_key:
-                    matched_index = index
-                    resolved_key = normalized_key
-                    break
-        elif item_index is not None:
-            if 0 <= item_index < len(section_data.items):
-                matched_index = item_index
-                resolved_key = make_item_key(section, section_data.items[item_index])
+        if section == "route_stops":
+            from program.item_key import parse_route_stop_key
+            from program.route_stops import collect_route_stop_poi_ids
+
+            valid_pois = collect_route_stop_poi_ids(program.model_dump())
+            poi_ids = list(valid_pois.keys())
+            normalized_key = (item_key or "").strip()
+            poi_id: str | None = None
+            if normalized_key.startswith("poi:"):
+                poi_id = parse_route_stop_key(normalized_key)
+            elif item_index is not None and 0 <= item_index < len(poi_ids):
+                poi_id = poi_ids[item_index]
+            if poi_id and poi_id in valid_pois:
+                matched_index = poi_ids.index(poi_id)
+                resolved_key = make_route_stop_key(poi_id)
+        else:
+            normalized_key = (item_key or "").strip()
+            if normalized_key:
+                for index, text in enumerate(section_data.items):
+                    if make_item_key(section, text) == normalized_key:
+                        matched_index = index
+                        resolved_key = normalized_key
+                        break
+            elif item_index is not None:
+                if 0 <= item_index < len(section_data.items):
+                    matched_index = item_index
+                    resolved_key = make_item_key(section, section_data.items[item_index])
 
         if matched_index is None or resolved_key is None:
             raise ValueError("Пункт подборки не найден")
@@ -581,6 +625,21 @@ class TripService:
                 if liked_count >= MAX_LIKED_ROUTES_PER_TRIP:
                     raise ValueError(
                         f"Лимит лайков маршрутов ({MAX_LIKED_ROUTES_PER_TRIP}) для поездки"
+                    )
+
+        if vote == 1 and section == "route_stops":
+            from program.route_feedback import (
+                MAX_LIKED_ROUTE_STOPS_PER_TRIP,
+                count_liked_route_stops,
+            )
+
+            existing_votes = list_item_feedback(trip_id)
+            already_liked = existing_votes.get(resolved_key) == 1
+            if not already_liked:
+                liked_count = count_liked_route_stops(trip_id)
+                if liked_count >= MAX_LIKED_ROUTE_STOPS_PER_TRIP:
+                    raise ValueError(
+                        f"Лимит лайков остановок ({MAX_LIKED_ROUTE_STOPS_PER_TRIP})"
                     )
 
         if vote is None:

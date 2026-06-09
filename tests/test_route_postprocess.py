@@ -7,6 +7,7 @@ import unittest
 from agents.route_postprocess import (
     build_fallback_route_program,
     build_hybrid_route_program,
+    enforce_route_poi_policy,
     estimate_path_km,
     format_routes_text,
     leisure_overlap_ratio,
@@ -301,7 +302,62 @@ class TestRoutePostprocess(unittest.TestCase):
                 )
 
 
-    def test_pace_shortens_routes_from_full_pool(self) -> None:
+    def test_enforce_route_poi_policy_removes_banned(self) -> None:
+        materials = _kostroma_materials()
+        banned_id = materials.leisure_points[0].poi_id
+        program = RouteProgram(
+            cases=[
+                TripRouteCase(
+                    case_id="A",
+                    title="A",
+                    summary="s",
+                    stops=[
+                        RouteStop(
+                            order=1,
+                            kind="leisure",
+                            poi_id=banned_id,
+                            narrative=materials.leisure_points[0].name,
+                        )
+                    ],
+                ),
+                TripRouteCase(
+                    case_id="B",
+                    title="B",
+                    summary="s",
+                    stops=[
+                        RouteStop(
+                            order=1,
+                            kind="leisure",
+                            poi_id=materials.leisure_points[1].poi_id,
+                            narrative=materials.leisure_points[1].name,
+                        )
+                    ],
+                ),
+                TripRouteCase(
+                    case_id="C",
+                    title="C",
+                    summary="s",
+                    stops=[
+                        RouteStop(
+                            order=1,
+                            kind="leisure",
+                            poi_id=materials.leisure_points[2].poi_id,
+                            narrative=materials.leisure_points[2].name,
+                        )
+                    ],
+                ),
+            ]
+        )
+        fixed = enforce_route_poi_policy(
+            program,
+            materials,
+            banned_poi_ids={banned_id},
+            prefer_poi_ids=set(),
+        )
+        for case in fixed.cases:
+            stop_ids = {s.poi_id for s in case.stops if s.kind == "leisure"}
+            self.assertNotIn(banned_id, stop_ids)
+
         materials = _kostroma_materials()
         relaxed = build_fallback_route_program(materials, pace="relaxed")
         packed = build_fallback_route_program(materials, pace="packed")

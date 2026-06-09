@@ -655,6 +655,7 @@
             "type": "string",
             "enum": [
               "routes",
+              "route_stops",
               "lifehacks",
               "events",
               "dining"
@@ -753,6 +754,17 @@
               }
             ],
             "title": "Vote"
+          },
+          "poi_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poi Id"
           }
         },
         "type": "object",
@@ -1012,6 +1024,9 @@
           "routes": {
             "$ref": "#/components/schemas/ProgramSectionResponse"
           },
+          "route_stops": {
+            "$ref": "#/components/schemas/ProgramSectionResponse"
+          },
           "lifehacks": {
             "$ref": "#/components/schemas/ProgramSectionResponse"
           },
@@ -1026,6 +1041,7 @@
         "required": [
           "tickets",
           "routes",
+          "route_stops",
           "lifehacks",
           "events",
           "dining"

@@ -28,6 +28,10 @@ TAG_SPECS: dict[LeisureTag, LeisureTagSpec] = {
     "museums": LeisureTagSpec("museums", "Музеи", "музей"),
     "embankments": LeisureTagSpec("embankments", "Набережные", "набережная"),
     "monuments": LeisureTagSpec("monuments", "Памятники", "памятник"),
+    "temples": LeisureTagSpec("temples", "Храмы и монастыри", "храм"),
+    "pedestrian_streets": LeisureTagSpec(
+        "pedestrian_streets", "Пешеходные улицы", "пешеходная улица"
+    ),
     # legacy — только для старых записей в SQLite
     "exhibitions": LeisureTagSpec("exhibitions", "Выставки", "выставочный зал"),
     "galleries": LeisureTagSpec("galleries", "Галереи", "художественная галерея"),
@@ -79,6 +83,17 @@ def geocode_queries_for_tag(tag: LeisureTag, city: str) -> list[str]:
             f"монумент, {city}, Россия",
             f"скульптурный парк, {city}, Россия",
         ],
+        "temples": [
+            f"собор, {city}, Россия",
+            f"церковь, {city}, Россия",
+            f"монастырь, {city}, Россия",
+            f"храм, {city}, Россия",
+        ],
+        "pedestrian_streets": [
+            f"пешеходная улица, {city}, Россия",
+            f"пешеходный бульвар, {city}, Россия",
+            f"историческая улица, {city}, Россия",
+        ],
     }
     for item in extras.get(tag, []):
         if item not in queries:
@@ -89,7 +104,28 @@ def geocode_queries_for_tag(tag: LeisureTag, city: str) -> list[str]:
 def infer_leisure_tag(name: str) -> LeisureTag:
     """Тег POI по ключевым словам в названии."""
     lowered = name.lower().replace("ё", "е")
-    if any(h in lowered for h in ("муз", "галер", "выстав")):
+    if any(
+        h in lowered
+        for h in (
+            "собор",
+            "храм",
+            "церк",
+            "монаст",
+            "часовн",
+            "мечет",
+            "синагог",
+            "костел",
+            "базилик",
+            "лавр",
+        )
+    ):
+        return "temples"
+    if any(
+        h in lowered
+        for h in ("покровск", "бауман", "пешеходн", "променад", "пешеходная")
+    ):
+        return "pedestrian_streets"
+    if any(h in lowered for h in ("муз", "галер", "выстав", "museum", "gallery")):
         return "museums"
     if "набереж" in lowered:
         return "embankments"
@@ -111,7 +147,7 @@ def leisure_pool_limit(pace: str) -> int:
 
 def leisure_search_pool_limit() -> int:
     """Размер пула при поиске OSM/Wikidata — всегда максимум, не зависит от темпа."""
-    return 25
+    return 35
 
 
 def dining_per_anchor_limit(pace: str) -> int:

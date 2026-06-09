@@ -12,6 +12,8 @@ LeisureTag = Literal[
     "museums",
     "embankments",
     "monuments",
+    "temples",
+    "pedestrian_streets",
     # legacy (старые поездки в SQLite)
     "exhibitions",
     "galleries",

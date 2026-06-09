@@ -27,4 +27,5 @@ class AgentState(TypedDict, total=False):
     retry_count: int
     approved: bool
     review_mode: ReviewMode
+    route_feedback_snapshot: dict[str, Any]
     messages: Annotated[list[AnyMessage], add_messages]

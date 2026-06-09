@@ -17,8 +17,14 @@ SECTION_KEYS: tuple[ProgramSectionKey, ...] = (
     "dining",
 )
 
-VotableSectionKey = Literal["routes", "lifehacks", "events", "dining"]
-VOTABLE_SECTIONS: tuple[VotableSectionKey, ...] = ("routes", "lifehacks", "events", "dining")
+VotableSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
+VOTABLE_SECTIONS: tuple[VotableSectionKey, ...] = (
+    "routes",
+    "route_stops",
+    "lifehacks",
+    "events",
+    "dining",
+)
 
 _NUMBERED_ITEM = re.compile(r"^\d+\.\s+")
 _DASH_ITEM = re.compile(r"^-\s+")
@@ -37,6 +43,7 @@ class ParsedSection:
 class ParsedProgram:
     tickets: ParsedSection
     routes: ParsedSection
+    route_stops: ParsedSection
     lifehacks: ParsedSection
     events: ParsedSection
     dining: ParsedSection
@@ -220,6 +227,8 @@ def parse_section(section: ProgramSectionKey, text: str) -> ParsedSection:
 
 
 def parse_program_sections(program: dict[str, Any]) -> ParsedProgram:
+    from program.route_stops import parse_route_stops
+
     routes_structured = _parse_routes_from_structured(program)
     routes_text = str(program.get("routes_text", "")).strip()
     if routes_structured:
@@ -234,6 +243,7 @@ def parse_program_sections(program: dict[str, Any]) -> ParsedProgram:
     return ParsedProgram(
         tickets=parse_section("tickets", program.get("tickets", "")),
         routes=routes,
+        route_stops=parse_route_stops(program),
         lifehacks=parse_section("lifehacks", program.get("lifehacks", "")),
         events=parse_section("events", program.get("events", "")) if legacy else empty,
         dining=parse_section("dining", program.get("dining", "")) if legacy else empty,

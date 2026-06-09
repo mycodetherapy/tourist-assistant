@@ -122,7 +122,9 @@ class TestRouteFeedback(unittest.TestCase):
 
     def test_feedback_prompt_includes_stops_and_themes(self) -> None:
         self._like_route_index(0)
-        ctx = build_route_feedback_context(self.program, self.trip_id)
+        ctx = build_route_feedback_context(
+            self.program, self.trip_id, rebuild_scope="routes"
+        )
         assert ctx is not None
         self.assertIn("Музей", ctx.llm_instructions)
         self.assertIn("Площадь", ctx.llm_instructions)
@@ -130,6 +132,17 @@ class TestRouteFeedback(unittest.TestCase):
         self.assertIn("Запрещённые poi_id", ctx.llm_instructions)
         self.assertIn("l1", ctx.llm_instructions)
         self.assertIn("вдохновения", ctx.llm_instructions)
+
+    def test_full_rebuild_soft_route_like_hints(self) -> None:
+        self._like_route_index(1)
+        ctx = build_route_feedback_context(
+            self.program, self.trip_id, rebuild_scope="full"
+        )
+        assert ctx is not None
+        self.assertIn("Параметры лайкнутых маршрутов", ctx.llm_instructions)
+        self.assertIn("средний", ctx.llm_instructions.lower())
+        self.assertNotIn("останутся без изменений", ctx.llm_instructions)
+        self.assertNotIn("Запрещённые poi_id", ctx.llm_instructions)
 
     def test_church_theme_hint_from_stop_names(self) -> None:
         from program.route_feedback import _infer_soft_themes

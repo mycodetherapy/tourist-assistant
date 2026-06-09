@@ -19,6 +19,7 @@ from models.routes import (
 from search.yandex.poi_filters import (
     haversine_km,
     is_landmark_poi_name,
+    is_leisure_route_poi,
     poi_name_conflict,
     route_name_key,
 )
@@ -93,8 +94,8 @@ _BASE_PROFILES: dict[RouteCaseId, RouteProfile] = {
 
 
 def _landmark_pool(leisure: list[PoiPoint]) -> list[PoiPoint]:
-    """Только достопримечательности; улицы из Geocoder не участвуют в маршруте."""
-    filtered = [p for p in leisure if is_landmark_poi_name(p.name)]
+    """POI для маршрута: достопримечательности и именованные пешеходные улицы."""
+    filtered = [p for p in leisure if is_leisure_route_poi(p)]
     return filtered if len(filtered) >= 3 else leisure
 
 
@@ -622,12 +623,17 @@ def _stops_from_indices(leisure: list[PoiPoint], indices: list[int]) -> list[Rou
 def _ranked_indices_from_case(
     case: TripRouteCase,
     leisure: list[PoiPoint],
+    *,
+    banned_poi_ids: set[str] | None = None,
 ) -> list[int]:
     """Индексы POI из черновика LLM в порядке остановок."""
+    banned = banned_poi_ids or set()
     poi_to_idx = {p.poi_id: i for i, p in enumerate(leisure)}
     seed: list[int] = []
     for stop in sorted(case.stops, key=lambda s: s.order):
         if stop.kind != "leisure" or not stop.poi_id:
+            continue
+        if stop.poi_id in banned:
             continue
         idx = poi_to_idx.get(stop.poi_id)
         if idx is None or idx in seed:
@@ -648,12 +654,15 @@ def _indices_from_llm_ranking(
     *,
     compact: bool = False,
     max_km: float | None = None,
+    banned_poi_ids: set[str] | None = None,
 ) -> list[int] | None:
     """
     Ранжирование LLM: poi_id в порядке модели → проверка km/дублей → обрезка или добор.
     None — черновик не прошёл валидацию, нужен алгоритмический fallback.
     """
-    seed = _ranked_indices_from_case(case, leisure)
+    banned = banned_poi_ids or set()
+    avoid_idx = _avoid_indices(leisure, banned)
+    seed = _ranked_indices_from_case(case, leisure, banned_poi_ids=banned)
     if not seed:
         return None
 
@@ -680,7 +689,7 @@ def _indices_from_llm_ranking(
     ):
         added = False
         for idx in ordered:
-            if idx in indices:
+            if idx in indices or idx in avoid_idx:
                 continue
             trial = _order_indices_by_path(leisure, indices + [idx])
             if _window_has_duplicate_names(leisure, trial):
@@ -735,6 +744,7 @@ def _finalize_leisure_indices(
     *,
     compact: bool = False,
     max_km: float | None = None,
+    banned_poi_ids: set[str] | None = None,
 ) -> list[int]:
     """Собирает индексы POI для варианта: LLM-ранг или добор алгоритмом."""
     ordered = _order_indices(leisure)
@@ -746,11 +756,14 @@ def _finalize_leisure_indices(
         span_km,
         compact=compact,
         max_km=max_km,
+        banned_poi_ids=banned_poi_ids,
     )
     if llm is not None:
         return llm
 
-    if seed := _ranked_indices_from_case(case, leisure):
+    if seed := _ranked_indices_from_case(
+        case, leisure, banned_poi_ids=banned_poi_ids
+    ):
         indices = _order_indices_by_path(leisure, seed)
         indices = _extend_for_min_km(
             leisure,
@@ -779,6 +792,7 @@ def _finalize_leisure_indices(
         span_km=span_km,
         compact=compact,
         max_km=max_km,
+        avoid=_avoid_indices(leisure, banned_poi_ids),
     )
 
 
@@ -800,12 +814,61 @@ def _avoid_indices(
     return {id_to_idx[pid] for pid in avoid_poi_ids if pid in id_to_idx}
 
 
+def _needs_maps_backfill(program: RouteProgram) -> bool:
+    if not program.cases:
+        return False
+    return any(not str(case.maps_route_url).strip() for case in program.cases)
+
+
+def backfill_route_maps_only(
+    program: RouteProgram,
+    materials: RouteMaterials,
+    *,
+    transport: str = "mixed",
+) -> RouteProgram:
+    """Заполняет maps_route_url по уже выбранным остановкам, без переподбора POI."""
+    if not _needs_maps_backfill(program):
+        return program
+    index = _poi_index(materials)
+    profiles = _adapt_profiles(_landmark_pool(materials.leisure_points), pace="moderate")
+    cases: list[TripRouteCase] = []
+    for case in program.cases:
+        if str(case.maps_route_url).strip():
+            cases.append(case)
+            continue
+        points: list[GeoPoint] = []
+        labels: list[str] = []
+        for stop in sorted(case.stops, key=lambda s: s.order):
+            if stop.kind != "leisure":
+                continue
+            coord = _coords_for_stop(stop, index)
+            if coord is None:
+                continue
+            points.append(coord)
+            labels.append(_label_for_stop(stop, index))
+        profile_key = _profile_for_case_id(case.case_id)
+        profile = profiles[profile_key]  # type: ignore[index]
+        maps_url = ""
+        if points:
+            maps_url = build_maps_route_url(
+                points,
+                labels=labels,
+                city=materials.city,
+                transport=transport,
+                max_stops=profile.max_stops,
+            )
+        cases.append(case.model_copy(update={"maps_route_url": maps_url}))
+    return program.model_copy(update={"cases": cases})
+
+
 def finalize_route_program(
     program: RouteProgram,
     materials: RouteMaterials,
     *,
     transport: str = "mixed",
     pace: str = "moderate",
+    banned_poi_ids: set[str] | None = None,
+    prefer_poi_ids: set[str] | None = None,
 ) -> RouteProgram:
     index = _poi_index(materials)
     leisure = _landmark_pool(materials.leisure_points)
@@ -822,6 +885,9 @@ def finalize_route_program(
     span_km = _pool_span_km(leisure)
     cases: list[TripRouteCase] = []
     for case in program.cases:
+        if case.preserved:
+            cases.append(case)
+            continue
         profile_key = _profile_for_case_id(case.case_id)
         profile = profiles[profile_key]  # type: ignore[index]
         compact = profile_key == "A"
@@ -833,6 +899,7 @@ def finalize_route_program(
             span_km,
             compact=compact,
             max_km=max_km,
+            banned_poi_ids=banned_poi_ids,
         )
         valid_stops = _stops_from_indices(leisure, indices)
         points: list[GeoPoint] = []
@@ -976,38 +1043,52 @@ def _compute_algorithm_indices(
     span_km: float,
     *,
     avoid_extra: set[int] | None = None,
+    prefer_indices: list[int] | None = None,
 ) -> dict[RouteCaseId, list[int]]:
     """Индексы A/B/C чистым алгоритмом (fallback)."""
     if not leisure:
         return {"A": [], "B": [], "C": []}
     extra = avoid_extra or set()
+    prefer = [i for i in (prefer_indices or []) if i not in extra]
     outliers = _outlier_indices(leisure, count=2)
     far_idx = _farthest_index(leisure)
 
+    a_must = [prefer[0]] if prefer else None
     a_idx = _pick_window(
         leisure,
         ordered,
         profiles["A"],
         span_km=span_km,
+        must_include=a_must,
         avoid=outliers | extra,
         compact=True,
         max_km=_MAX_ROUTE_KM_SHORT,
     )
+    used_a = set(a_idx)
+    b_prefer = next((i for i in prefer if i not in used_a), None)
+    b_must = [b_prefer] if b_prefer is not None else None
     b_idx = _pick_window(
         leisure,
         ordered,
         profiles["B"],
         span_km=span_km,
-        avoid=set(a_idx) | extra,
+        must_include=b_must,
+        avoid=used_a | extra,
         min_unique=2,
     )
+    used_b = set(b_idx)
+    c_prefer = next((i for i in prefer if i not in used_a and i not in used_b), None)
     c_idx = _pick_novel_route(
         leisure,
         ordered,
         profiles["C"],
         span_km,
-        set(b_idx) | extra,
+        used_b | extra,
     )
+    if c_prefer is not None and c_prefer not in c_idx and c_prefer not in extra:
+        trial = _order_indices_by_path(leisure, list(dict.fromkeys([*c_idx, c_prefer])))
+        if len(trial) >= profiles["C"].min_stops:
+            c_idx = trial[: profiles["C"].max_stops]
     if len(c_idx) < profiles["C"].min_stops:
         outlier_must = [i for i in outliers if i not in set(b_idx)]
         c_must = outlier_must[:2] if outlier_must else (
@@ -1052,6 +1133,16 @@ def _draft_case_map(draft: RouteProgram) -> dict[RouteCaseId, TripRouteCase]:
 _HYBRID_MAX_OVERLAP = 0.85
 
 
+def _preferred_indices(
+    leisure: list[PoiPoint],
+    prefer_poi_ids: set[str] | None,
+) -> list[int]:
+    if not prefer_poi_ids:
+        return []
+    id_to_idx = {p.poi_id: i for i, p in enumerate(leisure)}
+    return [id_to_idx[pid] for pid in prefer_poi_ids if pid in id_to_idx]
+
+
 def build_hybrid_route_program(
     materials: RouteMaterials,
     draft: RouteProgram,
@@ -1059,6 +1150,7 @@ def build_hybrid_route_program(
     transport: str = "walking",
     pace: str = "moderate",
     avoid_poi_ids: set[str] | None = None,
+    prefer_poi_ids: set[str] | None = None,
 ) -> RouteProgram:
     """
     LLM ранжирует poi_id по вариантам; алгоритм валидирует km/дубли или подставляет fallback.
@@ -1072,8 +1164,18 @@ def build_hybrid_route_program(
     profiles = _adapt_profiles(leisure, pace=pace)
     span_km = _pool_span_km(leisure)
     avoid_extra = _avoid_indices(leisure, avoid_poi_ids)
+    prefer_indices = [
+        i
+        for i in _preferred_indices(leisure, prefer_poi_ids)
+        if i not in avoid_extra
+    ]
     algo = _compute_algorithm_indices(
-        leisure, ordered, profiles, span_km, avoid_extra=avoid_extra
+        leisure,
+        ordered,
+        profiles,
+        span_km,
+        avoid_extra=avoid_extra,
+        prefer_indices=prefer_indices,
     )
     draft_cases = _draft_case_map(draft)
 
@@ -1092,6 +1194,7 @@ def build_hybrid_route_program(
                 span_km,
                 compact=compact,
                 max_km=max_km,
+                banned_poi_ids=avoid_poi_ids,
             )
         indices_by_id[case_id] = llm_idx if llm_idx is not None else algo[case_id]
 
@@ -1127,6 +1230,7 @@ def build_fallback_route_program(
     *,
     pace: str = "moderate",
     avoid_poi_ids: set[str] | None = None,
+    prefer_poi_ids: set[str] | None = None,
     variant: int = 0,
 ) -> RouteProgram:
     """Три пеших варианта разной длины — только leisure из пула (алгоритм)."""
@@ -1145,8 +1249,18 @@ def build_fallback_route_program(
     profiles = _adapt_profiles(leisure, pace=pace)
     span_km = _pool_span_km(leisure)
     avoid_extra = _avoid_indices(leisure, avoid_poi_ids)
+    prefer_indices = [
+        i
+        for i in _preferred_indices(leisure, prefer_poi_ids)
+        if i not in avoid_extra
+    ]
     algo = _compute_algorithm_indices(
-        leisure, ordered, profiles, span_km, avoid_extra=avoid_extra
+        leisure,
+        ordered,
+        profiles,
+        span_km,
+        avoid_extra=avoid_extra,
+        prefer_indices=prefer_indices,
     )
 
     program = RouteProgram(
@@ -1193,11 +1307,14 @@ def build_new_routes_respecting_likes(
     *,
     transport: str = "walking",
     pace: str = "moderate",
+    prefer_poi_ids: set[str] | None = None,
+    banned_poi_ids: set[str] | None = None,
 ) -> RouteProgram:
     """Три новых маршрута с учётом poi из лайкнутых (без копирования пути)."""
     from program.route_feedback import collect_leisure_poi_ids
 
-    avoid = collect_leisure_poi_ids(preserved)
+    avoid = collect_leisure_poi_ids(preserved) | set(banned_poi_ids or ())
+    prefer = set(prefer_poi_ids or ()) - avoid
     program: RouteProgram | None = None
     for attempt in range(4):
         if draft is not None and attempt == 0:
@@ -1207,14 +1324,88 @@ def build_new_routes_respecting_likes(
                 transport=transport,
                 pace=pace,
                 avoid_poi_ids=avoid,
+                prefer_poi_ids=prefer,
             )
         else:
             program = build_fallback_route_program(
                 materials,
                 pace=pace,
                 avoid_poi_ids=avoid,
+                prefer_poi_ids=prefer,
                 variant=attempt,
             )
         if not routes_overlap_preserved(program.cases, preserved):
             return program
     return program or build_fallback_route_program(materials, pace=pace)
+
+
+def enforce_route_poi_policy(
+    program: RouteProgram,
+    materials: RouteMaterials,
+    *,
+    banned_poi_ids: set[str],
+    prefer_poi_ids: set[str],
+    transport: str = "mixed",
+    pace: str = "moderate",
+) -> RouteProgram:
+    """Убирает запрещённые POI из новых маршрутов; при необходимости пересобирает case."""
+    if not banned_poi_ids:
+        return program
+    leisure = _landmark_pool(materials.leisure_points)
+    if not leisure:
+        return program
+    ordered = _order_indices(leisure)
+    profiles = _adapt_profiles(leisure, pace=pace)
+    span_km = _pool_span_km(leisure)
+    avoid_idx = _avoid_indices(leisure, banned_poi_ids)
+    prefer_idx = [
+        i for i in _preferred_indices(leisure, prefer_poi_ids) if i not in avoid_idx
+    ]
+    prefer_cursor = 0
+    cases: list[TripRouteCase] = []
+    for case in program.cases:
+        if case.preserved:
+            cases.append(case)
+            continue
+        stop_ids = {
+            s.poi_id for s in case.stops if s.kind == "leisure" and s.poi_id
+        }
+        if not (stop_ids & banned_poi_ids):
+            cases.append(case)
+            continue
+        profile_key = _profile_for_case_id(case.case_id)
+        profile = profiles[profile_key]  # type: ignore[index]
+        compact = profile_key == "A"
+        max_km = _MAX_ROUTE_KM_SHORT if compact else None
+        must = None
+        if prefer_cursor < len(prefer_idx):
+            must = [prefer_idx[prefer_cursor]]
+            prefer_cursor += 1
+        indices = _pick_window(
+            leisure,
+            ordered,
+            profile,
+            span_km=span_km,
+            must_include=must,
+            avoid=avoid_idx,
+            compact=compact,
+            max_km=max_km,
+        )
+        cases.append(
+            _trip_case_from_indices(
+                case.case_id,
+                indices,
+                leisure,
+                profile,
+                materials.city,
+            )
+        )
+    patched = program.model_copy(update={"cases": cases})
+    return finalize_route_program(
+        patched,
+        materials,
+        transport=transport,
+        pace=pace,
+        banned_poi_ids=banned_poi_ids,
+        prefer_poi_ids=prefer_poi_ids,
+    )

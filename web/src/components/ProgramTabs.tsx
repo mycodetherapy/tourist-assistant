@@ -81,6 +81,14 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
   const tabs = buildTabs(data);
   const legacy = isLegacyProgram(data);
   const routeCases = parseRouteProgram(data.program.routes);
+  const stopVoteByPoi = new Map(
+    (data.sections.route_stops?.items ?? [])
+      .filter((item) => item.poi_id)
+      .map((item) => [
+        item.poi_id as string,
+        { item_key: item.item_key, index: item.index, vote: item.vote },
+      ]),
+  );
 
   const voteMutation = useMutation({
     mutationFn: (payload: {
@@ -105,17 +113,16 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
       ]);
       if (previous?.sections?.[payload.section]) {
         const section = previous.sections[payload.section];
+        const updatedItems = section.items.map((item) =>
+          item.item_key === payload.item_key ? { ...item, vote: payload.vote } : item,
+        );
         queryClient.setQueryData<ProgramResponse>(["trips", tripId, "program"], {
           ...previous,
           sections: {
             ...previous.sections,
             [payload.section]: {
               ...section,
-              items: section.items.map((item) =>
-                item.item_key === payload.item_key
-                  ? { ...item, vote: payload.vote }
-                  : item,
-              ),
+              items: updatedItems,
             },
           },
         });
@@ -240,7 +247,14 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
                             />
                           ) : null}
                           {useRouteCard ? (
-                            <RouteCaseDetails routeCase={routeCase} />
+                            <RouteCaseDetails
+                              routeCase={routeCase}
+                              stopVotes={stopVoteByPoi}
+                              votingDisabled={votingDisabled || voteMutation.isPending}
+                              onStopVote={(poiId, itemKey, index, vote) =>
+                                handleVote("route_stops", index, itemKey, vote)
+                              }
+                            />
                           ) : (
                             <MarkdownBlock text={item.text} className="mb-0" />
                           )}

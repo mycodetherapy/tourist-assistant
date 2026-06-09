@@ -353,22 +353,33 @@ def resolve_routes_program(
     trip_id: int | None = None,
     dates: str = "",
     rebuild_scope: str = "full",
+    route_feedback_snapshot: dict[str, Any] | None = None,
 ) -> tuple[RouteProgram, str]:
     from agents.route_postprocess import (
         build_fallback_route_program,
         build_hybrid_route_program,
         build_new_routes_respecting_likes,
+        enforce_route_poi_policy,
         finalize_route_program,
         format_routes_text,
     )
-    from models.routes import RouteProgram
+    from models.routes import RouteProgram, TripRouteCase
     from program.route_feedback import (
         extract_liked_routes,
         merge_preserved_with_new_routes,
+        rebuild_poi_preferences,
     )
 
     preserved: list[Any] = []
-    if rebuild_scope == "routes" and base_program and trip_id is not None:
+    prefer_poi: set[str] = set()
+    banned_poi: set[str] = set()
+    if route_feedback_snapshot:
+        prefer_poi = set(route_feedback_snapshot.get("preferred_poi_ids") or [])
+        banned_poi = set(route_feedback_snapshot.get("banned_poi_ids") or [])
+        if rebuild_scope == "routes":
+            for raw in route_feedback_snapshot.get("liked_cases") or []:
+                preserved.append(TripRouteCase.model_validate(raw))
+    elif rebuild_scope == "routes" and base_program and trip_id is not None:
         preserved = extract_liked_routes(base_program, int(trip_id))
 
     if trip_id is not None:
@@ -384,6 +395,10 @@ def resolve_routes_program(
     materials = load_route_materials(
         messages, expected_city=expected_city, trip_id=trip_id
     )
+    if not route_feedback_snapshot and trip_id is not None:
+        prefer_poi, banned_poi, _disliked = rebuild_poi_preferences(
+            int(trip_id), materials, preserved
+        )
     program: RouteProgram | None = None
     if materials:
         draft_prog: RouteProgram | None = None
@@ -399,13 +414,25 @@ def resolve_routes_program(
                 preserved,
                 transport=transport,
                 pace=pace,
+                prefer_poi_ids=prefer_poi,
+                banned_poi_ids=banned_poi,
             )
         elif draft_prog and len(draft_prog.cases) >= 3:
             program = build_hybrid_route_program(
-                materials, draft_prog, transport=transport, pace=pace
+                materials,
+                draft_prog,
+                transport=transport,
+                pace=pace,
+                avoid_poi_ids=banned_poi,
+                prefer_poi_ids=prefer_poi,
             )
         else:
-            program = build_fallback_route_program(materials, pace=pace)
+            program = build_fallback_route_program(
+                materials,
+                pace=pace,
+                avoid_poi_ids=banned_poi,
+                prefer_poi_ids=prefer_poi,
+            )
     elif draft_routes:
         try:
             program = RouteProgram.model_validate(draft_routes)
@@ -435,8 +462,22 @@ def resolve_routes_program(
             )
         if materials:
             program = finalize_route_program(
-                program, materials, transport=transport, pace=pace
+                program,
+                materials,
+                transport=transport,
+                pace=pace,
+                banned_poi_ids=banned_poi,
+                prefer_poi_ids=prefer_poi,
             )
+            if banned_poi or prefer_poi:
+                program = enforce_route_poi_policy(
+                    program,
+                    materials,
+                    banned_poi_ids=banned_poi,
+                    prefer_poi_ids=prefer_poi,
+                    transport=transport,
+                    pace=pace,
+                )
 
     if preserved:
         program = merge_preserved_with_new_routes(preserved, program)
@@ -466,22 +507,30 @@ def repair_program_routes(
     if not _routes_need_maps_finalize(current):
         return program
 
-    repaired, routes_text = resolve_routes_program(
-        messages or [],
-        routes,
-        base_program=base_program,
-        transport=transport,
-        pace=pace,
-        expected_city=city or None,
-        trip_id=trip_id,
-        dates=dates,
+    materials = load_route_materials(
+        messages or [], expected_city=city or None, trip_id=trip_id
     )
+    if materials is None and trip_id is not None:
+        from search.route_materials_store import ensure_route_materials_for_trip
+
+        materials = ensure_route_materials_for_trip(
+            int(trip_id),
+            city=city or "",
+            dates=dates,
+            base_program=base_program,
+        )
+    if materials is None:
+        return program
+
+    from agents.route_postprocess import backfill_route_maps_only, format_routes_text
+
+    repaired = backfill_route_maps_only(current, materials, transport=transport)
     if _routes_need_maps_finalize(repaired):
         return program
     updated = dict(program)
     updated["routes"] = repaired.model_dump()
-    if routes_text:
-        updated["routes_text"] = routes_text
+    if format_routes_text(repaired):
+        updated["routes_text"] = format_routes_text(repaired)
     return updated
 
 
