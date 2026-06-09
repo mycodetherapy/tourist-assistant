@@ -10,6 +10,8 @@ from agents.route_postprocess import (
     estimate_path_km,
     format_routes_text,
     leisure_overlap_ratio,
+    public_route_summary,
+    public_route_title,
 )
 from models.routes import (
     DiningOption,
@@ -54,6 +56,15 @@ def _kostroma_materials() -> RouteMaterials:
 
 
 class TestRoutePostprocess(unittest.TestCase):
+    def test_public_route_title_strips_parens(self) -> None:
+        self.assertEqual(public_route_title("Лёгкая прогулка (~4 км)"), "Лёгкая прогулка")
+
+    def test_public_route_summary_strips_km(self) -> None:
+        raw = "Пешая прогулка по Кострома: лёгкая прогулка (~4 км), ~2.5 км, 5 остановок."
+        cleaned = public_route_summary(raw)
+        self.assertNotIn("км", cleaned.lower())
+        self.assertIn("5 остановок", cleaned)
+
     def test_build_fallback_three_cases_with_urls(self) -> None:
         materials = RouteMaterials(
             city="Москва",

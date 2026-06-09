@@ -167,9 +167,9 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     system = SystemMessage(
         content=(
             "Составь программу по ToolMessage (билеты уже готовы).\n"
-            "- routes: РОВНО 3 пеших маршрута (A ~4 км, B 5–6 км, C 7–8 км). "
+            "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
             "Только leisure poi_id из materials_digest; без вокзалов и аэропортов. "
-            "A: ровно 3 точки (1 промежуточная); B: 4–5; C: 5–7. narrative — название места. "
+            "A — компактный, B — средний, C — длинный. narrative — название места. "
             "maps_route_url оставь пустым — заполнит пост-процессор.\n"
             "- lifehacks: 4–7 коротких советов, до 800 символов, без ссылок.\n"
             f"Город: {ctx.city}. Даты: {ctx.dates}. Вылет из: {ctx.origin_city}."

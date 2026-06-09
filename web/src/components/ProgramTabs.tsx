@@ -1,10 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Alert, Tabs, Tag, notification } from "antd";
+import { Alert, Tabs, notification } from "antd";
 import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
+import { parseRouteProgram } from "../api/routeTypes";
 import type { ItemVote, ProgramResponse, VotableSectionKey } from "../api/types";
 import { ItemVoteButtons } from "./ItemVoteButtons";
+import { RouteCaseDetails } from "./RouteCaseDetails";
+import { RouteMapEmbed } from "./RouteMapEmbed";
 
 interface ProgramTabsProps {
   tripId: number;
@@ -21,11 +24,7 @@ interface TabDef {
 }
 
 function routeCaseCount(program: ProgramResponse["program"]): number {
-  const routes = program.routes;
-  if (routes && typeof routes === "object" && Array.isArray((routes as { cases?: unknown }).cases)) {
-    return (routes as { cases: unknown[] }).cases.length;
-  }
-  return 0;
+  return parseRouteProgram(program.routes).length;
 }
 
 function hasRoutesProgram(program: ProgramResponse["program"]): boolean {
@@ -81,6 +80,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
   const queryClient = useQueryClient();
   const tabs = buildTabs(data);
   const legacy = isLegacyProgram(data);
+  const routeCases = parseRouteProgram(data.program.routes);
 
   const voteMutation = useMutation({
     mutationFn: (payload: {
@@ -153,7 +153,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
           description={
             (data.program.routes_text || "").includes("(fallback)")
               ? "Использованы демо-точки: нужен ключ API Геокодера в YANDEX_MAPS_API_KEY. python3 scripts/test_yandex_maps.py"
-              : "Оцените варианты A / B / C. В каждом пункте — ссылка на маршрут в Яндекс.Картах."
+              : "Оцените варианты A / B / C. Карта встроена в каждый вариант; ссылка на Яндекс.Карты — в описании."
           }
         />
       )}
@@ -187,19 +187,32 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
                 ) : section.items.length === 0 ? (
                   <p className="text-gray-500">Нет пунктов в этой секции.</p>
                 ) : (
-                  <ul className="space-y-3">
-                    {section.items.map((item) => (
+                  <ul className="space-y-2">
+                    {section.items.map((item) => {
+                      const routeCase =
+                        sectionKey === "routes" ? routeCases[item.index] : undefined;
+                      const useRouteCard =
+                        sectionKey === "routes" &&
+                        routeCase &&
+                        Boolean(routeCase.maps_route_url || routeCase.stops.length);
+                      return (
                       <li
                         key={`${sectionKey}-${item.item_key}`}
-                        className="flex items-start gap-3 rounded-lg border border-gray-100 bg-white px-3 py-2"
+                        className="flex items-start gap-2 rounded-lg border border-gray-100 bg-white px-2.5 py-2"
                       >
                         <div className="min-w-0 flex-1">
-                          {sectionKey === "routes" && (
-                            <Tag color="blue" className="mb-2">
-                              Вариант
-                            </Tag>
+                          {routeCase?.maps_route_url ? (
+                            <RouteMapEmbed
+                              mapsRouteUrl={routeCase.maps_route_url}
+                              caseId={routeCase.case_id}
+                              title={routeCase.title}
+                            />
+                          ) : null}
+                          {useRouteCard ? (
+                            <RouteCaseDetails routeCase={routeCase} />
+                          ) : (
+                            <MarkdownBlock text={item.text} className="mb-0" />
                           )}
-                          <MarkdownBlock text={item.text} className="" />
                         </div>
                         <ItemVoteButtons
                           vote={item.vote}
@@ -209,7 +222,8 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
                           }
                         />
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 )}
               </div>

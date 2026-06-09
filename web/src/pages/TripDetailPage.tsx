@@ -1,6 +1,7 @@
 import { DeleteOutlined } from "@ant-design/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Card, Empty, Popconfirm, Space, notification } from "antd";
+import axios from "axios";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getErrorMessage } from "../api/client";
@@ -85,6 +86,18 @@ export function TripDetailPage() {
     const paramRun = searchParams.get("run");
     if (paramRun) setActiveRunId(paramRun);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!activeRunId || !runQuery.isError) {
+      return;
+    }
+    const error = runQuery.error;
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      setActiveRunId(null);
+      setSearchParams({}, { replace: true });
+      queryClient.removeQueries({ queryKey: ["runs", activeRunId] });
+    }
+  }, [activeRunId, runQuery.isError, runQuery.error, queryClient, setSearchParams]);
 
   useEffect(() => {
     if (runQuery.data?.status === "completed" || runQuery.data?.status === "failed") {

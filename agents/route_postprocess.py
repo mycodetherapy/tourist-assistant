@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -30,6 +31,22 @@ _MIN_ROUTE_KM_MEDIUM = 3.0
 _MIN_ROUTE_KM_SHORT = 2.0
 _MAX_ROUTE_KM_SHORT = 5.0
 _KM_PER_STOP_TARGET = 2.5
+_ROUTE_PARENS = re.compile(r"\s*\([^)]*\)")
+_KM_SNIPPET = re.compile(r"~?\s*\d+(?:[.,]\d+)?\s*(?:–\s*\d+(?:[.,]\d+)?)?\s*км\.?", re.IGNORECASE)
+
+
+def public_route_title(title: str) -> str:
+    """Убирает подписи в скобках: «Лёгкая прогулка (~4 км)» → «Лёгкая прогулка»."""
+    return _ROUTE_PARENS.sub("", title).strip()
+
+
+def public_route_summary(summary: str) -> str:
+    """Чистит legacy-summary от км и скобок."""
+    text = _ROUTE_PARENS.sub("", summary)
+    text = _KM_SNIPPET.sub("", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    text = re.sub(r",\s*,", ",", text)
+    return text.strip(" ,:—-")
 
 
 @dataclass(frozen=True)
@@ -46,7 +63,7 @@ class RouteProfile:
 # Точки на карте: начало → промежуточные → конец (все — leisure из пула).
 _BASE_PROFILES: dict[RouteCaseId, RouteProfile] = {
     "A": RouteProfile(
-        title="Лёгкая прогулка (~4 км)",
+        title="Лёгкая прогулка",
         target_km_min=3.2,
         target_km_max=4.6,
         min_stops=3,
@@ -55,7 +72,7 @@ _BASE_PROFILES: dict[RouteCaseId, RouteProfile] = {
         abs_min_km=_MIN_ROUTE_KM_MEDIUM,
     ),
     "B": RouteProfile(
-        title="Средний маршрут (5–6 км)",
+        title="Средний маршрут",
         target_km_min=4.8,
         target_km_max=6.5,
         min_stops=4,
@@ -64,7 +81,7 @@ _BASE_PROFILES: dict[RouteCaseId, RouteProfile] = {
         abs_min_km=_MIN_ROUTE_KM_MEDIUM,
     ),
     "C": RouteProfile(
-        title="Длинный маршрут (7–8 км)",
+        title="Длинный маршрут",
         target_km_min=6.5,
         target_km_max=8.8,
         min_stops=5,
@@ -538,6 +555,10 @@ def _filter_conflicting_indices(leisure: list[PoiPoint], indices: list[int]) -> 
     return _order_indices_by_path(leisure, filtered)
 
 
+def _route_summary(city: str, stop_count: int) -> str:
+    return f"Пешая прогулка по {city}, {stop_count} остановок."
+
+
 def _stops_from_indices(leisure: list[PoiPoint], indices: list[int]) -> list[RouteStop]:
     stops: list[RouteStop] = []
     for order, idx in enumerate(indices, start=1):
@@ -547,18 +568,17 @@ def _stops_from_indices(leisure: list[PoiPoint], indices: list[int]) -> list[Rou
                 order=order,
                 kind="leisure",
                 poi_id=poi.poi_id,
-                time_hint="день",
+                time_hint="",
                 narrative=poi.name,
             )
         )
     if stops:
-        km = estimate_path_km([leisure[i].coordinates for i in indices])
         stops.append(
             RouteStop(
                 order=stops[-1].order + 1,
                 kind="transit_note",
                 narrative=(
-                    f"Пеший маршрут ~{km:.1f} км по достопримечательностям. "
+                    "Пеший маршрут по достопримечательностям. "
                     "Рестораны — «Искать вдоль маршрута» в Яндекс.Картах."
                 ),
             )
@@ -766,7 +786,9 @@ def finalize_route_program(
         cases.append(
             case.model_copy(
                 update={
+                    "title": public_route_title(profile.title),
                     "stops": valid_stops,
+                    "summary": _route_summary(materials.city, len(indices)),
                     "maps_route_url": build_maps_route_url(
                         points,
                         labels=labels,
@@ -785,7 +807,7 @@ def finalize_route_program(
             else ""
         )
         + f" ({materials.provider}). "
-        "Варианты A/B/C — разная длина и число точек на карте (мин. 1–3 км пешком)."
+        "Варианты A/B/C — разная длина и число точек на карте."
     )
     return program.model_copy(update={"materials_summary": summary, "cases": cases})
 
@@ -796,8 +818,8 @@ def format_routes_text(program: RouteProgram) -> str:
         lines.append(program.materials_summary)
         lines.append("")
     for case in program.cases:
-        lines.append(f"## Вариант {case.case_id}: {case.title}")
-        lines.append(case.summary)
+        lines.append(f"## Вариант {case.case_id}: {public_route_title(case.title)}")
+        lines.append(public_route_summary(case.summary) or case.summary)
         if case.maps_route_url:
             lines.append(f"[Маршрут на Яндекс.Картах]({case.maps_route_url})")
         for stop in sorted(case.stops, key=lambda s: s.order):
@@ -943,14 +965,10 @@ def _trip_case_from_indices(
     profile: RouteProfile,
     city: str,
 ) -> TripRouteCase:
-    km = estimate_path_km([leisure[i].coordinates for i in indices])
     return TripRouteCase(
         case_id=case_id,
-        title=profile.title,
-        summary=(
-            f"Пешая прогулка по {city}: {profile.title.lower()}, "
-            f"~{km:.1f} км, {len(indices)} остановок."
-        ),
+        title=public_route_title(profile.title),
+        summary=_route_summary(city, len(indices)),
         stops=_stops_from_indices(leisure, indices)[:-1],
     )
 

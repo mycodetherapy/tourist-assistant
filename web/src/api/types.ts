@@ -39,9 +39,11 @@ export interface TripPreferences {
   special_notes: string;
 }
 
+import type { RouteProgram } from "./routeTypes";
+
 export interface FinalProgram {
   tickets: string;
-  routes?: Record<string, unknown> | null;
+  routes?: RouteProgram | null;
   routes_text?: string;
   lifehacks: string;
   events?: string;

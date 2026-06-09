@@ -124,6 +124,34 @@ def _split_paragraph(text: str) -> ParsedSection:
     return ParsedSection(intro="", items=(stripped,))
 
 
+def _format_route_item_block(case: dict[str, Any]) -> str:
+    from agents.route_postprocess import public_route_summary, public_route_title
+
+    case_id = case.get("case_id", "?")
+    title = public_route_title(str(case.get("title", "")))
+    url = str(case.get("maps_route_url", "")).strip()
+    stops = case.get("stops")
+    leisure: list[dict[str, Any]] = []
+    if isinstance(stops, list):
+        leisure = [
+            stop
+            for stop in stops
+            if isinstance(stop, dict) and stop.get("kind") == "leisure"
+        ]
+    if leisure:
+        meta = f"{len(leisure)} остановок"
+    else:
+        meta = public_route_summary(str(case.get("summary", "")).strip())
+    block = f"**Вариант {case_id}: {title}** — {meta}"
+    if url:
+        block += f"\n\n[Открыть маршрут в Яндекс.Картах]({url})"
+    for stop in leisure:
+        narrative = str(stop.get("narrative", "")).strip()
+        if narrative:
+            block += f"\n- {narrative}"
+    return block.strip()
+
+
 def _parse_routes_from_structured(program: dict[str, Any]) -> ParsedSection | None:
     routes = program.get("routes")
     if not isinstance(routes, dict):
@@ -136,26 +164,7 @@ def _parse_routes_from_structured(program: dict[str, Any]) -> ParsedSection | No
     for case in cases:
         if not isinstance(case, dict):
             continue
-        case_id = case.get("case_id", "?")
-        title = case.get("title", "")
-        summary = case.get("summary", "")
-        url = case.get("maps_route_url", "")
-        block = f"**Вариант {case_id}: {title}**\n\n{summary}"
-        if url:
-            block += f"\n\n[Открыть маршрут в Яндекс.Картах]({url})"
-        stops = case.get("stops")
-        if isinstance(stops, list):
-            for stop in stops:
-                if not isinstance(stop, dict):
-                    continue
-                narrative = str(stop.get("narrative", "")).strip()
-                hint = str(stop.get("time_hint", "")).strip()
-                if narrative:
-                    line = f"- {narrative}"
-                    if hint:
-                        line += f" ({hint})"
-                    block += f"\n{line}"
-        items.append(block.strip())
+        items.append(_format_route_item_block(case))
     return ParsedSection(intro=intro, items=tuple(items))
 
 
