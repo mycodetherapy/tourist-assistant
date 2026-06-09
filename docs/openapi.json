@@ -1174,11 +1174,6 @@
         "properties": {
           "case_id": {
             "type": "string",
-            "enum": [
-              "A",
-              "B",
-              "C"
-            ],
             "title": "Case Id"
           },
           "title": {
@@ -1200,6 +1195,11 @@
             "type": "string",
             "title": "Maps Route Url",
             "default": ""
+          },
+          "preserved": {
+            "type": "boolean",
+            "title": "Preserved",
+            "default": false
           }
         },
         "type": "object",

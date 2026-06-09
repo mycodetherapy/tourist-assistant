@@ -44,6 +44,11 @@ def is_garbage_section(text: str, section: str) -> bool:
     return False
 
 
+def _min_leisure_for_case(case_id: str) -> int:
+    key = case_id[2:] if case_id.startswith("N-") else case_id
+    return {"A": 3, "B": 4, "C": 5}.get(key, 2)
+
+
 def _routes_issues(program: dict[str, Any]) -> list[str]:
     issues: list[str] = []
     raw = program.get("routes")
@@ -59,21 +64,35 @@ def _routes_issues(program: dict[str, Any]) -> list[str]:
     if routes is None:
         issues.append("отсутствует структура routes")
         return issues
-    if len(routes.cases) != 3:
-        issues.append(f"в routes {len(routes.cases)} вариантов (нужно 3)")
-    ids = {"A", "B", "C"}
-    found = {c.case_id for c in routes.cases}
-    if found != ids:
-        issues.append(f"ожидались case_id A/B/C, получено {sorted(found)}")
-    _MIN_LEISURE = {"A": 3, "B": 4, "C": 5}
+    preserved = [c for c in routes.cases if c.preserved]
+    new_cases = [c for c in routes.cases if not c.preserved]
+    if preserved:
+        if len(new_cases) < 3:
+            issues.append(
+                f"после пересборки нужно 3 новых маршрута, получено {len(new_cases)}"
+            )
+    else:
+        if len(routes.cases) != 3:
+            issues.append(f"в routes {len(routes.cases)} вариантов (нужно 3)")
+        ids = {"A", "B", "C"}
+        found = {c.case_id for c in routes.cases}
+        if found != ids:
+            issues.append(f"ожидались case_id A/B/C, получено {sorted(found)}")
     for case in routes.cases:
         leisure = sum(1 for s in case.stops if s.kind == "leisure")
-        need = _MIN_LEISURE.get(case.case_id, 2)
+        need = _min_leisure_for_case(case.case_id)
         if leisure < need:
             issues.append(f"вариант {case.case_id}: {leisure} leisure (нужно ≥{need})")
         if not case.maps_route_url:
             issues.append(f"вариант {case.case_id}: нет maps_route_url")
-    if len(routes.cases) >= 3:
+    if preserved and new_cases:
+        for new_case in new_cases:
+            for kept in preserved:
+                if leisure_overlap_ratio(new_case, kept) > 0.5:
+                    issues.append(
+                        f"новый {new_case.case_id} слишком похож на сохранённый {kept.case_id}"
+                    )
+    elif len(routes.cases) >= 3:
         if leisure_overlap_ratio(routes.cases[0], routes.cases[2]) > 0.85:
             issues.append("варианты A и C слишком похожи")
     if text and is_garbage_section(text, "routes_text"):

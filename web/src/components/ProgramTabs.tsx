@@ -96,17 +96,46 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
         item_index: payload.item_index,
         vote: payload.vote,
       }),
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ["trips", tripId, "program"] });
+      const previous = queryClient.getQueryData<ProgramResponse>([
+        "trips",
+        tripId,
+        "program",
+      ]);
+      if (previous?.sections?.[payload.section]) {
+        const section = previous.sections[payload.section];
+        queryClient.setQueryData<ProgramResponse>(["trips", tripId, "program"], {
+          ...previous,
+          sections: {
+            ...previous.sections,
+            [payload.section]: {
+              ...section,
+              items: section.items.map((item) =>
+                item.item_key === payload.item_key
+                  ? { ...item, vote: payload.vote }
+                  : item,
+              ),
+            },
+          },
+        });
+      }
+      return { previous };
+    },
     onSuccess: (updated) => {
       queryClient.setQueryData(["trips", tripId, "program"], updated);
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
-    },
-    onError: (error) => {
+    onError: (error, _payload, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["trips", tripId, "program"], context.previous);
+      }
       notification.error({
         message: "Оценка не сохранена",
         description: getErrorMessage(error),
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
     },
   });
 

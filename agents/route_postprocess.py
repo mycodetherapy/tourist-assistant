@@ -782,6 +782,24 @@ def _finalize_leisure_indices(
     )
 
 
+def _profile_for_case_id(case_id: str) -> str:
+    if case_id in ("A", "B", "C"):
+        return case_id
+    if case_id.startswith("N-") and case_id[2:] in ("A", "B", "C"):
+        return case_id[2:]
+    return "A"
+
+
+def _avoid_indices(
+    leisure: list[PoiPoint],
+    avoid_poi_ids: set[str] | None,
+) -> set[int]:
+    if not avoid_poi_ids:
+        return set()
+    id_to_idx = {p.poi_id: i for i, p in enumerate(leisure)}
+    return {id_to_idx[pid] for pid in avoid_poi_ids if pid in id_to_idx}
+
+
 def finalize_route_program(
     program: RouteProgram,
     materials: RouteMaterials,
@@ -804,9 +822,10 @@ def finalize_route_program(
     span_km = _pool_span_km(leisure)
     cases: list[TripRouteCase] = []
     for case in program.cases:
-        profile = profiles[case.case_id if case.case_id in profiles else "A"]  # type: ignore[index]
-        compact = case.case_id == "A"
-        max_km = _MAX_ROUTE_KM_SHORT if case.case_id == "A" else None
+        profile_key = _profile_for_case_id(case.case_id)
+        profile = profiles[profile_key]  # type: ignore[index]
+        compact = profile_key == "A"
+        max_km = _MAX_ROUTE_KM_SHORT if compact else None
         indices = _finalize_leisure_indices(
             case,
             leisure,
@@ -955,10 +974,13 @@ def _compute_algorithm_indices(
     ordered: list[int],
     profiles: dict[RouteCaseId, RouteProfile],
     span_km: float,
+    *,
+    avoid_extra: set[int] | None = None,
 ) -> dict[RouteCaseId, list[int]]:
     """Индексы A/B/C чистым алгоритмом (fallback)."""
     if not leisure:
         return {"A": [], "B": [], "C": []}
+    extra = avoid_extra or set()
     outliers = _outlier_indices(leisure, count=2)
     far_idx = _farthest_index(leisure)
 
@@ -967,7 +989,7 @@ def _compute_algorithm_indices(
         ordered,
         profiles["A"],
         span_km=span_km,
-        avoid=outliers,
+        avoid=outliers | extra,
         compact=True,
         max_km=_MAX_ROUTE_KM_SHORT,
     )
@@ -976,7 +998,7 @@ def _compute_algorithm_indices(
         ordered,
         profiles["B"],
         span_km=span_km,
-        avoid=set(a_idx),
+        avoid=set(a_idx) | extra,
         min_unique=2,
     )
     c_idx = _pick_novel_route(
@@ -984,7 +1006,7 @@ def _compute_algorithm_indices(
         ordered,
         profiles["C"],
         span_km,
-        set(b_idx),
+        set(b_idx) | extra,
     )
     if len(c_idx) < profiles["C"].min_stops:
         outlier_must = [i for i in outliers if i not in set(b_idx)]
@@ -1036,17 +1058,23 @@ def build_hybrid_route_program(
     *,
     transport: str = "walking",
     pace: str = "moderate",
+    avoid_poi_ids: set[str] | None = None,
 ) -> RouteProgram:
     """
     LLM ранжирует poi_id по вариантам; алгоритм валидирует km/дубли или подставляет fallback.
     """
     leisure = _landmark_pool(materials.leisure_points)
     if not leisure:
-        return build_fallback_route_program(materials, pace=pace)
+        return build_fallback_route_program(
+            materials, pace=pace, avoid_poi_ids=avoid_poi_ids
+        )
     ordered = _order_indices(leisure)
     profiles = _adapt_profiles(leisure, pace=pace)
     span_km = _pool_span_km(leisure)
-    algo = _compute_algorithm_indices(leisure, ordered, profiles, span_km)
+    avoid_extra = _avoid_indices(leisure, avoid_poi_ids)
+    algo = _compute_algorithm_indices(
+        leisure, ordered, profiles, span_km, avoid_extra=avoid_extra
+    )
     draft_cases = _draft_case_map(draft)
 
     indices_by_id: dict[RouteCaseId, list[int]] = {}
@@ -1098,6 +1126,8 @@ def build_fallback_route_program(
     materials: RouteMaterials,
     *,
     pace: str = "moderate",
+    avoid_poi_ids: set[str] | None = None,
+    variant: int = 0,
 ) -> RouteProgram:
     """Три пеших варианта разной длины — только leisure из пула (алгоритм)."""
     leisure = _landmark_pool(materials.leisure_points)
@@ -1109,9 +1139,15 @@ def build_fallback_route_program(
             ]
         )
     ordered = _order_indices(leisure)
+    if variant and ordered:
+        shift = (variant * 3) % len(ordered)
+        ordered = ordered[shift:] + ordered[:shift]
     profiles = _adapt_profiles(leisure, pace=pace)
     span_km = _pool_span_km(leisure)
-    algo = _compute_algorithm_indices(leisure, ordered, profiles, span_km)
+    avoid_extra = _avoid_indices(leisure, avoid_poi_ids)
+    algo = _compute_algorithm_indices(
+        leisure, ordered, profiles, span_km, avoid_extra=avoid_extra
+    )
 
     program = RouteProgram(
         cases=[
@@ -1132,3 +1168,53 @@ def leisure_overlap_ratio(a: TripRouteCase, b: TripRouteCase) -> float:
     shared = len(a_ids & b_ids)
     denom = max(len(a_ids), len(b_ids))
     return shared / denom if denom else 1.0
+
+
+_PRESERVED_MAX_OVERLAP = 0.5
+
+
+def routes_overlap_preserved(
+    new_cases: list[TripRouteCase],
+    preserved: list[TripRouteCase],
+    *,
+    max_ratio: float = _PRESERVED_MAX_OVERLAP,
+) -> bool:
+    for new_case in new_cases:
+        for kept in preserved:
+            if leisure_overlap_ratio(new_case, kept) > max_ratio:
+                return True
+    return False
+
+
+def build_new_routes_respecting_likes(
+    materials: RouteMaterials,
+    draft: RouteProgram | None,
+    preserved: list[TripRouteCase],
+    *,
+    transport: str = "walking",
+    pace: str = "moderate",
+) -> RouteProgram:
+    """Три новых маршрута с учётом poi из лайкнутых (без копирования пути)."""
+    from program.route_feedback import collect_leisure_poi_ids
+
+    avoid = collect_leisure_poi_ids(preserved)
+    program: RouteProgram | None = None
+    for attempt in range(4):
+        if draft is not None and attempt == 0:
+            program = build_hybrid_route_program(
+                materials,
+                draft,
+                transport=transport,
+                pace=pace,
+                avoid_poi_ids=avoid,
+            )
+        else:
+            program = build_fallback_route_program(
+                materials,
+                pace=pace,
+                avoid_poi_ids=avoid,
+                variant=attempt,
+            )
+        if not routes_overlap_preserved(program.cases, preserved):
+            return program
+    return program or build_fallback_route_program(materials, pace=pace)

@@ -77,7 +77,7 @@ docker compose up api web
 
 UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health). CLI по-прежнему: `docker compose run --rm app`.
 
-**Оценки пунктов (👍/👎):** для **вариантов маршрута и лайфхаков** (билеты — без голосования). В legacy-программах — также мероприятия и питание. Веб: клик → `PUT /api/trips/{id}/program/feedback`; CLI: пункт меню «Оценить пункты» или опционально перед утверждением. Хранение: `program_item_feedback` в `data/trips.db`, ключ по тексту пункта. При пересборе раздела оценки **сбрасываются** у изменённых пунктов; у неизменённых — сохраняются. После `docker compose build api web` перезапустите оба контейнера.
+**Оценки пунктов (👍/👎):** для **вариантов маршрута и лайфхаков** (билеты — без голосования). В legacy-программах — также мероприятия и питание. Веб: клик → `PUT /api/trips/{id}/program/feedback`; CLI: пункт меню «Оценить пункты» или опционально перед утверждением. Хранение: `program_item_feedback` в `data/trips.db`, ключ по тексту пункта. При пересборе раздела оценки **сбрасываются** у изменённых пунктов; у неизменённых — сохраняются. **Partial rebuild маршрутов (`routes`):** лайкнутые варианты остаются сверху списка без изменений; LLM генерирует **3 новых** (N-A/N-B/N-C). Повторный клик по 👍/👎 **снимает оценку** (нейтрально, LLM не учится). 👎 — негативный пример для LLM. Оценки привязаны к **тексту пункта** (не к индексу); устаревшие сбрасываются при пересборке и при загрузке программы. После `docker compose build api web` перезапустите оба контейнера.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -506,6 +506,7 @@ tourist-assistant/
 ├── planning/rebuild.py       # rebuild_scope, merge_program
 ├── program/parse_items.py  # разбор markdown-секций на пункты (голосование)
 ├── program/feedback_prune.py  # сброс оценок пересобранных пунктов
+├── program/route_feedback.py  # лайкнутые маршруты при partial rebuild
 ├── db/                     # schema.sql, repository (в т.ч. program_item_feedback)
 ├── onboarding/             # опросник, TripPreferences
 ├── observability/tracing.py

@@ -19,7 +19,9 @@ LeisureTag = Literal[
     "theaters",
 ]
 
-RouteCaseId = Literal["A", "B", "C"]
+RouteCaseId = str
+DEFAULT_ROUTE_CASE_IDS = ("A", "B", "C")
+NEW_ROUTE_BATCH_IDS = ("N-A", "N-B", "N-C")
 
 
 class GeoPoint(BaseModel):
@@ -74,6 +76,7 @@ class TripRouteCase(BaseModel):
     summary: str
     stops: list[RouteStop] = Field(default_factory=list)
     maps_route_url: str = ""
+    preserved: bool = False
 
 
 class RouteProgram(BaseModel):

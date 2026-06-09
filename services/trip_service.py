@@ -66,11 +66,10 @@ def _resolve_item_vote(
     votes_by_key: dict[str, int],
     votes_by_index: dict[tuple[str, int], int],
 ) -> ItemVote | None:
-    """Сначала по item_key, иначе по (section, index) — для старых оценок."""
+    """Только по item_key — индекс после пересборки нестабилен."""
+    _ = (index, votes_by_index)
     item_key = make_item_key(section, text)
     raw = votes_by_key.get(item_key)
-    if raw not in (1, -1):
-        raw = votes_by_index.get((section, index))
     return raw if raw in (1, -1) else None
 
 
@@ -514,6 +513,9 @@ class TripService:
             transport=str(prefs.get("transport_preference") or "mixed"),
             pace=str(prefs.get("pace") or "moderate"),
         )
+        from db.repository import prune_stale_item_feedback
+
+        prune_stale_item_feedback(trip_id, program_data, scope="full")
         return self.build_program_view(
             trip_id,
             program_data,
@@ -569,9 +571,32 @@ class TripService:
         if matched_index is None or resolved_key is None:
             raise ValueError("Пункт подборки не найден")
 
+        if vote == 1 and section == "routes":
+            from program.route_feedback import MAX_LIKED_ROUTES_PER_TRIP, count_liked_routes
+
+            existing_votes = list_item_feedback(trip_id)
+            already_liked = existing_votes.get(resolved_key) == 1
+            if not already_liked:
+                liked_count = count_liked_routes(program.model_dump(), trip_id)
+                if liked_count >= MAX_LIKED_ROUTES_PER_TRIP:
+                    raise ValueError(
+                        f"Лимит лайков маршрутов ({MAX_LIKED_ROUTES_PER_TRIP}) для поездки"
+                    )
+
         if vote is None:
+            from db.repository import delete_feedback_at_index
+
             delete_item_feedback(trip_id, section, resolved_key)
+            delete_feedback_at_index(trip_id, section, matched_index)
             return
+        from db.repository import delete_feedback_at_index
+
+        delete_feedback_at_index(
+            trip_id,
+            section,
+            matched_index,
+            except_item_key=resolved_key,
+        )
         storage_version_id = int(latest["id"]) if latest is not None else None
         upsert_item_feedback(
             trip_id,

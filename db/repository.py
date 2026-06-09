@@ -622,6 +622,36 @@ def delete_item_feedback(trip_id: int, section: str, item_key: str) -> None:
         conn.commit()
 
 
+def delete_feedback_at_index(
+    trip_id: int,
+    section: str,
+    item_index: int,
+    *,
+    except_item_key: str | None = None,
+) -> int:
+    """Снимает «осиротевшие» оценки на том же item_index (после пересборки)."""
+    with connect() as conn:
+        if except_item_key:
+            cursor = conn.execute(
+                """
+                DELETE FROM program_item_feedback
+                WHERE trip_id = ? AND section = ? AND item_index = ?
+                  AND item_key != ?
+                """,
+                (trip_id, section, item_index, except_item_key),
+            )
+        else:
+            cursor = conn.execute(
+                """
+                DELETE FROM program_item_feedback
+                WHERE trip_id = ? AND section = ? AND item_index = ?
+                """,
+                (trip_id, section, item_index),
+            )
+        conn.commit()
+        return int(cursor.rowcount)
+
+
 def save_section_artifact(
     trip_id: int,
     section: str,

@@ -1,6 +1,6 @@
 /** Структурированные маршруты из program.routes (models/routes.py). */
 
-export type RouteCaseId = "A" | "B" | "C";
+export type RouteCaseId = "A" | "B" | "C" | string;
 
 export interface RouteStop {
   order: number;
@@ -16,6 +16,7 @@ export interface TripRouteCase {
   summary: string;
   stops: RouteStop[];
   maps_route_url: string;
+  preserved?: boolean;
 }
 
 export interface RouteProgram {
@@ -24,7 +25,21 @@ export interface RouteProgram {
   cases: TripRouteCase[];
 }
 
-const CASE_ORDER: Record<string, number> = { A: 0, B: 1, C: 2 };
+const CASE_ORDER: Record<string, number> = {
+  A: 0,
+  B: 1,
+  C: 2,
+  "N-A": 10,
+  "N-B": 11,
+  "N-C": 12,
+};
+
+function sortKey(item: TripRouteCase): number {
+  if (item.preserved) {
+    return CASE_ORDER[item.case_id] ?? 0;
+  }
+  return 100 + (CASE_ORDER[item.case_id] ?? 50);
+}
 
 export function parseRouteProgram(routes: unknown): TripRouteCase[] {
   if (!routes || typeof routes !== "object") {
@@ -41,10 +56,7 @@ export function parseRouteProgram(routes: unknown): TripRouteCase[] {
         typeof item === "object" &&
         typeof (item as TripRouteCase).case_id === "string",
     )
-    .sort(
-      (a, b) =>
-        (CASE_ORDER[a.case_id] ?? 99) - (CASE_ORDER[b.case_id] ?? 99),
-    );
+    .sort((a, b) => sortKey(a) - sortKey(b));
 }
 
 export function routeCaseAtIndex(

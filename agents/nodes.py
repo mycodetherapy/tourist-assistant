@@ -198,14 +198,40 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
         dates=ctx.dates,
         rebuild_scope=rebuild_scope,
     )
+    route_feedback_ctx = None
+    trip_id = state.get("trip_id")
+    if rebuild_scope == "routes" and base_program and trip_id is not None:
+        from program.route_feedback import build_route_feedback_context
+
+        route_feedback_ctx = build_route_feedback_context(
+            base_program, int(trip_id)
+        )
+
+    routes_instruction = (
+        "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
+        "Только leisure poi_id из materials_digest; без вокзалов и аэропортов. "
+        "A — компактный, B — средний, C — длинный. narrative — название места. "
+        "maps_route_url оставь пустым — заполнит пост-процессор.\n"
+    )
+    if route_feedback_ctx and route_feedback_ctx.liked_cases:
+        routes_instruction = (
+            "- routes: РОВНО 3 НОВЫх пеших маршрута A/B/C (компактный/средний/длинный). "
+            "Лайкнутые варианты сохранятся автоматически — не дублируй их poi_id. "
+            "Только leisure poi_id из materials_digest. "
+            "maps_route_url оставь пустым.\n"
+            f"{route_feedback_ctx.llm_instructions}"
+        )
+    elif route_feedback_ctx:
+        routes_instruction = (
+            "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
+            "Только leisure poi_id из materials_digest.\n"
+            f"{route_feedback_ctx.llm_instructions}"
+        )
 
     system = SystemMessage(
         content=(
             "Составь программу по ToolMessage (билеты уже готовы).\n"
-            "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
-            "Только leisure poi_id из materials_digest; без вокзалов и аэропортов. "
-            "A — компактный, B — средний, C — длинный. narrative — название места. "
-            "maps_route_url оставь пустым — заполнит пост-процессор.\n"
+            f"{routes_instruction}"
             "- lifehacks: 4–7 коротких советов, до 800 символов, без ссылок.\n"
             f"Город: {ctx.city}. Даты: {ctx.dates}. Вылет из: {ctx.origin_city}."
             f"{prefs_note}{scope_note}"
@@ -244,6 +270,7 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
             expected_city=ctx.city,
             trip_id=int(trip_id) if trip_id is not None else None,
             dates=ctx.dates,
+            rebuild_scope=rebuild_scope,
         )
         if trip_id is not None and rebuild_scope == "full":
             materials = load_route_materials(

@@ -16,6 +16,36 @@ from db import (
 from services.trip_service import TripService
 
 
+def _sample_routes_program(case_ids: list[str]) -> dict:
+    from agents.route_postprocess import format_routes_text
+    from models.routes import RouteProgram, RouteStop, TripRouteCase
+
+    cases = [
+        TripRouteCase(
+            case_id=cid,
+            title=f"Маршрут {cid}",
+            summary=f"Описание {cid}",
+            stops=[
+                RouteStop(
+                    order=1,
+                    kind="leisure",
+                    poi_id=f"p-{cid}",
+                    narrative=f"Место {cid}",
+                )
+            ],
+            maps_route_url=f"https://yandex.ru/maps/?rtext={cid}",
+        )
+        for cid in case_ids
+    ]
+    program = RouteProgram(cases=cases)
+    return {
+        "tickets": "- Aviasales: url",
+        "routes": program.model_dump(),
+        "routes_text": format_routes_text(program),
+        "lifehacks": "- Совет",
+    }
+
+
 class TestItemFeedback(unittest.TestCase):
     def setUp(self) -> None:
         self._db_path = "/tmp/test_item_feedback.db"
@@ -173,8 +203,8 @@ class TestItemFeedback(unittest.TestCase):
                 vote=1,
             )
 
-    def test_votes_fallback_by_index_after_parser_change(self) -> None:
-        """Оценка по item_index подтягивается, если item_key устарел."""
+    def test_stale_key_no_longer_applies_by_index(self) -> None:
+        """После пересборки оценка по старому item_key не «переезжает» на новый пункт."""
         upsert_item_feedback(
             self.trip_id,
             self.version_id,
@@ -185,7 +215,50 @@ class TestItemFeedback(unittest.TestCase):
         )
         view = self.service.get_program_view(self.trip_id)
         assert view is not None
-        self.assertEqual(view.sections["events"].items[0].vote, 1)
+        self.assertIsNone(view.sections["events"].items[0].vote)
+
+    def test_unlike_clears_vote(self) -> None:
+        from program.item_key import make_item_key
+
+        key = make_item_key("events", "1. Музей")
+        self.service.set_item_feedback(
+            self.trip_id,
+            section="events",
+            item_key=key,
+            vote=1,
+        )
+        self.service.set_item_feedback(
+            self.trip_id,
+            section="events",
+            item_key=key,
+            vote=None,
+        )
+        view = self.service.get_program_view(self.trip_id)
+        assert view is not None
+        self.assertIsNone(view.sections["events"].items[0].vote)
+
+    def test_rebuild_does_not_show_old_like_on_new_route(self) -> None:
+        from program.item_key import make_item_key
+        from program.parse_items import parse_program_sections
+
+        program_v1 = _sample_routes_program(["A", "B", "C"])
+        save_itinerary_version(self.trip_id, program_v1, scope="full")
+        key_b = make_item_key("routes", parse_program_sections(program_v1).routes.items[1])
+        upsert_item_feedback(
+            self.trip_id,
+            self.version_id,
+            "routes",
+            1,
+            key_b,
+            1,
+        )
+        program_v2 = _sample_routes_program(["A", "X", "Y", "Z"])
+        save_itinerary_version(self.trip_id, program_v2, scope="routes")
+        view = self.service.get_program_view(self.trip_id)
+        assert view is not None
+        for item in view.sections["routes"].items:
+            if "Вариант X" in item.text or "Вариант Y" in item.text or "Вариант Z" in item.text:
+                self.assertIsNone(item.vote)
 
     def test_set_item_feedback_accepts_item_index(self) -> None:
         self.service.set_item_feedback(

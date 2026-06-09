@@ -337,7 +337,7 @@ def load_route_materials(
 
 
 def _routes_need_maps_finalize(program: RouteProgram) -> bool:
-    if len(program.cases) < 3:
+    if not program.cases:
         return False
     return any(not str(case.maps_route_url).strip() for case in program.cases)
 
@@ -352,14 +352,24 @@ def resolve_routes_program(
     expected_city: str | None = None,
     trip_id: int | None = None,
     dates: str = "",
+    rebuild_scope: str = "full",
 ) -> tuple[RouteProgram, str]:
     from agents.route_postprocess import (
         build_fallback_route_program,
         build_hybrid_route_program,
+        build_new_routes_respecting_likes,
         finalize_route_program,
         format_routes_text,
     )
     from models.routes import RouteProgram
+    from program.route_feedback import (
+        extract_liked_routes,
+        merge_preserved_with_new_routes,
+    )
+
+    preserved: list[Any] = []
+    if rebuild_scope == "routes" and base_program and trip_id is not None:
+        preserved = extract_liked_routes(base_program, int(trip_id))
 
     if trip_id is not None:
         from search.route_materials_store import ensure_route_materials_for_trip
@@ -382,7 +392,15 @@ def resolve_routes_program(
                 draft_prog = RouteProgram.model_validate(draft_routes)
             except Exception:
                 draft_prog = None
-        if draft_prog and len(draft_prog.cases) >= 3:
+        if preserved:
+            program = build_new_routes_respecting_likes(
+                materials,
+                draft_prog if draft_prog and len(draft_prog.cases) >= 3 else None,
+                preserved,
+                transport=transport,
+                pace=pace,
+            )
+        elif draft_prog and len(draft_prog.cases) >= 3:
             program = build_hybrid_route_program(
                 materials, draft_prog, transport=transport, pace=pace
             )
@@ -393,7 +411,7 @@ def resolve_routes_program(
             program = RouteProgram.model_validate(draft_routes)
         except Exception:
             program = None
-    elif base_program and base_program.get("routes"):
+    elif base_program and base_program.get("routes") and not preserved:
         try:
             program = RouteProgram.model_validate(base_program["routes"])
         except Exception:
@@ -419,6 +437,9 @@ def resolve_routes_program(
             program = finalize_route_program(
                 program, materials, transport=transport, pace=pace
             )
+
+    if preserved:
+        program = merge_preserved_with_new_routes(preserved, program)
 
     return program, format_routes_text(program)
 
