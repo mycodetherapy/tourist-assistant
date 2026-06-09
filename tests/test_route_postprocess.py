@@ -6,6 +6,7 @@ import unittest
 
 from agents.route_postprocess import (
     build_fallback_route_program,
+    build_hybrid_route_program,
     estimate_path_km,
     format_routes_text,
     leisure_overlap_ratio,
@@ -15,6 +16,7 @@ from models.routes import (
     GeoPoint,
     PoiPoint,
     RouteMaterials,
+    RouteProgram,
     RouteStop,
     TripRouteCase,
 )
@@ -170,6 +172,102 @@ class TestRoutePostprocess(unittest.TestCase):
         a, b, c = program.cases
         self.assertLess(leisure_overlap_ratio(a, b), 0.75)
         self.assertLess(leisure_overlap_ratio(b, c), 0.7)
+
+    def test_hybrid_keeps_llm_ranking_for_valid_case_a(self) -> None:
+        materials = _kostroma_materials()
+        fallback = build_fallback_route_program(materials)
+
+        def _poi_ids(case: TripRouteCase) -> list[str]:
+            return [s.poi_id for s in case.stops if s.kind == "leisure" and s.poi_id]
+
+        draft = RouteProgram(
+            cases=[
+                TripRouteCase(
+                    case_id="A",
+                    title="A",
+                    summary="",
+                    stops=[
+                        RouteStop(order=1, kind="leisure", poi_id="susan", narrative=""),
+                        RouteStop(order=2, kind="leisure", poi_id="kal", narrative=""),
+                        RouteStop(order=3, kind="leisure", poi_id="ryady", narrative=""),
+                        RouteStop(order=4, kind="leisure", poi_id="bogo", narrative=""),
+                    ],
+                ),
+                TripRouteCase(
+                    case_id="B",
+                    title="B",
+                    summary="",
+                    stops=[
+                        RouteStop(order=i, kind="leisure", poi_id=pid, narrative="")
+                        for i, pid in enumerate(_poi_ids(fallback.cases[1]), start=1)
+                    ],
+                ),
+                TripRouteCase(
+                    case_id="C",
+                    title="C",
+                    summary="",
+                    stops=[
+                        RouteStop(order=i, kind="leisure", poi_id=pid, narrative="")
+                        for i, pid in enumerate(_poi_ids(fallback.cases[2]), start=1)
+                    ],
+                ),
+            ]
+        )
+        hybrid = build_hybrid_route_program(materials, draft)
+        a_stops = [s for s in hybrid.cases[0].stops if s.kind == "leisure"]
+        a_ids = [s.poi_id for s in a_stops if s.poi_id]
+        self.assertGreaterEqual(len(a_ids), 3)
+        self.assertTrue({"susan", "kal", "ryady", "bogo"}.issubset(set(a_ids)))
+        a_coords = [
+            next(p.coordinates for p in materials.leisure_points if p.poi_id == s.poi_id)
+            for s in a_stops
+            if s.poi_id
+        ]
+        self.assertGreaterEqual(estimate_path_km(a_coords), 2.0)
+        self.assertLessEqual(estimate_path_km(a_coords), 5.5)
+
+    def test_hybrid_falls_back_when_llm_poi_invalid(self) -> None:
+        materials = _kostroma_materials()
+        fallback = build_fallback_route_program(materials)
+
+        def _poi_ids(case: TripRouteCase) -> list[str]:
+            return [s.poi_id for s in case.stops if s.kind == "leisure" and s.poi_id]
+
+        draft = RouteProgram(
+            cases=[
+                TripRouteCase(
+                    case_id="A",
+                    title="A",
+                    summary="",
+                    stops=[
+                        RouteStop(order=1, kind="leisure", poi_id="unknown", narrative=""),
+                    ],
+                ),
+                TripRouteCase(
+                    case_id="B",
+                    title="B",
+                    summary="",
+                    stops=[
+                        RouteStop(order=i, kind="leisure", poi_id=pid, narrative="")
+                        for i, pid in enumerate(_poi_ids(fallback.cases[1]), start=1)
+                    ],
+                ),
+                TripRouteCase(
+                    case_id="C",
+                    title="C",
+                    summary="",
+                    stops=[
+                        RouteStop(order=i, kind="leisure", poi_id=pid, narrative="")
+                        for i, pid in enumerate(_poi_ids(fallback.cases[2]), start=1)
+                    ],
+                ),
+            ]
+        )
+        hybrid = build_hybrid_route_program(materials, draft)
+        self.assertEqual(
+            set(_poi_ids(hybrid.cases[0])),
+            set(_poi_ids(fallback.cases[0])),
+        )
 
     def test_kostroma_uses_landmark_names(self) -> None:
         from search.yandex.poi_filters import is_generic_street_name

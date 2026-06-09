@@ -346,7 +346,7 @@ python3 scripts/render_graph.py
 | **Яндекс.Карты API** | API Геокодера (`YANDEX_MAPS_API_KEY`): POI и рестораны |
 | **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок |
 
-Билеты: `search/ticket_links.py` + `search/providers/avia.py`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`; LLM выбирает только `poi_id` из whitelist пула.
+Билеты: `search/ticket_links.py` + `search/providers/avia.py`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
 
 ### Почему нужен именно агент, а не workflow?
 
@@ -440,6 +440,7 @@ python3 -m scripts.metrics_report --limit 50
 | **Повторный запуск без опросника** | `user_profile` + `trip_preferences`; fallback из последней поездки |
 | **Конфликт категорий** (музей в «Билетах») | Постфильтрация `SEARCH_FILTERS` в `search/web.py` |
 | **Даты в далёком будущем** | В поиске может не быть цен — в ответе ссылки «уточните на сайте» |
+| **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap B/C &gt; 85% — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
 
 ### Как понять, что агент работает хорошо?
 

@@ -16,6 +16,7 @@ from agents.finalize_helpers import (
     build_fallback_program_draft,
     extract_tickets_summary,
     prepare_finalize_messages,
+    resolve_routes_program,
     slim_tool_message_for_finalize,
     resolve_tickets_section,
 )
@@ -160,6 +161,40 @@ class TestFinalizeHelpers(unittest.TestCase):
         wrapper.parsed = inner
         self.assertEqual(len(_coerce_program_draft(wrapper).routes.cases), 3)
         self.assertEqual(_coerce_program_draft(inner).lifehacks, "Совет")
+
+    def test_resolve_routes_uses_hybrid_with_draft(self) -> None:
+        from agents.route_postprocess import build_fallback_route_program
+        from models.routes import RouteProgram, RouteStop, TripRouteCase
+
+        materials = RouteMaterials.model_validate(_materials_payload()["materials"])
+        fallback = build_fallback_route_program(materials)
+        draft = RouteProgram(
+            cases=[
+                TripRouteCase(
+                    case_id="A",
+                    title="A",
+                    summary="",
+                    stops=[
+                        RouteStop(order=1, kind="leisure", poi_id="l2", narrative=""),
+                        RouteStop(order=2, kind="leisure", poi_id="l1", narrative=""),
+                        RouteStop(order=3, kind="leisure", poi_id="l3", narrative=""),
+                    ],
+                ),
+                *fallback.cases[1:],
+            ]
+        )
+        messages = [
+            ToolMessage(
+                content=json.dumps(_materials_payload(), ensure_ascii=False),
+                tool_call_id="m",
+                name="search_route_materials",
+            ),
+        ]
+        program, _ = resolve_routes_program(
+            messages, draft.model_dump(), base_program=None, transport="walking"
+        )
+        a_ids = [s.poi_id for s in program.cases[0].stops if s.kind == "leisure" and s.poi_id]
+        self.assertEqual(a_ids[0], "l2")
 
     def test_invoke_fallback_passes_city(self) -> None:
         from unittest.mock import MagicMock

@@ -416,6 +416,22 @@ def _trim_to_max_km(
     return current
 
 
+def _trim_indices_to_profile(
+    leisure: list[PoiPoint],
+    indices: list[int],
+    profile: RouteProfile,
+) -> list[int]:
+    """Урезает до max_stops, но оставляет доп. точку, если иначе не дотягиваем abs_min_km."""
+    result = _order_indices_by_path(leisure, indices)
+    while len(result) > profile.max_stops:
+        shorter = result[:-1]
+        if estimate_path_km(_window_coords(leisure, shorter)) >= profile.abs_min_km:
+            result = shorter
+        else:
+            break
+    return result
+
+
 def _score_window(
     leisure: list[PoiPoint],
     window: list[int],
@@ -550,46 +566,167 @@ def _stops_from_indices(leisure: list[PoiPoint], indices: list[int]) -> list[Rou
     return stops
 
 
-def _finalize_leisure_indices(
+def _ranked_indices_from_case(
     case: TripRouteCase,
     leisure: list[PoiPoint],
-    profile: RouteProfile,
-    span_km: float,
 ) -> list[int]:
-    """Собирает индексы POI для варианта: без дублей, с min km и достаточным числом точек."""
-    ordered = _order_indices(leisure)
+    """Индексы POI из черновика LLM в порядке остановок."""
     poi_to_idx = {p.poi_id: i for i, p in enumerate(leisure)}
     seed: list[int] = []
     for stop in sorted(case.stops, key=lambda s: s.order):
         if stop.kind != "leisure" or not stop.poi_id:
             continue
         idx = poi_to_idx.get(stop.poi_id)
-        if idx is None:
+        if idx is None or idx in seed:
             continue
         poi = leisure[idx]
         if any(_poi_name_conflict(poi, leisure[keep]) for keep in seed):
             continue
         seed.append(idx)
+    return seed
 
-    if seed:
-        indices = _order_indices_by_path(leisure, seed)
-        coords = _window_coords(leisure, indices)
-        if (
-            len(indices) >= profile.min_stops
-            and estimate_path_km(coords) >= profile.abs_min_km
-            and not _window_has_duplicate_names(leisure, indices)
-        ):
-            return indices[: profile.max_stops]
-        indices = _extend_for_min_km(leisure, indices, profile, ordered, span_km=span_km)
-        indices = _densify_window(leisure, ordered, indices, profile)
-        indices = _extend_for_min_km(leisure, indices, profile, ordered, span_km=span_km)
-    else:
-        indices = _pick_window(leisure, ordered, profile, span_km=span_km)
+
+def _indices_from_llm_ranking(
+    case: TripRouteCase,
+    leisure: list[PoiPoint],
+    profile: RouteProfile,
+    ordered: list[int],
+    span_km: float,
+    *,
+    compact: bool = False,
+    max_km: float | None = None,
+) -> list[int] | None:
+    """
+    Ранжирование LLM: poi_id в порядке модели → проверка km/дублей → обрезка или добор.
+    None — черновик не прошёл валидацию, нужен алгоритмический fallback.
+    """
+    seed = _ranked_indices_from_case(case, leisure)
+    if not seed:
+        return None
+
+    leg_limit = profile.max_leg_km if compact else _leg_limit_km(profile, span_km)
+    indices = seed[: profile.max_stops]
+    coords = _window_coords(leisure, indices)
+    if not _legs_within_limit(coords, leg_limit):
+        indices = _order_indices_by_path(leisure, indices)
+        if not _legs_within_limit(_window_coords(leisure, indices), leg_limit):
+            return None
+
+    if max_km is not None:
+        while len(indices) > profile.min_stops:
+            if estimate_path_km(_window_coords(leisure, indices)) <= max_km:
+                break
+            indices = indices[:-1]
+        if estimate_path_km(_window_coords(leisure, indices)) > max_km:
+            return None
+
+    grow_limit = profile.max_stops + (1 if compact else 2)
+    while (
+        estimate_path_km(_window_coords(leisure, indices)) < profile.abs_min_km
+        and len(indices) < grow_limit
+    ):
+        added = False
+        for idx in ordered:
+            if idx in indices:
+                continue
+            trial = _order_indices_by_path(leisure, indices + [idx])
+            if _window_has_duplicate_names(leisure, trial):
+                continue
+            trial_coords = _window_coords(leisure, trial)
+            if not _legs_within_limit(trial_coords, leg_limit):
+                continue
+            trial_km = estimate_path_km(trial_coords)
+            if max_km is not None and trial_km > max_km:
+                continue
+            indices = trial
+            added = True
+            break
+        if not added:
+            break
+
+    indices = _extend_for_min_km(
+        leisure,
+        indices,
+        profile,
+        ordered,
+        span_km=span_km,
+        compact=compact,
+        max_km=max_km,
+    )
+    if max_km is not None:
+        indices = _trim_to_max_km(leisure, indices, profile, max_km)
 
     if _window_has_duplicate_names(leisure, indices):
         indices = _filter_conflicting_indices(leisure, indices)
 
-    return indices[: profile.max_stops]
+    coords = _window_coords(leisure, indices)
+    km = estimate_path_km(coords)
+    if len(indices) < profile.min_stops or km < profile.abs_min_km:
+        return None
+    if max_km is not None and km > max_km * 1.05:
+        return None
+    if not compact and not _legs_within_limit(coords, _leg_limit_km(profile, span_km)):
+        if not _legs_within_limit(
+            coords, _novel_leg_limit_km(profile, span_km)
+        ):
+            return None
+
+    return _trim_indices_to_profile(leisure, indices, profile)
+
+
+def _finalize_leisure_indices(
+    case: TripRouteCase,
+    leisure: list[PoiPoint],
+    profile: RouteProfile,
+    span_km: float,
+    *,
+    compact: bool = False,
+    max_km: float | None = None,
+) -> list[int]:
+    """Собирает индексы POI для варианта: LLM-ранг или добор алгоритмом."""
+    ordered = _order_indices(leisure)
+    llm = _indices_from_llm_ranking(
+        case,
+        leisure,
+        profile,
+        ordered,
+        span_km,
+        compact=compact,
+        max_km=max_km,
+    )
+    if llm is not None:
+        return llm
+
+    if seed := _ranked_indices_from_case(case, leisure):
+        indices = _order_indices_by_path(leisure, seed)
+        indices = _extend_for_min_km(
+            leisure,
+            indices,
+            profile,
+            ordered,
+            span_km=span_km,
+            compact=compact,
+            max_km=max_km,
+        )
+        if max_km is not None:
+            indices = _trim_to_max_km(leisure, indices, profile, max_km)
+        if _window_has_duplicate_names(leisure, indices):
+            indices = _filter_conflicting_indices(leisure, indices)
+        coords = _window_coords(leisure, indices)
+        if (
+            len(indices) >= profile.min_stops
+            and estimate_path_km(coords) >= profile.abs_min_km
+        ):
+            return _trim_indices_to_profile(leisure, indices, profile)
+
+    return _pick_window(
+        leisure,
+        ordered,
+        profile,
+        span_km=span_km,
+        compact=compact,
+        max_km=max_km,
+    )
 
 
 def finalize_route_program(
@@ -605,7 +742,16 @@ def finalize_route_program(
     cases: list[TripRouteCase] = []
     for case in program.cases:
         profile = profiles[case.case_id if case.case_id in profiles else "A"]  # type: ignore[index]
-        indices = _finalize_leisure_indices(case, leisure, profile, span_km)
+        compact = case.case_id == "A"
+        max_km = _MAX_ROUTE_KM_SHORT if case.case_id == "A" else None
+        indices = _finalize_leisure_indices(
+            case,
+            leisure,
+            profile,
+            span_km,
+            compact=compact,
+            max_km=max_km,
+        )
         valid_stops = _stops_from_indices(leisure, indices)
         points: list[GeoPoint] = []
         labels: list[str] = []
@@ -739,12 +885,13 @@ def _pick_novel_route(
     return base[: profile.max_stops]
 
 
-def build_fallback_route_program(materials: RouteMaterials) -> RouteProgram:
-    """Три пеших варианта разной длины — только leisure из пула."""
-    leisure = _landmark_pool(materials.leisure_points)
-    ordered = _order_indices(leisure)
-    profiles = _adapt_profiles(leisure)
-    span_km = _pool_span_km(leisure)
+def _compute_algorithm_indices(
+    leisure: list[PoiPoint],
+    ordered: list[int],
+    profiles: dict[RouteCaseId, RouteProfile],
+    span_km: float,
+) -> dict[RouteCaseId, list[int]]:
+    """Индексы A/B/C чистым алгоритмом (fallback)."""
     outliers = _outlier_indices(leisure, count=2)
     far_idx = _farthest_index(leisure)
 
@@ -786,25 +933,122 @@ def build_fallback_route_program(materials: RouteMaterials) -> RouteProgram:
             min_unique=2,
             must_include=c_must,
         )
+    return {"A": a_idx, "B": b_idx, "C": c_idx}
 
-    def _case(case_id: RouteCaseId, indices: list[int]) -> TripRouteCase:
+
+def _trip_case_from_indices(
+    case_id: RouteCaseId,
+    indices: list[int],
+    leisure: list[PoiPoint],
+    profile: RouteProfile,
+    city: str,
+) -> TripRouteCase:
+    km = estimate_path_km([leisure[i].coordinates for i in indices])
+    return TripRouteCase(
+        case_id=case_id,
+        title=profile.title,
+        summary=(
+            f"Пешая прогулка по {city}: {profile.title.lower()}, "
+            f"~{km:.1f} км, {len(indices)} остановок."
+        ),
+        stops=_stops_from_indices(leisure, indices)[:-1],
+    )
+
+
+def _draft_case_map(draft: RouteProgram) -> dict[RouteCaseId, TripRouteCase]:
+    out: dict[RouteCaseId, TripRouteCase] = {}
+    for case in draft.cases:
+        cid = case.case_id
+        if cid in ("A", "B", "C") and cid not in out:
+            out[cid] = case  # type: ignore[assignment]
+    return out
+
+
+_HYBRID_MAX_OVERLAP = 0.85
+
+
+def build_hybrid_route_program(
+    materials: RouteMaterials,
+    draft: RouteProgram,
+    *,
+    transport: str = "walking",
+) -> RouteProgram:
+    """
+    LLM ранжирует poi_id по вариантам; алгоритм валидирует km/дубли или подставляет fallback.
+    """
+    leisure = _landmark_pool(materials.leisure_points)
+    ordered = _order_indices(leisure)
+    profiles = _adapt_profiles(leisure)
+    span_km = _pool_span_km(leisure)
+    algo = _compute_algorithm_indices(leisure, ordered, profiles, span_km)
+    draft_cases = _draft_case_map(draft)
+
+    indices_by_id: dict[RouteCaseId, list[int]] = {}
+    for case_id in ("A", "B", "C"):
         profile = profiles[case_id]
-        km = estimate_path_km([leisure[i].coordinates for i in indices])
-        return TripRouteCase(
-            case_id=case_id,
-            title=profile.title,
-            summary=(
-                f"Пешая прогулка по {materials.city}: {profile.title.lower()}, "
-                f"~{km:.1f} км, {len(indices)} остановок."
-            ),
-            stops=_stops_from_indices(leisure, indices)[:-1],  # без transit_note до finalize
+        compact = case_id == "A"
+        max_km = _MAX_ROUTE_KM_SHORT if case_id == "A" else None
+        llm_idx: list[int] | None = None
+        if case_id in draft_cases:
+            llm_idx = _indices_from_llm_ranking(
+                draft_cases[case_id],
+                leisure,
+                profile,
+                ordered,
+                span_km,
+                compact=compact,
+                max_km=max_km,
+            )
+        indices_by_id[case_id] = llm_idx if llm_idx is not None else algo[case_id]
+
+    def _cases_from_indices() -> list[TripRouteCase]:
+        return [
+            _trip_case_from_indices(
+                case_id,
+                indices_by_id[case_id],
+                leisure,
+                profiles[case_id],
+                materials.city,
+            )
+            for case_id in ("A", "B", "C")
+        ]
+
+    cases = _cases_from_indices()
+    if len(cases) == 3:
+        a, b, c = cases
+        if leisure_overlap_ratio(b, c) > _HYBRID_MAX_OVERLAP:
+            indices_by_id["C"] = algo["C"]
+            cases = _cases_from_indices()
+            a, b, c = cases
+        if leisure_overlap_ratio(a, b) > _HYBRID_MAX_OVERLAP:
+            indices_by_id["B"] = algo["B"]
+            cases = _cases_from_indices()
+
+    program = RouteProgram(cases=cases)
+    return finalize_route_program(program, materials, transport=transport)
+
+
+def build_fallback_route_program(materials: RouteMaterials) -> RouteProgram:
+    """Три пеших варианта разной длины — только leisure из пула (алгоритм)."""
+    leisure = _landmark_pool(materials.leisure_points)
+    if not leisure:
+        return RouteProgram(
+            cases=[
+                TripRouteCase(case_id=cid, title=f"Маршрут {cid}", summary="")
+                for cid in ("A", "B", "C")
+            ]
         )
+    ordered = _order_indices(leisure)
+    profiles = _adapt_profiles(leisure)
+    span_km = _pool_span_km(leisure)
+    algo = _compute_algorithm_indices(leisure, ordered, profiles, span_km)
 
     program = RouteProgram(
         cases=[
-            _case("A", a_idx),
-            _case("B", b_idx),
-            _case("C", c_idx),
+            _trip_case_from_indices(
+                case_id, algo[case_id], leisure, profiles[case_id], materials.city
+            )
+            for case_id in ("A", "B", "C")
         ]
     )
     return finalize_route_program(program, materials, transport="walking")
@@ -816,4 +1060,5 @@ def leisure_overlap_ratio(a: TripRouteCase, b: TripRouteCase) -> float:
     if not a_ids or not b_ids:
         return 1.0
     shared = len(a_ids & b_ids)
-    return shared / max(len(a_ids), len(b_ids))
+    denom = max(len(a_ids), len(b_ids))
+    return shared / denom if denom else 1.0

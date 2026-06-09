@@ -296,6 +296,7 @@ def resolve_routes_program(
 ) -> tuple[RouteProgram, str]:
     from agents.route_postprocess import (
         build_fallback_route_program,
+        build_hybrid_route_program,
         format_routes_text,
     )
     from models.routes import RouteProgram
@@ -303,7 +304,18 @@ def resolve_routes_program(
     materials = load_route_materials(messages)
     program: RouteProgram | None = None
     if materials:
-        program = build_fallback_route_program(materials)
+        draft_prog: RouteProgram | None = None
+        if draft_routes:
+            try:
+                draft_prog = RouteProgram.model_validate(draft_routes)
+            except Exception:
+                draft_prog = None
+        if draft_prog and len(draft_prog.cases) >= 3:
+            program = build_hybrid_route_program(
+                materials, draft_prog, transport=transport
+            )
+        else:
+            program = build_fallback_route_program(materials)
     elif draft_routes:
         try:
             program = RouteProgram.model_validate(draft_routes)
