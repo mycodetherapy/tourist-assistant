@@ -13,7 +13,7 @@ class TestPreferences(unittest.TestCase):
         prefs = TripPreferences(
             pace="relaxed",
             budget="economy",
-            leisure_categories=["landmarks", "museums", "theaters"],
+            interests=["музеи", "архитектура"],
             cuisine="итальянская",
             min_restaurant_rating=4.7,
             transport_preference="metro",
@@ -21,7 +21,7 @@ class TestPreferences(unittest.TestCase):
             special_notes="без очередей",
         )
         ctx = build_search_context(prefs)
-        self.assertIn("Музеи", ctx)
+        self.assertIn("музеи", ctx)
         self.assertIn("4.7", ctx)
 
     def test_enrich_query(self) -> None:

@@ -24,36 +24,52 @@ from search.yandex.parse import feature_to_poi
 from search.yandex.poi_filters import (
     coord_key,
     is_acceptable_place_name,
+    is_landmark_poi_name,
+    poi_name_conflict,
+    route_name_key,
     within_walkable_radius,
 )
 
 
-def _rank_key(poi: PoiPoint) -> tuple[float, float]:
+def _rank_key(poi: PoiPoint) -> tuple[float, float, float]:
     rating = poi.rating if poi.rating is not None else 0.0
-    return (rating, 1.0 if poi.address else 0.0)
+    landmark = 1.0 if is_landmark_poi_name(poi.name) else 0.0
+    return (landmark, rating, 1.0 if poi.address else 0.0)
 
 
 def _append_poi(
     collected: list[PoiPoint],
     seen_ids: set[str],
     seen_coords: set[str],
+    seen_names: set[str],
     feature: dict,
     *,
     tag: LeisureTag,
     center: GeoPoint,
+    city: str,
+    skip_radius: bool = False,
 ) -> bool:
     poi = feature_to_poi(feature, tag=tag)
     if poi is None or poi.poi_id in seen_ids:
         return False
-    if not is_acceptable_place_name(poi.name):
+    if not is_landmark_poi_name(poi.name, city_hint=city):
         return False
-    if not within_walkable_radius(poi.coordinates, center):
+    name_key = route_name_key(poi.name)
+    if name_key in seen_names:
+        return False
+    for existing in collected:
+        if poi_name_conflict(
+            poi.name, poi.coordinates, existing.name, existing.coordinates
+        ):
+            return False
+    if not skip_radius and not within_walkable_radius(poi.coordinates, center):
         return False
     key = coord_key(poi.coordinates)
     if key in seen_coords:
         return False
     seen_ids.add(poi.poi_id)
     seen_coords.add(key)
+    seen_names.add(name_key)
     collected.append(poi)
     return True
 
@@ -68,6 +84,7 @@ def _collect_from_seeds(
     collected: list[PoiPoint],
     seen_ids: set[str],
     seen_coords: set[str],
+    seen_names: set[str],
 ) -> None:
     for seed in seeds_for_city(city, categories):
         if len(collected) >= limit:
@@ -82,7 +99,7 @@ def _collect_from_seeds(
             )
             for feature in batch:
                 meta = feature.get("properties", {}).get("CompanyMetaData", {})
-                if is_acceptable_place_name(str(meta.get("name") or "")):
+                if is_landmark_poi_name(str(meta.get("name") or "")):
                     meta["name"] = seed.name
                     props = feature.setdefault("properties", {})
                     props["name"] = seed.name
@@ -90,7 +107,7 @@ def _collect_from_seeds(
                     break
         if not features:
             coords = fallback_coords(seed)
-            if coords is None or not within_walkable_radius(coords, center):
+            if coords is None:
                 continue
             features = [seed_to_feature(seed)]
         for feature in features:
@@ -98,9 +115,12 @@ def _collect_from_seeds(
                 collected,
                 seen_ids,
                 seen_coords,
+                seen_names,
                 feature,
                 tag=seed.tag,
                 center=center,
+                city=city,
+                skip_radius=True,
             ):
                 break
 
@@ -115,6 +135,7 @@ def _collect_from_tags(
     collected: list[PoiPoint],
     seen_ids: set[str],
     seen_coords: set[str],
+    seen_names: set[str],
 ) -> None:
     for tag in categories:
         if len(collected) >= limit:
@@ -136,9 +157,11 @@ def _collect_from_tags(
                     collected,
                     seen_ids,
                     seen_coords,
+                    seen_names,
                     feature,
                     tag=tag,
                     center=center,
+                    city=city,
                 )
 
 
@@ -157,6 +180,7 @@ def search_leisure_points(
     limit = leisure_pool_limit(pace)
     seen_ids: set[str] = set()
     seen_coords: set[str] = set()
+    seen_names: set[str] = set()
     collected: list[PoiPoint] = []
 
     _collect_from_seeds(
@@ -168,6 +192,7 @@ def search_leisure_points(
         collected=collected,
         seen_ids=seen_ids,
         seen_coords=seen_coords,
+        seen_names=seen_names,
     )
     if len(collected) < limit and get_api_key():
         _collect_from_tags(
@@ -179,6 +204,7 @@ def search_leisure_points(
             collected=collected,
             seen_ids=seen_ids,
             seen_coords=seen_coords,
+            seen_names=seen_names,
         )
     if not collected and not get_api_key():
         collected = _demo_leisure(city, categories, lon, lat, spn_lon, spn_lat, limit)

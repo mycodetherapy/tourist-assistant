@@ -2,18 +2,7 @@
 
 from __future__ import annotations
 
-from models.routes import LeisureTag
 from onboarding.preferences import TripPreferences, build_search_context
-from search.yandex.leisure_tags import TAG_SPECS, normalize_leisure_categories
-
-_OPTIONAL_LEISURE: tuple[LeisureTag, ...] = (
-    "museums",
-    "exhibitions",
-    "galleries",
-    "philharmonic",
-    "theaters",
-    "parks",
-)
 
 
 def _prompt_choice(
@@ -58,37 +47,6 @@ def _prompt_yes_no(label: str, *, default: bool = True) -> bool:
     return raw in {"y", "yes", "д", "да"}
 
 
-def _prompt_leisure_categories(default_keys: list[LeisureTag] | None) -> list[LeisureTag]:
-    """Мультивыбор категорий досуга для поиска на Яндекс.Картах."""
-    default = normalize_leisure_categories(default_keys)
-    default_optional = [k for k in default if k != "landmarks"]
-    print("\n3. Категории досуга для маршрутов (Яндекс.Карты)")
-    print("   0 — только достопримечательности (по умолчанию, если Enter)")
-    for index, key in enumerate(_OPTIONAL_LEISURE, start=1):
-        mark = " [выбрано]" if key in default_optional else ""
-        print(f"   {index}. {TAG_SPECS[key].label_ru}{mark}")
-    hint = ",".join(str(_OPTIONAL_LEISURE.index(k) + 1) for k in default_optional)
-    raw = input(
-        f"Номера через запятую [Enter = {hint or '0'}]: "
-    ).strip()
-    if not raw:
-        return normalize_leisure_categories(default_optional or None)
-    picked: list[str] = []
-    for part in raw.replace(" ", ",").split(","):
-        part = part.strip()
-        if not part:
-            continue
-        if part == "0":
-            continue
-        try:
-            num = int(part)
-        except ValueError:
-            continue
-        if 1 <= num <= len(_OPTIONAL_LEISURE):
-            picked.append(_OPTIONAL_LEISURE[num - 1])
-    return normalize_leisure_categories(picked or None)
-
-
 def _print_preferences_summary(prefs: TripPreferences) -> None:
     print("\n--- Сохранённые предпочтения ---")
     print(build_search_context(prefs))
@@ -101,7 +59,7 @@ def run_questionnaire(*, defaults: TripPreferences | None = None) -> TripPrefere
     Если передан defaults — Enter оставляет прежние ответы (уточняющий режим).
     """
     if defaults is None:
-        print("\n--- Опросник (8 вопросов) ---")
+        print("\n--- Опросник (7 вопросов) ---")
         print("Ответы улучшат поиск билетов, афиши и ресторанов.\n")
     else:
         print("\n--- Уточняющий опрос ---")
@@ -110,7 +68,6 @@ def run_questionnaire(*, defaults: TripPreferences | None = None) -> TripPrefere
     base = defaults
     pace_default = base.pace if base else "moderate"
     budget_default = base.budget if base else "medium"
-    leisure_default = list(base.leisure_categories) if base and base.leisure_categories else None
     interests_default = ", ".join(base.interests) if base and base.interests else ""
     cuisine_default = base.cuisine if base and base.cuisine else "любая местная"
     rating_default = str(base.min_restaurant_rating) if base else "4.5"
@@ -138,17 +95,15 @@ def run_questionnaire(*, defaults: TripPreferences | None = None) -> TripPrefere
         budget_default,
     )
 
-    leisure_categories = _prompt_leisure_categories(leisure_default)
-
     interests_raw = _prompt_line(
-        "4. Доп. интересы через запятую (необязательно)",
+        "3. Интересы через запятую (необязательно)",
         default=interests_default,
     )
     interests = [part.strip() for part in interests_raw.split(",") if part.strip()]
 
-    cuisine = _prompt_line("5. Предпочтения по кухне", default=cuisine_default)
+    cuisine = _prompt_line("4. Предпочтения по кухне", default=cuisine_default)
 
-    rating_raw = _prompt_line("6. Минимальный рейтинг ресторанов (1–5)", default=rating_default)
+    rating_raw = _prompt_line("5. Минимальный рейтинг ресторанов (1–5)", default=rating_default)
     try:
         min_rating = float(rating_raw.replace(",", "."))
     except ValueError:
@@ -156,7 +111,7 @@ def run_questionnaire(*, defaults: TripPreferences | None = None) -> TripPrefere
     min_rating = max(1.0, min(5.0, min_rating))
 
     transport = _prompt_choice(
-        "7. Передвижение по городу?",
+        "6. Передвижение по городу?",
         [
             ("metro", "Метро и общественный транспорт"),
             ("walking", "В основном пешком"),
@@ -167,7 +122,7 @@ def run_questionnaire(*, defaults: TripPreferences | None = None) -> TripPrefere
     )
 
     party = _prompt_choice(
-        "8. С кем едете?",
+        "7. С кем едете?",
         [
             ("solo", "Один/одна"),
             ("couple", "Пара"),
@@ -182,7 +137,6 @@ def run_questionnaire(*, defaults: TripPreferences | None = None) -> TripPrefere
     prefs = TripPreferences(
         pace=pace,
         budget=budget,
-        leisure_categories=leisure_categories,
         interests=interests,
         cuisine=cuisine,
         min_restaurant_rating=min_rating,

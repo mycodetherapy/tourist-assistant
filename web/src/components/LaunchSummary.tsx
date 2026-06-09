@@ -1,7 +1,5 @@
-import { Alert, Descriptions, Tag } from "antd";
+import { Alert, Descriptions } from "antd";
 import type { TripPreferences } from "../api/types";
-import { LEISURE_LABELS } from "../utils/leisure";
-import { normalizeLeisureCategories } from "../utils/preferences";
 
 interface LaunchSummaryProps {
   city: string;
@@ -16,8 +14,6 @@ export function LaunchSummary({
   originCity,
   preferences,
 }: LaunchSummaryProps) {
-  const leisure = normalizeLeisureCategories(preferences.leisure_categories);
-
   return (
     <div className="max-w-xl space-y-4">
       <Alert
@@ -31,11 +27,6 @@ export function LaunchSummary({
           {originCity} → {city}
         </Descriptions.Item>
         <Descriptions.Item label="Даты">{dates}</Descriptions.Item>
-        <Descriptions.Item label="Категории досуга">
-          {leisure.map((tag) => (
-            <Tag key={tag}>{LEISURE_LABELS[tag]}</Tag>
-          ))}
-        </Descriptions.Item>
         <Descriptions.Item label="Темп">{preferences.pace}</Descriptions.Item>
         <Descriptions.Item label="Рестораны от">
           {preferences.min_restaurant_rating} ★

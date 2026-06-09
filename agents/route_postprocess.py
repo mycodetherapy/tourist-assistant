@@ -15,10 +15,21 @@ from models.routes import (
     RouteStop,
     TripRouteCase,
 )
-from search.yandex.poi_filters import coord_key, haversine_km
+from search.yandex.poi_filters import (
+    haversine_km,
+    is_landmark_poi_name,
+    poi_name_conflict,
+    route_name_key,
+)
 from search.yandex.route_url import build_maps_route_url
 
 _WALK_FACTOR = 1.35
+_SPAN_SMALL_CITY_KM = 3.0
+_MIN_ROUTE_KM_SMALL = 1.0
+_MIN_ROUTE_KM_MEDIUM = 3.0
+_MIN_ROUTE_KM_SHORT = 2.0
+_MAX_ROUTE_KM_SHORT = 5.0
+_KM_PER_STOP_TARGET = 2.5
 
 
 @dataclass(frozen=True)
@@ -29,6 +40,7 @@ class RouteProfile:
     min_stops: int
     max_stops: int
     max_leg_km: float
+    abs_min_km: float
 
 
 # Точки на карте: начало → промежуточные → конец (все — leisure из пула).
@@ -38,42 +50,98 @@ _BASE_PROFILES: dict[RouteCaseId, RouteProfile] = {
         target_km_min=3.2,
         target_km_max=4.6,
         min_stops=3,
-        max_stops=3,
+        max_stops=4,
         max_leg_km=2.2,
+        abs_min_km=_MIN_ROUTE_KM_MEDIUM,
     ),
     "B": RouteProfile(
         title="Средний маршрут (5–6 км)",
         target_km_min=4.8,
         target_km_max=6.5,
         min_stops=4,
-        max_stops=5,
+        max_stops=6,
         max_leg_km=2.6,
+        abs_min_km=_MIN_ROUTE_KM_MEDIUM,
     ),
     "C": RouteProfile(
         title="Длинный маршрут (7–8 км)",
         target_km_min=6.5,
         target_km_max=8.8,
         min_stops=5,
-        max_stops=7,
+        max_stops=10,
         max_leg_km=3.2,
+        abs_min_km=_MIN_ROUTE_KM_MEDIUM,
     ),
 }
 
 
-def _stops_for_pool(case_id: RouteCaseId, pool_size: int) -> tuple[int, int]:
-    """min/max точек на карте с учётом размера пула."""
+def _landmark_pool(leisure: list[PoiPoint]) -> list[PoiPoint]:
+    """Только достопримечательности; улицы из Geocoder не участвуют в маршруте."""
+    filtered = [p for p in leisure if is_landmark_poi_name(p.name)]
+    return filtered if len(filtered) >= 3 else leisure
+
+
+def _pool_span_km(leisure: list[PoiPoint]) -> float:
+    """Максимальное расстояние между POI в пуле (пеший коэффициент)."""
+    if len(leisure) < 2:
+        return 0.0
+    max_d = 0.0
+    for i in range(len(leisure)):
+        for j in range(i + 1, len(leisure)):
+            max_d = max(max_d, haversine_km(leisure[i].coordinates, leisure[j].coordinates))
+    return max_d * _WALK_FACTOR
+
+
+def _abs_min_route_km(span_km: float) -> float:
+    if span_km < _SPAN_SMALL_CITY_KM:
+        return _MIN_ROUTE_KM_SMALL
+    return _MIN_ROUTE_KM_MEDIUM
+
+
+def _centroid(leisure: list[PoiPoint]) -> GeoPoint:
+    lon = sum(p.coordinates.lon for p in leisure) / len(leisure)
+    lat = sum(p.coordinates.lat for p in leisure) / len(leisure)
+    return GeoPoint(lon=lon, lat=lat)
+
+
+def _farthest_index(leisure: list[PoiPoint]) -> int:
+    center = _centroid(leisure)
+    return max(
+        range(len(leisure)),
+        key=lambda i: haversine_km(center, leisure[i].coordinates),
+    )
+
+
+def _outlier_indices(leisure: list[PoiPoint], *, count: int = 2) -> set[int]:
+    """Самые дальние POI от центра пула — для длинных маршрутов B/C, не для A."""
+    if len(leisure) <= 4:
+        return set()
+    center = _centroid(leisure)
+    ranked = sorted(
+        range(len(leisure)),
+        key=lambda i: haversine_km(center, leisure[i].coordinates),
+        reverse=True,
+    )
+    return set(ranked[:count])
+
+
+def _stops_for_pool(case_id: RouteCaseId, pool_size: int, span_km: float) -> tuple[int, int]:
+    """min/max точек на карте с учётом размера пула и географического размаха."""
     base = _BASE_PROFILES[case_id]
     if pool_size >= 7:
-        return base.min_stops, base.max_stops
+        max_s = base.max_stops
+        if case_id == "C" and span_km >= 5.0:
+            max_s = min(pool_size, 10)
+        return base.min_stops, max_s
     if pool_size >= 5:
         if case_id == "A":
-            return (3, 3) if pool_size >= 3 else (pool_size, pool_size)
+            return (3, min(4, pool_size)) if pool_size >= 3 else (pool_size, pool_size)
         if case_id == "B":
-            return 4, min(5, pool_size)
-        return 5, min(7, pool_size)
+            return 4, min(5, pool_size - 1) if pool_size <= 7 else min(6, pool_size)
+        return 5, min(10, pool_size)
     if pool_size >= 3:
         if case_id == "A":
-            return 3, 3
+            return 3, min(4, pool_size)
         if case_id == "B":
             return min(4, pool_size), pool_size
         return min(5, pool_size), pool_size
@@ -81,27 +149,44 @@ def _stops_for_pool(case_id: RouteCaseId, pool_size: int) -> tuple[int, int]:
     return n, n
 
 
-def _adapt_profiles(pool_size: int) -> dict[RouteCaseId, RouteProfile]:
-    """Уменьшает число точек, если в городе мало POI."""
+def _adapt_profiles(leisure: list[PoiPoint]) -> dict[RouteCaseId, RouteProfile]:
+    """Профили A/B/C с учётом пула и размаха города."""
+    pool_size = len(leisure)
+    span_km = _pool_span_km(leisure)
+    abs_min = _abs_min_route_km(span_km)
     out: dict[RouteCaseId, RouteProfile] = {}
     for case_id in ("A", "B", "C"):
         base = _BASE_PROFILES[case_id]
-        min_s, max_s = _stops_for_pool(case_id, pool_size)
-        km_scale = 0.85 if pool_size < 5 else 1.0
+        min_s, max_s = _stops_for_pool(case_id, pool_size, span_km)
+        km_scale = 0.9 if pool_size < 5 else 1.0
+        if case_id == "A":
+            out[case_id] = RouteProfile(
+                title=base.title,
+                target_km_min=max(_MIN_ROUTE_KM_SHORT, base.target_km_min * km_scale * 0.9),
+                target_km_max=min(_MAX_ROUTE_KM_SHORT, base.target_km_max * km_scale),
+                min_stops=min_s,
+                max_stops=max_s,
+                max_leg_km=base.max_leg_km,
+                abs_min_km=_MIN_ROUTE_KM_SHORT,
+            )
+            continue
         out[case_id] = RouteProfile(
             title=base.title,
-            target_km_min=base.target_km_min * km_scale,
+            target_km_min=max(abs_min, base.target_km_min * km_scale),
             target_km_max=base.target_km_max * km_scale,
             min_stops=min_s,
             max_stops=max_s,
             max_leg_km=base.max_leg_km,
+            abs_min_km=abs_min,
         )
     return out
 
 
 def route_profile_for_case(case_id: str, *, pool_size: int) -> RouteProfile:
     key: RouteCaseId = case_id if case_id in _BASE_PROFILES else "A"  # type: ignore[assignment]
-    return _adapt_profiles(pool_size)[key]
+    dummy = [PoiPoint(poi_id="x", tag="landmarks", name="x", coordinates=GeoPoint(lon=0, lat=0), maps_url="")]
+    profiles = _adapt_profiles(dummy * max(pool_size, 1))
+    return profiles[key]
 
 
 def estimate_path_km(coords: list[GeoPoint]) -> float:
@@ -139,51 +224,212 @@ def _label_for_stop(stop: RouteStop, index: dict[str, Any]) -> str:
     return ""
 
 
-def _order_indices(leisure: list[PoiPoint]) -> list[int]:
-    """Жадный порядок обхода: от центра пула к ближайшим соседям."""
-    n = len(leisure)
-    if n <= 1:
-        return list(range(n))
-    center_lon = sum(p.coordinates.lon for p in leisure) / n
-    center_lat = sum(p.coordinates.lat for p in leisure) / n
-    center = GeoPoint(lon=center_lon, lat=center_lat)
-    remaining = set(range(n))
-    start = min(
-        remaining,
-        key=lambda i: haversine_km(center, leisure[i].coordinates),
+def _window_coords(leisure: list[PoiPoint], indices: list[int]) -> list[GeoPoint]:
+    return [leisure[i].coordinates for i in indices]
+
+
+def _poi_name_conflict(a: PoiPoint, b: PoiPoint) -> bool:
+    return poi_name_conflict(a.name, a.coordinates, b.name, b.coordinates)
+
+
+def _window_has_duplicate_names(leisure: list[PoiPoint], indices: list[int]) -> bool:
+    for i, a_idx in enumerate(indices):
+        for b_idx in indices[i + 1 :]:
+            if _poi_name_conflict(leisure[a_idx], leisure[b_idx]):
+                return True
+    return False
+
+
+def _leg_limit_km(profile: RouteProfile, span_km: float) -> float:
+    """Допускает более длинные переходы, если город размашистый и нужен min km."""
+    return max(
+        profile.max_leg_km,
+        profile.abs_min_km * 1.15,
+        span_km * 0.45 if span_km > 0 else 0.0,
     )
+
+
+def _legs_within_limit(coords: list[GeoPoint], max_leg_km: float) -> bool:
+    return all(
+        haversine_km(coords[i - 1], coords[i]) <= max_leg_km
+        for i in range(1, len(coords))
+    )
+
+
+def _order_indices_by_path(leisure: list[PoiPoint], indices: list[int]) -> list[int]:
+    """Упорядочивает выбранные POI жадным обходом (не обязательно подряд в ordered)."""
+    if len(indices) <= 1:
+        return list(indices)
+    remaining = set(indices)
+    center_lon = sum(leisure[i].coordinates.lon for i in indices) / len(indices)
+    center_lat = sum(leisure[i].coordinates.lat for i in indices) / len(indices)
+    center = GeoPoint(lon=center_lon, lat=center_lat)
+    start = min(remaining, key=lambda i: haversine_km(center, leisure[i].coordinates))
     path = [start]
     remaining.remove(start)
     while remaining:
         last = path[-1]
         nxt = min(
             remaining,
-            key=lambda i: haversine_km(
-                leisure[last].coordinates, leisure[i].coordinates
-            ),
+            key=lambda i: haversine_km(leisure[last].coordinates, leisure[i].coordinates),
         )
         path.append(nxt)
         remaining.remove(nxt)
     return path
 
 
-def _window_coords(
-    leisure: list[PoiPoint], ordered: list[int], window: list[int]
-) -> list[GeoPoint]:
-    return [leisure[i].coordinates for i in window]
+def _order_indices(leisure: list[PoiPoint]) -> list[int]:
+    """Жадный порядок обхода всего пула: от центра к ближайшим соседям."""
+    return _order_indices_by_path(leisure, list(range(len(leisure))))
 
 
-def _score_window(
+def _target_stops_for_km(km: float, profile: RouteProfile) -> int:
+    """Сколько точек нужно для длинного маршрута (~1 остановка на 2.5 км)."""
+    if km < 4.0:
+        return profile.min_stops
+    needed = int(km / _KM_PER_STOP_TARGET) + 1
+    return max(profile.min_stops, min(needed, profile.max_stops))
+
+
+def _densify_window(
     leisure: list[PoiPoint],
     ordered: list[int],
     window: list[int],
     profile: RouteProfile,
-) -> float:
-    coords = _window_coords(leisure, ordered, window)
+) -> list[int]:
+    """Добавляет промежуточные POI между соседними точками маршрута (не через весь пул)."""
+    if len(window) < 2:
+        return window
+    path = _order_indices_by_path(leisure, window)
+    coords = _window_coords(leisure, path)
     km = estimate_path_km(coords)
+    target = _target_stops_for_km(km, profile)
+    if len(path) >= target:
+        return path
+
+    enriched: list[int] = []
+    for i, idx in enumerate(path):
+        if i == 0:
+            enriched.append(idx)
+            continue
+        prev_idx = path[i - 1]
+        if prev_idx not in ordered or idx not in ordered:
+            enriched.append(idx)
+            continue
+        prev_pos, curr_pos = ordered.index(prev_idx), ordered.index(idx)
+        lo, hi = sorted((prev_pos, curr_pos))
+        segment = ordered[lo : hi + 1]
+        if len(segment) <= 4:
+            for mid in segment[1:-1]:
+                if mid in enriched:
+                    continue
+                trial = enriched + [mid, idx]
+                if _window_has_duplicate_names(leisure, trial):
+                    continue
+                if len(trial) >= profile.max_stops:
+                    break
+                enriched.append(mid)
+        enriched.append(idx)
+
+    enriched = _order_indices_by_path(leisure, enriched)
+    if _window_has_duplicate_names(leisure, enriched):
+        return path
+    return enriched if len(enriched) >= len(path) else path
+
+
+def _extend_for_min_km(
+    leisure: list[PoiPoint],
+    window: list[int],
+    profile: RouteProfile,
+    ordered: list[int],
+    *,
+    span_km: float,
+    compact: bool = False,
+    max_km: float | None = None,
+) -> list[int]:
+    """Добирает POI, если маршрут короче abs_min_km (с потолком max_km для варианта A)."""
+    leg_limit = profile.max_leg_km if compact else _leg_limit_km(profile, span_km)
+    current = _order_indices_by_path(leisure, window)
+    coords = _window_coords(leisure, current)
+    if estimate_path_km(coords) >= profile.abs_min_km:
+        return current
+
+    used = set(current)
+    extend_leg = leg_limit if compact else max(leg_limit, _novel_leg_limit_km(profile, span_km))
+    for _ in range(profile.max_stops - len(current)):
+        coords = _window_coords(leisure, current)
+        km = estimate_path_km(coords)
+        if km >= profile.abs_min_km:
+            break
+        if max_km is not None and km >= max_km:
+            break
+        best_idx: int | None = None
+        best_km = km
+        for idx in ordered:
+            if idx in used:
+                continue
+            if _window_has_duplicate_names(leisure, current + [idx]):
+                continue
+            trial = _order_indices_by_path(leisure, current + [idx])
+            trial_coords = _window_coords(leisure, trial)
+            if not _legs_within_limit(trial_coords, extend_leg):
+                continue
+            trial_km = estimate_path_km(trial_coords)
+            if max_km is not None and trial_km > max_km:
+                continue
+            if trial_km > best_km:
+                best_km = trial_km
+                best_idx = idx
+        if best_idx is None:
+            break
+        used.add(best_idx)
+        current = _order_indices_by_path(leisure, list(used))
+    return current
+
+
+def _trim_to_max_km(
+    leisure: list[PoiPoint],
+    indices: list[int],
+    profile: RouteProfile,
+    max_km: float,
+) -> list[int]:
+    """Укорачивает маршрут, убирая точки, если длина выше потолка."""
+    current = _order_indices_by_path(leisure, indices)
+    while len(current) > profile.min_stops:
+        km = estimate_path_km(_window_coords(leisure, current))
+        if km <= max_km:
+            break
+        drop: int | None = None
+        best_km = km
+        for idx in current:
+            trial = _order_indices_by_path(leisure, [i for i in current if i != idx])
+            if len(trial) < profile.min_stops:
+                continue
+            tk = estimate_path_km(_window_coords(leisure, trial))
+            if tk < best_km:
+                best_km = tk
+                drop = idx
+        if drop is None:
+            break
+        current = [i for i in current if i != drop]
+        current = _order_indices_by_path(leisure, current)
+    return current
+
+
+def _score_window(
+    leisure: list[PoiPoint],
+    window: list[int],
+    profile: RouteProfile,
+) -> float:
+    if _window_has_duplicate_names(leisure, window):
+        return -1e6
+    coords = _window_coords(leisure, window)
+    km = estimate_path_km(coords)
+    if km < profile.abs_min_km:
+        return km - profile.abs_min_km - 10.0
     if km < profile.target_km_min:
         return km - profile.target_km_min
-    if km > profile.target_km_max:
+    if km > profile.target_km_max * 1.35:
         return profile.target_km_max - km
     return 0.0
 
@@ -193,13 +439,22 @@ def _pick_window(
     ordered: list[int],
     profile: RouteProfile,
     *,
+    span_km: float,
     must_include: list[int] | None = None,
+    avoid: set[int] | None = None,
+    min_unique: int = 0,
+    compact: bool = False,
+    max_km: float | None = None,
 ) -> list[int]:
-    """Подбирает непрерывный участок упорядоченного пути под профиль длины."""
+    """Подбирает участок пути: длина, число точек, без повторов названий."""
     n = len(ordered)
     if n == 0:
         return []
+    leg_limit = profile.max_leg_km if compact else _leg_limit_km(profile, span_km)
+    if must_include and not compact:
+        leg_limit = max(leg_limit, _novel_leg_limit_km(profile, span_km))
     must = set(must_include or [])
+    avoid_set = avoid or set()
     best: list[int] = []
     best_score = -1e9
 
@@ -208,82 +463,83 @@ def _pick_window(
             window = ordered[start : start + length]
             if must and not must.issubset(set(window)):
                 continue
-            if length < profile.min_stops:
+            ordered_window = _order_indices_by_path(leisure, window)
+            if _window_has_duplicate_names(leisure, ordered_window):
                 continue
-            coords = _window_coords(leisure, ordered, window)
-            if any(
-                haversine_km(coords[i - 1], coords[i]) > profile.max_leg_km
-                for i in range(1, len(coords))
-            ):
+            if avoid_set:
+                unique_count = len(set(ordered_window) - avoid_set)
+                if unique_count < min_unique:
+                    continue
+            coords = _window_coords(leisure, ordered_window)
+            if not _legs_within_limit(coords, leg_limit):
                 continue
-            score = _score_window(leisure, ordered, window, profile)
+            score = _score_window(leisure, ordered_window, profile)
             km = estimate_path_km(coords)
             mid = (profile.target_km_min + profile.target_km_max) / 2
-            tie = length * 0.05 - abs(km - mid) * 0.02
-            if km < profile.target_km_min:
-                tie += km * 0.1
+            tie = len(ordered_window) * 0.12 - abs(km - mid) * 0.02
+            if km >= profile.abs_min_km:
+                tie += 5.0
+            overlap = len(set(ordered_window) & avoid_set)
+            tie -= overlap * 25.0
+            tie += (len(ordered_window) - overlap) * 4.0
             total = score * 100 + tie
-            if score == 0.0:
+            if score >= 0.0:
                 total += 50
             if total > best_score:
                 best_score = total
-                best = window
+                best = ordered_window
 
-    if best:
-        return best
+    if not best:
+        seed = list(must) if must else ordered[: min(profile.max_stops, n)]
+        best = _order_indices_by_path(leisure, seed)
 
-    if must_include:
-        extended = list(must_include)
-        for idx in ordered:
-            if idx in extended:
-                continue
-            trial = extended + [idx]
-            if len(trial) > profile.max_stops:
-                break
-            coords = _window_coords(leisure, ordered, trial)
-            if all(
-                haversine_km(coords[i - 1], coords[i]) <= profile.max_leg_km
-                for i in range(1, len(coords))
-            ):
-                extended = trial
-            if len(extended) >= profile.min_stops:
-                return extended[: profile.max_stops]
+    if must and not must.issubset(set(best)):
+        best = _order_indices_by_path(leisure, list(must))
 
-    return ordered[: min(profile.max_stops, n)]
+    best = _extend_for_min_km(
+        leisure, best, profile, ordered, span_km=span_km, compact=compact, max_km=max_km
+    )
+    best = _densify_window(leisure, ordered, best, profile)
+    best = _extend_for_min_km(
+        leisure, best, profile, ordered, span_km=span_km, compact=compact, max_km=max_km
+    )
+    if max_km is not None:
+        best = _trim_to_max_km(leisure, best, profile, max_km)
+
+    if _window_has_duplicate_names(leisure, best):
+        best = _filter_conflicting_indices(leisure, best)
+
+    return best[: profile.max_stops]
 
 
-def _compact_walkable_stops(
-    stops: list[RouteStop],
-    index: dict[str, Any],
-    profile: RouteProfile,
-) -> list[RouteStop]:
-    """Leisure-цепочка под профиль варианта (длина и число точек)."""
-    picked: list[RouteStop] = []
-    last_coord: GeoPoint | None = None
-    seen_coords: set[str] = set()
-
-    for stop in sorted(stops, key=lambda s: s.order):
-        if stop.kind != "leisure":
+def _filter_conflicting_indices(leisure: list[PoiPoint], indices: list[int]) -> list[int]:
+    filtered: list[int] = []
+    for idx in indices:
+        poi = leisure[idx]
+        if any(_poi_name_conflict(poi, leisure[keep]) for keep in filtered):
             continue
-        coord = _coords_for_stop(stop, index)
-        if coord is None:
-            continue
-        key = coord_key(coord)
-        if key in seen_coords:
-            continue
-        if last_coord is not None and haversine_km(last_coord, coord) > profile.max_leg_km:
-            continue
-        seen_coords.add(key)
-        picked.append(stop)
-        last_coord = coord
-        if len(picked) >= profile.max_stops:
-            break
+        filtered.append(idx)
+    return _order_indices_by_path(leisure, filtered)
 
-    if picked:
-        km = estimate_path_km([_coords_for_stop(s, index) for s in picked])  # type: ignore[list-item]
-        picked.append(
+
+def _stops_from_indices(leisure: list[PoiPoint], indices: list[int]) -> list[RouteStop]:
+    stops: list[RouteStop] = []
+    for order, idx in enumerate(indices, start=1):
+        poi = leisure[idx]
+        stops.append(
             RouteStop(
-                order=picked[-1].order + 1,
+                order=order,
+                kind="leisure",
+                poi_id=poi.poi_id,
+                time_hint="день",
+                narrative=poi.name,
+            )
+        )
+    if stops:
+        km = estimate_path_km([leisure[i].coordinates for i in indices])
+        stops.append(
+            RouteStop(
+                order=stops[-1].order + 1,
                 kind="transit_note",
                 narrative=(
                     f"Пеший маршрут ~{km:.1f} км по достопримечательностям. "
@@ -291,7 +547,49 @@ def _compact_walkable_stops(
                 ),
             )
         )
-    return picked
+    return stops
+
+
+def _finalize_leisure_indices(
+    case: TripRouteCase,
+    leisure: list[PoiPoint],
+    profile: RouteProfile,
+    span_km: float,
+) -> list[int]:
+    """Собирает индексы POI для варианта: без дублей, с min km и достаточным числом точек."""
+    ordered = _order_indices(leisure)
+    poi_to_idx = {p.poi_id: i for i, p in enumerate(leisure)}
+    seed: list[int] = []
+    for stop in sorted(case.stops, key=lambda s: s.order):
+        if stop.kind != "leisure" or not stop.poi_id:
+            continue
+        idx = poi_to_idx.get(stop.poi_id)
+        if idx is None:
+            continue
+        poi = leisure[idx]
+        if any(_poi_name_conflict(poi, leisure[keep]) for keep in seed):
+            continue
+        seed.append(idx)
+
+    if seed:
+        indices = _order_indices_by_path(leisure, seed)
+        coords = _window_coords(leisure, indices)
+        if (
+            len(indices) >= profile.min_stops
+            and estimate_path_km(coords) >= profile.abs_min_km
+            and not _window_has_duplicate_names(leisure, indices)
+        ):
+            return indices[: profile.max_stops]
+        indices = _extend_for_min_km(leisure, indices, profile, ordered, span_km=span_km)
+        indices = _densify_window(leisure, ordered, indices, profile)
+        indices = _extend_for_min_km(leisure, indices, profile, ordered, span_km=span_km)
+    else:
+        indices = _pick_window(leisure, ordered, profile, span_km=span_km)
+
+    if _window_has_duplicate_names(leisure, indices):
+        indices = _filter_conflicting_indices(leisure, indices)
+
+    return indices[: profile.max_stops]
 
 
 def finalize_route_program(
@@ -301,11 +599,14 @@ def finalize_route_program(
     transport: str = "mixed",
 ) -> RouteProgram:
     index = _poi_index(materials)
-    pool_size = len(materials.leisure_points)
+    leisure = _landmark_pool(materials.leisure_points)
+    profiles = _adapt_profiles(leisure)
+    span_km = _pool_span_km(leisure)
     cases: list[TripRouteCase] = []
     for case in program.cases:
-        profile = route_profile_for_case(case.case_id, pool_size=pool_size)
-        valid_stops = _compact_walkable_stops(case.stops, index, profile)
+        profile = profiles[case.case_id if case.case_id in profiles else "A"]  # type: ignore[index]
+        indices = _finalize_leisure_indices(case, leisure, profile, span_km)
+        valid_stops = _stops_from_indices(leisure, indices)
         points: list[GeoPoint] = []
         labels: list[str] = []
         for stop in valid_stops:
@@ -331,9 +632,14 @@ def finalize_route_program(
             )
         )
     summary = (
-        f"Пул: {len(materials.leisure_points)} мест досуга, "
-        f"{len(materials.dining_options)} ресторанов ({materials.provider}). "
-        "Варианты A/B/C — 3 / 4–5 / 5–7 точек на карте, ~4 / 5–6 / 7–8 км пешком."
+        f"Пул: {len(materials.leisure_points)} мест досуга"
+        + (
+            f", {len(materials.dining_options)} ресторанов"
+            if materials.dining_options
+            else ""
+        )
+        + f" ({materials.provider}). "
+        "Варианты A/B/C — разная длина и число точек на карте (мин. 1–3 км пешком)."
     )
     return program.model_copy(update={"materials_summary": summary, "cases": cases})
 
@@ -358,42 +664,132 @@ def format_routes_text(program: RouteProgram) -> str:
     return "\n".join(lines).strip()
 
 
+def _novel_leg_limit_km(profile: RouteProfile, span_km: float) -> float:
+    """Длинные переходы к «дальним» POI (музей за городом и т.п.)."""
+    return max(_leg_limit_km(profile, span_km), span_km * 0.72)
+
+
+def _novel_cluster_center(leisure: list[PoiPoint], novel: list[int]) -> GeoPoint:
+    if not novel:
+        return leisure[0].coordinates
+    lon = sum(leisure[i].coordinates.lon for i in novel) / len(novel)
+    lat = sum(leisure[i].coordinates.lat for i in novel) / len(novel)
+    return GeoPoint(lon=lon, lat=lat)
+
+
+def _pick_novel_route(
+    leisure: list[PoiPoint],
+    ordered: list[int],
+    profile: RouteProfile,
+    span_km: float,
+    avoid: set[int],
+) -> list[int]:
+    """Маршрут C: в приоритете POI, которых нет в A/B."""
+    novel = [i for i in range(len(leisure)) if i not in avoid]
+    leg_limit = _novel_leg_limit_km(profile, span_km)
+
+    if not novel:
+        return []
+
+    if len(novel) >= profile.min_stops:
+        indices = _order_indices_by_path(leisure, novel)
+        indices = _extend_for_min_km(leisure, indices, profile, ordered, span_km=span_km)
+        return indices[: profile.max_stops]
+
+    base = list(novel)
+    center = _novel_cluster_center(leisure, novel)
+    shared_sorted = sorted(
+        [i for i in avoid if i in ordered],
+        key=lambda i: haversine_km(center, leisure[i].coordinates),
+    )
+    while len(base) < profile.min_stops and shared_sorted:
+        added = False
+        for idx in shared_sorted:
+            if idx in base:
+                continue
+            trial = _order_indices_by_path(leisure, base + [idx])
+            if _window_has_duplicate_names(leisure, trial):
+                continue
+            coords = _window_coords(leisure, trial)
+            if not _legs_within_limit(coords, leg_limit):
+                continue
+            base = trial
+            added = True
+            break
+        if not added:
+            break
+
+    base = _extend_for_min_km(leisure, base, profile, ordered, span_km=span_km)
+    if len(base) < profile.min_stops:
+        used = set(base)
+        for idx in shared_sorted:
+            if idx in used:
+                continue
+            trial = _order_indices_by_path(leisure, base + [idx])
+            if _window_has_duplicate_names(leisure, trial):
+                continue
+            coords = _window_coords(leisure, trial)
+            if _legs_within_limit(coords, leg_limit):
+                base = trial
+                used.add(idx)
+            if len(base) >= profile.min_stops:
+                break
+
+    base = _filter_conflicting_indices(leisure, base)
+    return base[: profile.max_stops]
+
+
 def build_fallback_route_program(materials: RouteMaterials) -> RouteProgram:
     """Три пеших варианта разной длины — только leisure из пула."""
-    leisure = materials.leisure_points
+    leisure = _landmark_pool(materials.leisure_points)
     ordered = _order_indices(leisure)
-    profiles = _adapt_profiles(len(leisure))
-    small_city = len(leisure) <= 8
+    profiles = _adapt_profiles(leisure)
+    span_km = _pool_span_km(leisure)
+    outliers = _outlier_indices(leisure, count=2)
+    far_idx = _farthest_index(leisure)
 
-    a_idx = _pick_window(leisure, ordered, profiles["A"])
+    a_idx = _pick_window(
+        leisure,
+        ordered,
+        profiles["A"],
+        span_km=span_km,
+        avoid=outliers,
+        compact=True,
+        max_km=_MAX_ROUTE_KM_SHORT,
+    )
     b_idx = _pick_window(
         leisure,
         ordered,
         profiles["B"],
-        must_include=a_idx if small_city else None,
+        span_km=span_km,
+        avoid=set(a_idx),
+        min_unique=2,
     )
-    c_idx = _pick_window(
+    c_idx = _pick_novel_route(
         leisure,
         ordered,
         profiles["C"],
-        must_include=b_idx if small_city else None,
+        span_km,
+        set(b_idx),
     )
+    if len(c_idx) < profiles["C"].min_stops:
+        outlier_must = [i for i in outliers if i not in set(b_idx)]
+        c_must = outlier_must[:2] if outlier_must else (
+            [far_idx] if far_idx not in set(b_idx) else None
+        )
+        c_idx = _pick_window(
+            leisure,
+            ordered,
+            profiles["C"],
+            span_km=span_km,
+            avoid=set(b_idx),
+            min_unique=2,
+            must_include=c_must,
+        )
 
     def _case(case_id: RouteCaseId, indices: list[int]) -> TripRouteCase:
         profile = profiles[case_id]
-        stops: list[RouteStop] = []
-        for order, idx in enumerate(indices, start=1):
-            poi = leisure[idx]
-            stops.append(
-                RouteStop(
-                    order=order,
-                    kind="leisure",
-                    poi_id=poi.poi_id,
-                    time_hint="день",
-                    narrative=poi.name,
-                )
-            )
-        km = estimate_path_km([poi.coordinates for poi in (leisure[i] for i in indices)])
+        km = estimate_path_km([leisure[i].coordinates for i in indices])
         return TripRouteCase(
             case_id=case_id,
             title=profile.title,
@@ -401,7 +797,7 @@ def build_fallback_route_program(materials: RouteMaterials) -> RouteProgram:
                 f"Пешая прогулка по {materials.city}: {profile.title.lower()}, "
                 f"~{km:.1f} км, {len(indices)} остановок."
             ),
-            stops=stops,
+            stops=_stops_from_indices(leisure, indices)[:-1],  # без transit_note до finalize
         )
 
     program = RouteProgram(

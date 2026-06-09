@@ -1,13 +1,10 @@
-import { Checkbox, Form, Input, InputNumber, Select, Typography } from "antd";
+import { Checkbox, Form, Input, InputNumber, Select } from "antd";
 import type { TripPreferences } from "../api/types";
-import { LEISURE_LABELS, OPTIONAL_LEISURE_TAGS } from "../utils/leisure";
-import { normalizeLeisureCategories } from "../utils/preferences";
 
 export const DEFAULT_PREFERENCES: TripPreferences = {
   pace: "moderate",
   budget: "medium",
-  leisure_categories: ["landmarks", "museums", "exhibitions"],
-  interests: ["музеи", "архитектура", "выставки"],
+  interests: ["музеи", "архитектура"],
   cuisine: "любая местная",
   min_restaurant_rating: 4.5,
   transport_preference: "mixed",
@@ -57,36 +54,13 @@ export function PreferencesForm({
           ]}
         />
       </Form.Item>
-      <Form.Item
-        name="leisure_categories"
-        label="Категории досуга"
-        normalize={normalizeLeisureCategories}
-        rules={[
-          {
-            validator: async (_, value) => {
-              const cats = normalizeLeisureCategories(value);
-              if (cats.length < 1) {
-                throw new Error("Выберите хотя бы одну категорию");
-              }
-            },
-          },
-        ]}
-        extra={
-          <Typography.Text type="secondary">
-            Поиск мест на Яндекс.Картах. {LEISURE_LABELS.landmarks} включены всегда.
-          </Typography.Text>
-        }
-      >
-        <Checkbox.Group disabled={useSavedProfile} className="flex flex-col gap-1">
-          <Checkbox value="landmarks" disabled>
-            {LEISURE_LABELS.landmarks} (всегда)
-          </Checkbox>
-          {OPTIONAL_LEISURE_TAGS.map((value) => (
-            <Checkbox key={value} value={value}>
-              {LEISURE_LABELS[value]}
-            </Checkbox>
-          ))}
-        </Checkbox.Group>
+      <Form.Item name="interests" label="Интересы">
+        <Select
+          disabled={useSavedProfile}
+          mode="tags"
+          placeholder="музеи, архитектура, парки…"
+          tokenSeparators={[","]}
+        />
       </Form.Item>
       <Form.Item name="cuisine" label="Кухня">
         <Input disabled={useSavedProfile} />

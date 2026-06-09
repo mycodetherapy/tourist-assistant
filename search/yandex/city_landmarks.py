@@ -85,7 +85,7 @@ _CITY_SEEDS: dict[str, list[LandmarkSeed]] = {
         LandmarkSeed("Красная площадь", "landmarks", "Красная площадь, Москва, Россия"),
         LandmarkSeed("Государственный исторический музей", "museums", "Государственный исторический музей, Москва"),
         LandmarkSeed("Парк Зарядье", "parks", "Парк Зарядье, Москва"),
-        LandmarkSeed("Большой театр", "theaters", "Большой театр, Москва"),
+        LandmarkSeed("Большой театр", "landmarks", "Большой театр, Москва"),
     ],
     "санкт-петербург": [
         LandmarkSeed("Дворцовая площадь", "landmarks", "Дворцовая площадь, Санкт-Петербург"),
@@ -110,10 +110,10 @@ def generic_center_seeds(city: str, categories: list[LeisureTag]) -> list[Landma
     templates: list[tuple[str, LeisureTag, str]] = [
         (f"главная площадь {city}", "landmarks", f"главная площадь, {city}, Россия"),
         (f"исторический центр {city}", "landmarks", f"исторический центр, {city}, Россия"),
-        (f"набережная {city}", "landmarks", f"набережная, {city}, Россия"),
+        (f"набережная {city}", "embankments", f"набережная, {city}, Россия"),
         (f"парк культуры {city}", "parks", f"парк культуры, {city}, Россия"),
         (f"художественный музей {city}", "museums", f"художественный музей, {city}, Россия"),
-        (f"театр {city}", "theaters", f"театр, {city}, Россия"),
+        (f"памятник {city}", "monuments", f"памятник, {city}, Россия"),
     ]
     allowed = set(categories) | {"landmarks"}
     out: list[LandmarkSeed] = []

@@ -64,7 +64,6 @@ def main() -> int:
         budget="medium",
         transport_preference="mixed",
         travel_party="couple",
-        leisure_categories=["landmarks", "museums"],
     )
     materials, warnings = run_route_materials_search(
         city=city,

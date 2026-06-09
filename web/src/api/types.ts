@@ -8,15 +8,6 @@ export type RebuildScope =
 export type ReviewAction = "approve" | "save_draft" | "rebuild";
 export type RunStatusName = "queued" | "running" | "completed" | "failed";
 
-export type LeisureTag =
-  | "landmarks"
-  | "museums"
-  | "exhibitions"
-  | "galleries"
-  | "philharmonic"
-  | "theaters"
-  | "parks";
-
 export interface TripSummary {
   id: number;
   city: string;
@@ -40,7 +31,6 @@ export interface TripDetail {
 export interface TripPreferences {
   pace: "relaxed" | "moderate" | "packed";
   budget: "economy" | "medium" | "unlimited";
-  leisure_categories?: LeisureTag[];
   interests: string[];
   cuisine: string;
   min_restaurant_rating: number;

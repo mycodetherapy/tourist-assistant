@@ -43,8 +43,8 @@ def search_roundtrip_tickets(
 @tool
 def search_route_materials(city: str, dates: str) -> str:
     """
-    Единый пул мест досуга и ресторанов на Яндекс.Картах для всей поездки.
-    Категории досуга — из опросника (leisure_categories). Координаты в каждом POI.
+    Единый пул мест досуга на Яндекс.Картах для всей поездки.
+    POI собираются через HTTP Геокодер (фиксированный набор запросов). Координаты в каждом POI.
     """
     try:
         params = RouteMaterialsInput(city=city, dates=dates)
@@ -83,8 +83,8 @@ def search_route_materials(city: str, dates: str) -> str:
         payload["warning"] = "Пул мест пуст — проверьте YANDEX_MAPS_API_KEY или город."
     set_route_materials(materials.model_dump())
     print(
-        f"  → route materials: {len(materials.leisure_points)} досуг, "
-        f"{len(materials.dining_options)} ресторанов ({materials.provider})"
+        f"  → route materials: {len(materials.leisure_points)} досуг "
+        f"({materials.provider})"
     )
     return json.dumps(payload, ensure_ascii=False, indent=2)
 

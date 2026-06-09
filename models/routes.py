@@ -8,12 +8,15 @@ from pydantic import BaseModel, Field
 
 LeisureTag = Literal[
     "landmarks",
+    "parks",
     "museums",
+    "embankments",
+    "monuments",
+    # legacy (старые поездки в SQLite)
     "exhibitions",
     "galleries",
     "philharmonic",
     "theaters",
-    "parks",
 ]
 
 RouteCaseId = Literal["A", "B", "C"]

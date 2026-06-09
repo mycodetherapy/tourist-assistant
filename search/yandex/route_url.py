@@ -5,17 +5,19 @@ from __future__ import annotations
 from urllib.parse import quote, urlencode
 
 from models.routes import GeoPoint
+from search.yandex.poi_filters import haversine_km
 
 
 def _dedupe_points(points: list[GeoPoint]) -> list[GeoPoint]:
+    """Убирает точки ближе ~80 м — иначе на карте «Кострома» и короткий маршрут."""
     if not points:
         return []
     out: list[GeoPoint] = [points[0]]
     for point in points[1:]:
         prev = out[-1]
-        same = abs(point.lon - prev.lon) < 1e-4 and abs(point.lat - prev.lat) < 1e-4
-        if not same:
-            out.append(point)
+        if haversine_km(point, prev) < 0.08:
+            continue
+        out.append(point)
     return out
 
 
@@ -28,12 +30,12 @@ def build_maps_route_url(
     max_stops: int = 8,
 ) -> str:
     """
-    Маршрут по координатам из пула POI (rtext=lat,lon~lat,lon).
+    Маршрут по координатам POI (rtext=lat,lon~lat,lon).
 
-    Координаты уже получены геокодером — так Яндекс строит точную линию маршрута.
-    labels/city используются только для одиночной точки (fallback-ссылка).
+    Текстовые подписи в rtext Яндекс часто резолвит в «Кострома» или улицу —
+    координаты из пула надёжнее для длины и порядка точек.
     """
-    _ = labels  # для одиночной точки ниже
+    _ = labels
     points = _dedupe_points(points)
     if len(points) < 2:
         if points:
