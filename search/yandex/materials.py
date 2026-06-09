@@ -50,8 +50,8 @@ def _materials_warnings(status: YandexApiStatus, leisure_count: int) -> list[str
         )
     elif not status.places_ok:
         warnings.append(
-            "Геокодер отвечает, но мало POI по шаблонным запросам — "
-            "попробуйте другой город."
+            "Геокодер отвечает, но мало POI — проверьте веб-поиск (ddgs/Tavily) "
+            "или попробуйте другой город."
         )
     if leisure_count == 0:
         warnings.append("Пул мест пуст — маршруты соберутся из демо-точек.")

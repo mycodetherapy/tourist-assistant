@@ -44,7 +44,7 @@ def search_roundtrip_tickets(
 def search_route_materials(city: str, dates: str) -> str:
     """
     Единый пул мест досуга на Яндекс.Картах для всей поездки.
-    POI собираются через HTTP Геокодер (фиксированный набор запросов). Координаты в каждом POI.
+    POI: веб-поиск названий → Geocoder по каждому месту; затем шаблонные запросы.
     """
     try:
         params = RouteMaterialsInput(city=city, dates=dates)

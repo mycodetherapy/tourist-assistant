@@ -86,6 +86,20 @@ def geocode_queries_for_tag(tag: LeisureTag, city: str) -> list[str]:
     return queries
 
 
+def infer_leisure_tag(name: str) -> LeisureTag:
+    """Тег POI по ключевым словам в названии."""
+    lowered = name.lower().replace("ё", "е")
+    if any(h in lowered for h in ("муз", "галер", "выстав")):
+        return "museums"
+    if "набереж" in lowered:
+        return "embankments"
+    if any(h in lowered for h in ("парк", "сквер", "сад ", "сад,", "ботаническ")):
+        return "parks"
+    if any(h in lowered for h in ("памятник", "монумент", "мемориал")):
+        return "monuments"
+    return "landmarks"
+
+
 def leisure_pool_limit(pace: str) -> int:
     if pace == "relaxed":
         return 8

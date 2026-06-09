@@ -9,8 +9,9 @@ from models.routes import GeoPoint
 
 # Транспорт и инфраструктура — не точки пешего маршрута по городу
 _TRANSPORT_NAME_RE = re.compile(
-    r"(аэропорт|вокзал|станци[яи]|причал|порт\b|ж/д|жд\b|"
-    r"аэровокзал|автовокзал|перрон|аэро)",
+    r"(аэропорт|аэроп\.?|вокзал|станци[яи]\s|станция\b|причал|порт\b|ж/д|жд\b|"
+    r"аэровокзал|автовокзал|перрон|аэро|метро\b|метрополитен|"
+    r"railway|airport|train\s+station)",
     re.IGNORECASE,
 )
 
@@ -211,7 +212,7 @@ def is_acceptable_geo_member(member: dict, *, city_hint: str = "") -> bool:
     if not str(obj.get("Point", {}).get("pos", "")):
         return False
     if kind == "street":
-        return False
+        return is_landmark_poi_name(name, city_hint=city_hint)
     if kind in ("vegetation", "hydro", "house", "other"):
         return is_landmark_poi_name(name, city_hint=city_hint)
     return is_landmark_poi_name(name, city_hint=city_hint)

@@ -26,7 +26,7 @@ from search.yandex.poi_filters import route_name_key
 
 
 def _kostroma_materials() -> RouteMaterials:
-    """Координаты из city_landmarks + дубликат «Красные ряды»."""
+    """Тестовый пул POI Костромы (координаты для регрессии маршрутов)."""
     specs = [
         ("susan", "Сусанинская площадь", 40.927155, 57.768072),
         ("bogo", "Богоявленско-Анастасин монастырь", 40.9256, 57.7661),
@@ -64,6 +64,12 @@ class TestRoutePostprocess(unittest.TestCase):
         cleaned = public_route_summary(raw)
         self.assertNotIn("км", cleaned.lower())
         self.assertIn("5 остановок", cleaned)
+
+    def test_hybrid_empty_pool_no_crash(self) -> None:
+        materials = RouteMaterials(city="Кострома", dates="июнь", leisure_points=[])
+        draft = RouteProgram(cases=[])
+        program = build_hybrid_route_program(materials, draft)
+        self.assertEqual(len(program.cases), 3)
 
     def test_build_fallback_three_cases_with_urls(self) -> None:
         materials = RouteMaterials(

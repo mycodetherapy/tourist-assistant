@@ -300,7 +300,7 @@ python3 scripts/render_graph.py
 | Инструмент | Что ищет |
 |------------|----------|
 | `search_roundtrip_tickets` | Deep links + опционально API авиа (`TRAVELPAYOUTS_API_KEY`); JSON `offers[]`, `schema_version=1` |
-| `search_route_materials` | Пул POI через HTTP Геокодер (landmarks, parks, museums, monuments); `search/yandex/*` |
+| `search_route_materials` | Пул POI: веб-поиск названий → Geocoder по каждому месту + шаблонные запросы; `search/yandex/*` |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
@@ -343,7 +343,7 @@ python3 scripts/render_graph.py
 | **РЖД / Tutu.ru** | Deep links на жд (`ticket.rzd.ru`, `tutu.ru/poezda/…`) |
 | **Bus.tutu.ru** | Deep links на автобус (в одну сторону) |
 | **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
-| **Яндекс.Карты API** | API Геокодера (`YANDEX_MAPS_API_KEY`): POI и рестораны |
+| **Яндекс.Карты API** | API Геокодера (`YANDEX_MAPS_API_KEY`): координаты POI по названиям из веб-поиска |
 | **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок |
 
 Билеты: `search/ticket_links.py` + `search/providers/avia.py`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
@@ -474,7 +474,7 @@ tourist-assistant/
 ├── search/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool, TOOLS, TOOL_MAP
-│   ├── yandex/             # Geocoder, POI filters, city seeds, maps_route_url
+│   ├── yandex/             # Geocoder, landmark_discovery, POI filters, maps_route_url
 │   ├── tickets_search.py   # оркестрация билетов
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
 │   ├── transport_codes.py  # коды Tutu/РЖД для URL

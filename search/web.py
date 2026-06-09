@@ -91,7 +91,7 @@ def _filter_results(
             continue
         if include_any and not any(word in blob for word in include_any):
             continue
-        if kind in {"events", "restaurants"} and city_keys:
+        if kind in {"events", "restaurants", "landmarks"} and city_keys:
             target_city = next((c for c in (cities or []) if c), "")
             if target_city and not _matches_city(blob, _city_aliases(target_city)):
                 continue

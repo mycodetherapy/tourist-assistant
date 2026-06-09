@@ -21,6 +21,7 @@ class TestPoiFilters(unittest.TestCase):
         self.assertTrue(is_transport_hub("станция Кострома"))
         self.assertTrue(is_transport_hub("аэропорт Кострома (Сокеркино)"))
         self.assertFalse(is_acceptable_place_name("станция Кострома"))
+        self.assertFalse(is_acceptable_place_name("метро Площадь Революции"))
         self.assertFalse(is_acceptable_place_name("Центральный район"))
 
     def test_accepts_landmarks(self) -> None:
@@ -45,6 +46,26 @@ class TestPoiFilters(unittest.TestCase):
         self.assertTrue(is_landmark_poi_name("Сусанинская площадь"))
         self.assertTrue(is_landmark_poi_name("Торговые ряды"))
         self.assertTrue(is_landmark_poi_name("Богоявленско-Анастасин монастырь"))
+        self.assertTrue(is_landmark_poi_name("набережная Брюгге"))
+
+    def test_accepts_named_embankment_geo_member(self) -> None:
+        from search.yandex.poi_filters import is_acceptable_geo_member
+
+        member = {
+            "GeoObject": {
+                "name": "набережная Брюгге",
+                "Point": {"pos": "47.89 56.63"},
+                "metaDataProperty": {
+                    "GeocoderMetaData": {
+                        "kind": "street",
+                        "text": "Россия, Республика Марий Эл, Йошкар-Ола, набережная Брюгге",
+                    }
+                },
+            }
+        }
+        self.assertTrue(
+            is_acceptable_geo_member(member, city_hint="Йошкар-Ола")
+        )
 
     def test_route_url_uses_coordinates(self) -> None:
         url = build_maps_route_url(

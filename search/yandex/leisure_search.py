@@ -5,11 +5,6 @@ from __future__ import annotations
 import math
 
 from models.routes import GeoPoint, LeisureTag, PoiPoint
-from search.yandex.city_landmarks import (
-    fallback_coords,
-    seed_to_feature,
-    seeds_for_city,
-)
 from search.yandex.client import (
     center_bbox,
     geocode_city,
@@ -23,7 +18,6 @@ from search.yandex.leisure_tags import (
 from search.yandex.parse import feature_to_poi
 from search.yandex.poi_filters import (
     coord_key,
-    is_acceptable_place_name,
     is_landmark_poi_name,
     poi_name_conflict,
     route_name_key,
@@ -47,7 +41,6 @@ def _append_poi(
     tag: LeisureTag,
     center: GeoPoint,
     city: str,
-    skip_radius: bool = False,
 ) -> bool:
     poi = feature_to_poi(feature, tag=tag)
     if poi is None or poi.poi_id in seen_ids:
@@ -62,7 +55,7 @@ def _append_poi(
             poi.name, poi.coordinates, existing.name, existing.coordinates
         ):
             return False
-    if not skip_radius and not within_walkable_radius(poi.coordinates, center):
+    if not within_walkable_radius(poi.coordinates, center):
         return False
     key = coord_key(poi.coordinates)
     if key in seen_coords:
@@ -74,10 +67,9 @@ def _append_poi(
     return True
 
 
-def _collect_from_seeds(
+def _collect_from_discovery(
     *,
     city: str,
-    categories: list[LeisureTag],
     center: GeoPoint,
     bbox: str,
     limit: int,
@@ -86,46 +78,43 @@ def _collect_from_seeds(
     seen_coords: set[str],
     seen_names: set[str],
 ) -> None:
-    for seed in seeds_for_city(city, categories):
+    """Сначала веб-поиск названий, затем Geocoder по каждому месту."""
+    from search.yandex.landmark_discovery import (
+        discover_landmark_names,
+        geocode_query_for_name,
+        infer_tag_for_name,
+    )
+
+    names = discover_landmark_names(city)
+    for name in names:
         if len(collected) >= limit:
             break
-        features: list[dict] = []
-        if get_api_key():
-            batch = geocode_places(
-                seed.query,
-                results=3,
-                bbox=bbox,
-                city_hint=city,
-            )
-            for feature in batch:
-                meta = feature.get("properties", {}).get("CompanyMetaData", {})
-                if is_landmark_poi_name(str(meta.get("name") or "")):
-                    meta["name"] = seed.name
-                    props = feature.setdefault("properties", {})
-                    props["name"] = seed.name
-                    features.append(feature)
-                    break
-        if not features:
-            coords = fallback_coords(seed)
-            if coords is None:
-                continue
-            features = [seed_to_feature(seed)]
-        for feature in features:
-            if _append_poi(
+        query = geocode_query_for_name(name, city)
+        if not query:
+            continue
+        batch = geocode_places(
+            query,
+            results=3,
+            bbox=bbox,
+            city_hint=city,
+        )
+        tag = infer_tag_for_name(name)
+        for feature in batch:
+            if len(collected) >= limit:
+                break
+            _append_poi(
                 collected,
                 seen_ids,
                 seen_coords,
                 seen_names,
                 feature,
-                tag=seed.tag,
+                tag=tag,
                 center=center,
                 city=city,
-                skip_radius=True,
-            ):
-                break
+            )
 
 
-def _collect_from_tags(
+def _collect_from_geocoder(
     *,
     city: str,
     categories: list[LeisureTag],
@@ -137,6 +126,7 @@ def _collect_from_tags(
     seen_coords: set[str],
     seen_names: set[str],
 ) -> None:
+    """Пул POI только из ответов HTTP Геокодера по шаблонным запросам."""
     for tag in categories:
         if len(collected) >= limit:
             break
@@ -183,21 +173,9 @@ def search_leisure_points(
     seen_names: set[str] = set()
     collected: list[PoiPoint] = []
 
-    _collect_from_seeds(
-        city=city,
-        categories=categories,
-        center=center,
-        bbox=bbox,
-        limit=limit,
-        collected=collected,
-        seen_ids=seen_ids,
-        seen_coords=seen_coords,
-        seen_names=seen_names,
-    )
-    if len(collected) < limit and get_api_key():
-        _collect_from_tags(
+    if get_api_key():
+        _collect_from_discovery(
             city=city,
-            categories=categories,
             center=center,
             bbox=bbox,
             limit=limit,
@@ -206,7 +184,19 @@ def search_leisure_points(
             seen_coords=seen_coords,
             seen_names=seen_names,
         )
-    if not collected and not get_api_key():
+        if len(collected) < limit:
+            _collect_from_geocoder(
+                city=city,
+                categories=categories,
+                center=center,
+                bbox=bbox,
+                limit=limit,
+                collected=collected,
+                seen_ids=seen_ids,
+                seen_coords=seen_coords,
+                seen_names=seen_names,
+            )
+    else:
         collected = _demo_leisure(city, categories, lon, lat, spn_lon, spn_lat, limit)
 
     collected.sort(key=_rank_key, reverse=True)

@@ -116,12 +116,16 @@ def _abs_min_route_km(span_km: float) -> float:
 
 
 def _centroid(leisure: list[PoiPoint]) -> GeoPoint:
+    if not leisure:
+        return GeoPoint(lon=0.0, lat=0.0)
     lon = sum(p.coordinates.lon for p in leisure) / len(leisure)
     lat = sum(p.coordinates.lat for p in leisure) / len(leisure)
     return GeoPoint(lon=lon, lat=lat)
 
 
 def _farthest_index(leisure: list[PoiPoint]) -> int:
+    if not leisure:
+        return 0
     center = _centroid(leisure)
     return max(
         range(len(leisure)),
@@ -757,6 +761,15 @@ def finalize_route_program(
 ) -> RouteProgram:
     index = _poi_index(materials)
     leisure = _landmark_pool(materials.leisure_points)
+    if not leisure:
+        return program.model_copy(
+            update={
+                "materials_summary": (
+                    f"Пул: {len(materials.leisure_points)} мест досуга "
+                    f"({materials.provider}). Недостаточно POI для маршрута на карте."
+                ),
+            }
+        )
     profiles = _adapt_profiles(leisure)
     span_km = _pool_span_km(leisure)
     cases: list[TripRouteCase] = []
@@ -914,6 +927,8 @@ def _compute_algorithm_indices(
     span_km: float,
 ) -> dict[RouteCaseId, list[int]]:
     """Индексы A/B/C чистым алгоритмом (fallback)."""
+    if not leisure:
+        return {"A": [], "B": [], "C": []}
     outliers = _outlier_indices(leisure, count=2)
     far_idx = _farthest_index(leisure)
 
@@ -995,6 +1010,8 @@ def build_hybrid_route_program(
     LLM ранжирует poi_id по вариантам; алгоритм валидирует km/дубли или подставляет fallback.
     """
     leisure = _landmark_pool(materials.leisure_points)
+    if not leisure:
+        return build_fallback_route_program(materials)
     ordered = _order_indices(leisure)
     profiles = _adapt_profiles(leisure)
     span_km = _pool_span_km(leisure)
