@@ -149,7 +149,11 @@ docker compose run --rm app python -m eval --suite smoke
 - **Первый запуск** — 7 вопросов (темп, бюджет, интересы, кухня, рейтинг ресторанов, транспорт, состав группы).
 - **Повторный запуск** — по умолчанию берутся сохранённые предпочтения (`user_profile` в SQLite); опрос только если ответить «да» на «Пройти опрос заново?».
 
-**Частичный пересбор** (режим «Продолжить»): `full`, `tickets`, `routes`, `lifehacks` (лайфхаки — без нового поиска). Scope `events`/`dining` в API — алиасы на `routes`.
+**Частичный пересбор** (режим «Продолжить»): `full`, `tickets`, `routes`, `lifehacks`. Scope `events`/`dining` в API — алиасы на `routes`.
+
+- **`full`** — новый поиск билетов и POI (`search_route_materials` до ~25 точек); пул сохраняется в SQLite (`section_artifacts`, секция `route_materials`).
+- **`routes`** / **`events`** / **`dining`** — **без нового поиска**: A/B/C пересобираются из сохранённого пула по `poi_id`. Ссылки на карты (`maps_route_url`) заново собираются пост-процессором из координат пула. Для старых поездок без кэша пул восстанавливается из предыдущих маршрутов (координаты из `maps_route_url`). Если пула нет — critic попросит выполнить **`full`**.
+- **`lifehacks`** — без веб-поиска (как раньше).
 
 После сборки программы: разделы **Билеты**, **Мероприятия**, **Питание**, **Лайфхаки** (обычно 1–2 минуты).
 
@@ -204,7 +208,9 @@ python3 -m eval --suite smoke
 | `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
 | `POI_USE_WIKIDATA` | Нет | `true` (по умолчанию) — дополнять пул из Wikidata SPARQL |
 | `POI_USE_DISCOVERY` | Нет | `true` (по умолчанию) — веб-поиск названий и fuzzy-match к OSM-пулу |
+| `POI_USE_OVERPASS` | Нет | `true` — OSM Overpass; при достаточном Wikidata-пуле запрос пропускается |
 | `OVERPASS_URL` | Нет | Overpass API, по умолчанию `https://overpass-api.de/api/interpreter` |
+| `OVERPASS_TIMEOUT` | Нет | Таймаут запроса Overpass в секундах (по умолчанию `20`) |
 | `NOMINATIM_URL` | Нет | Центр/bbox города, по умолчанию `https://nominatim.openstreetmap.org` |
 | `NOMINATIM_USER_AGENT` | Нет | User-Agent для Nominatim (обязателен по ToS OSM) |
 | `YANDEX_MAPS_API_KEY` | Нет | Legacy: API Геокодера **не используется для POI**. Проверка пула: `python3 scripts/test_yandex_maps.py Самара` |

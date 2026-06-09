@@ -42,9 +42,9 @@ class TestRebuild(unittest.TestCase):
     def test_lifehacks_no_tools(self) -> None:
         self.assertEqual(required_tools_for_scope("lifehacks"), [])
 
-    def test_routes_tool_name(self) -> None:
+    def test_routes_no_tools(self) -> None:
         tools = required_tools_for_scope("routes")
-        self.assertEqual(tools, ["search_route_materials"])
+        self.assertEqual(tools, [])
 
     def test_tickets_one_tool(self) -> None:
         tools = required_tools_for_scope("tickets")

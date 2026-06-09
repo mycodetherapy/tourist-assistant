@@ -59,3 +59,28 @@ def build_maps_route_url(
     params["ll"] = f"{first.lon},{first.lat}"
     params["z"] = "14"
     return f"https://yandex.ru/maps/?{urlencode(params)}"
+
+
+def parse_maps_route_points(url: str) -> list[GeoPoint]:
+    """Координаты из deep link (rtext=lat,lon~…)."""
+    from urllib.parse import parse_qs, urlparse
+
+    trimmed = (url or "").strip()
+    if not trimmed:
+        return []
+    try:
+        parsed = urlparse(trimmed)
+        rtext = parse_qs(parsed.query).get("rtext", [""])[0]
+    except Exception:
+        return []
+    points: list[GeoPoint] = []
+    for part in rtext.split("~"):
+        chunk = part.strip()
+        if not chunk or "," not in chunk:
+            continue
+        lat_s, lon_s = chunk.split(",", 1)
+        try:
+            points.append(GeoPoint(lat=float(lat_s), lon=float(lon_s)))
+        except ValueError:
+            continue
+    return points

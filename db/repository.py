@@ -473,6 +473,34 @@ def mark_latest_itinerary_approved(trip_id: int) -> None:
         conn.commit()
 
 
+def list_trip_itinerary_programs(
+    trip_id: int,
+    *,
+    limit: int = 30,
+) -> list[dict[str, Any]]:
+    """Программы поездки от новых к старым (для восстановления пула POI)."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT program_json
+            FROM itinerary_versions
+            WHERE trip_id = ?
+            ORDER BY version DESC
+            LIMIT ?
+            """,
+            (trip_id, limit),
+        ).fetchall()
+    programs: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            data = json.loads(row["program_json"])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            programs.append(data)
+    return programs
+
+
 def get_latest_itinerary(trip_id: int) -> dict[str, Any] | None:
     """Последняя версия программы: version, scope, program (dict), approved."""
     with connect() as conn:
@@ -592,3 +620,56 @@ def delete_item_feedback(trip_id: int, section: str, item_key: str) -> None:
             (trip_id, section, item_key),
         )
         conn.commit()
+
+
+def save_section_artifact(
+    trip_id: int,
+    section: str,
+    payload: dict[str, Any],
+    *,
+    digest: str | None = None,
+) -> None:
+    """Сохраняет JSON-артефакт раздела (например, кэш route_materials)."""
+    now = _utc_now()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO section_artifacts (trip_id, section, digest, payload_json, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(trip_id, section) DO UPDATE SET
+                digest = excluded.digest,
+                payload_json = excluded.payload_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                trip_id,
+                section,
+                digest,
+                json.dumps(payload, ensure_ascii=False),
+                now,
+            ),
+        )
+        conn.commit()
+
+
+def get_section_artifact(trip_id: int, section: str) -> dict[str, Any] | None:
+    """Артефакт раздела: payload (dict) и digest."""
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT digest, payload_json
+            FROM section_artifacts
+            WHERE trip_id = ? AND section = ?
+            """,
+            (trip_id, section),
+        ).fetchone()
+    if row is None:
+        return None
+    try:
+        payload = json.loads(row["payload_json"] or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    return {
+        "digest": row["digest"],
+        "payload": payload if isinstance(payload, dict) else {},
+    }

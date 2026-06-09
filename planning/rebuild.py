@@ -29,10 +29,10 @@ _SCOPE_TOOLS: dict[str, tuple[str, ...]] = {
         "search_route_materials",
     ),
     "tickets": ("search_roundtrip_tickets",),
-    "routes": ("search_route_materials",),
+    "routes": (),
     "lifehacks": (),
-    "events": ("search_route_materials",),
-    "dining": ("search_route_materials",),
+    "events": (),
+    "dining": (),
 }
 
 _SCOPE_FIELD: dict[str, str] = {
@@ -102,6 +102,12 @@ def planner_tools_hint(scope: str) -> str:
     tools = required_tools_for_scope(scope)
     if scope == "lifehacks":
         return "Новый веб-поиск не нужен. Сразу ответь без tool_calls."
+    if scope in ("routes", "events", "dining"):
+        return (
+            f"Режим частичной пересборки ({scope}). "
+            "Новый поиск POI не нужен — пул уже в базе. "
+            "Сразу ответь без tool_calls."
+        )
     if scope == "full":
         return (
             "Сначала вызови оба инструмента (билеты и route_materials), если их нет в истории. "
@@ -124,11 +130,17 @@ def human_message_for_scope(scope: str) -> str:
             "Используй search_roundtrip_tickets."
         ),
         "routes": (
-            "Пересобери только маршруты (3 варианта A/B/C). "
-            "Используй search_route_materials."
+            "Пересобери только маршруты (3 варианта A/B/C) из сохранённого пула POI. "
+            "Новый search_route_materials не вызывай."
         ),
-        "events": "Пересобери маршруты. Используй search_route_materials.",
-        "dining": "Пересобери маршруты. Используй search_route_materials.",
+        "events": (
+            "Пересобери маршруты из сохранённого пула POI. "
+            "Новый search_route_materials не вызывай."
+        ),
+        "dining": (
+            "Пересобери маршруты из сохранённого пула POI. "
+            "Новый search_route_materials не вызывай."
+        ),
         "lifehacks": (
             "Обнови только лайфхаки по текущей программе поездки. Без нового поиска."
         ),
@@ -149,6 +161,12 @@ def finalize_extra_prompt(scope: str, base_program: dict[str, Any] | None) -> st
             "Остальные разделы возьми из текущей программы без изменений.\n"
             f"Текущие билеты: {str(base_program.get('tickets', ''))[:500]}...\n"
             f"Текущие маршруты: {str(base_program.get('routes_text', ''))[:500]}...\n"
+        )
+    if scope in ("routes", "events", "dining"):
+        return (
+            f"\nРежим: пересобери ТОЛЬКО маршруты ({scope}) из сохранённого пула POI в базе. "
+            "Новые места не придумывай — только poi_id из materials_digest.\n"
+            f"{_format_base_sections(base_program, exclude='routes')}\n"
         )
     labels = {
         "tickets": "билеты",

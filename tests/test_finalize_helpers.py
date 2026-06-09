@@ -138,6 +138,35 @@ class TestFinalizeHelpers(unittest.TestCase):
         self.assertIn("новый", str(out[0].content))
         self.assertNotIn("старый", str(out[0].content))
 
+    def test_prepare_routes_uses_db_cache_without_tools(self) -> None:
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from db.connection import init_db
+        from db.repository import create_trip, save_section_artifact
+        from search.route_materials_store import ROUTE_MATERIALS_SECTION
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "test.db"
+            with patch.dict("os.environ", {"DATABASE_PATH": str(db_path)}, clear=False):
+                init_db()
+                trip_id = create_trip("Самара", "июнь", "Москва", "тест")
+                save_section_artifact(
+                    trip_id,
+                    ROUTE_MATERIALS_SECTION,
+                    {
+                        "schema_version": 1,
+                        "materials": _materials_payload()["materials"],
+                        "leisure_count": 2,
+                    },
+                    digest="L1. Музей",
+                )
+                out = prepare_finalize_messages([], rebuild_scope="routes", trip_id=trip_id)
+        self.assertEqual(len(out), 1)
+        self.assertIn("кэш", str(out[0].content).lower())
+        self.assertIn("Музей", str(out[0].content))
+
     def test_fallback_draft_from_materials(self) -> None:
         messages = [
             ToolMessage(

@@ -24,8 +24,9 @@ _OVERPASS_URL = os.getenv(
 ).rstrip("/")
 _LAST_CALL = 0.0
 _MIN_INTERVAL = 2.0
-_TIMEOUT = int(os.getenv("OVERPASS_TIMEOUT", "40"))
-_MAX_RETRIES = 3
+_TIMEOUT = int(os.getenv("OVERPASS_TIMEOUT", "20"))
+_MAX_RETRIES = 2
+_AREA_FALLBACK_MAX_SEC = float(os.getenv("OVERPASS_AREA_FALLBACK_MAX_SEC", "12"))
 
 _TOURISM_RE = (
     "attraction|museum|gallery|viewpoint|theme_park|artwork|zoo|aquarium"
@@ -159,10 +160,12 @@ def fetch_overpass_leisure(
     *,
     max_elements: int = 120,
 ) -> list[PoiPoint]:
-    """POI из OSM: area по названию, затем компактный bbox вокруг центра."""
+    """POI из OSM: bbox вокруг центра; area-запрос только если bbox быстрый и мало точек."""
     walk_bbox = walkable_bbox(center)
+    bbox_started = time.monotonic()
     elements = _run_overpass(_bbox_query(walk_bbox))
-    if len(elements) < 8:
+    bbox_elapsed = time.monotonic() - bbox_started
+    if len(elements) < 8 and bbox_elapsed <= _AREA_FALLBACK_MAX_SEC:
         elements = _run_overpass(_area_query(city)) or elements
 
     collected: list[PoiPoint] = []

@@ -28,6 +28,16 @@ def run_critic(state: dict[str, Any]) -> tuple[bool, str]:
         if not tool_call_satisfied(tool_name, tools_done):
             issues.append(f"не вызван {tool_name}")
 
+    if scope in ("routes", "events", "dining"):
+        trip_id = state.get("trip_id")
+        if trip_id is not None:
+            from search.route_materials_store import load_route_materials_for_trip
+
+            if load_route_materials_for_trip(int(trip_id)) is None:
+                issues.append(
+                    "нет сохранённого пула POI — выполните полную пересборку программы"
+                )
+
     program = state.get("program")
     if program:
         issues.extend(

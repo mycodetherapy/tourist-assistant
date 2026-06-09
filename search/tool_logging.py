@@ -39,6 +39,16 @@ def parse_tool_result(content: str) -> dict[str, Any]:
             "error": str(data.get("error", ""))[:500],
         }
 
+    if data.get("category") == "route_materials":
+        count = int(data.get("leisure_count", data.get("results_count", 0)))
+        return {
+            "live_data": bool(data.get("live_data", count > 0)),
+            "results_count": count,
+            "raw_results_count": count,
+            "provider": str(data.get("provider") or "osm"),
+            "error": data.get("error") or data.get("warning"),
+        }
+
     if data.get("category") == "tickets" and data.get("schema_version") == "1":
         count = int(data.get("offers_count", data.get("results_count", 0)))
         provider = (

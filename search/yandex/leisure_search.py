@@ -23,6 +23,10 @@ def _use_discovery() -> bool:
     return os.getenv("POI_USE_DISCOVERY", "true").lower() in {"1", "true", "yes"}
 
 
+def _use_overpass() -> bool:
+    return os.getenv("POI_USE_OVERPASS", "true").lower() in {"1", "true", "yes"}
+
+
 @dataclass
 class LeisureSearchResult:
     points: list[PoiPoint]
@@ -44,11 +48,19 @@ def search_leisure_points(
         return LeisureSearchResult(points=_demo_leisure(city, limit))
 
     geo_center = GeoPoint(lon=center.lon, lat=center.lat)
-    osm_points = fetch_overpass_leisure(city, center, max_elements=max(limit * 4, 40))
+    osm_points: list[PoiPoint] = []
     wikidata_points: list[PoiPoint] = []
-    if _use_wikidata():
+    fetch_osm = _use_overpass()
+    fetch_wd = _use_wikidata()
+    min_wd_to_skip_osm = min(limit, max(limit - 5, 12))
+
+    if fetch_wd:
         wikidata_points = fetch_wikidata_leisure(
             city, center, wikidata_id=center.wikidata_id, max_items=max(limit * 2, 30)
+        )
+    if fetch_osm and len(wikidata_points) < min_wd_to_skip_osm:
+        osm_points = fetch_overpass_leisure(
+            city, center, max_elements=max(limit * 4, 40)
         )
 
     pool = merge_poi_pools(

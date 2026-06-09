@@ -200,6 +200,17 @@ class TripService:
             preferences_dict = {}
         latest = get_latest_itinerary(trip_id)
         base_program = normalize_stored_program(latest["program"]) if latest else None
+        from search.context import set_route_materials
+        from search.route_materials_store import ensure_route_materials_for_trip
+
+        cached = ensure_route_materials_for_trip(
+            trip_id,
+            city=trip["city"],
+            dates=trip["dates"],
+            base_program=base_program,
+        )
+        if cached is not None:
+            set_route_materials(cached.model_dump())
         user_message = human_message_for_scope(rebuild_scope)
         return self.build_initial_state(
             trip_id=trip_id,
@@ -333,6 +344,18 @@ class TripService:
             search_context = self.apply_preferences(prefs)
         else:
             search_context = ""
+
+        from search.context import set_route_materials
+        from search.route_materials_store import ensure_route_materials_for_trip
+
+        cached = ensure_route_materials_for_trip(
+            trip_id,
+            city=trip["city"],
+            dates=trip["dates"],
+            base_program=base_program,
+        )
+        if cached is not None:
+            set_route_materials(cached.model_dump())
 
         rebuild_scope = scope or latest["scope"]
         return self.build_initial_state(
@@ -478,9 +501,22 @@ class TripService:
         if details is None or details.latest_itinerary is None:
             return None
         latest = details.latest_itinerary
+        trip = details.trip
+        prefs = details.preferences or {}
+        program_data = dict(latest["program"])
+        from agents.finalize_helpers import repair_program_routes
+
+        program_data = repair_program_routes(
+            program_data,
+            trip_id=trip_id,
+            city=str(trip["city"]),
+            dates=str(trip["dates"]),
+            transport=str(prefs.get("transport_preference") or "mixed"),
+            pace=str(prefs.get("pace") or "moderate"),
+        )
         return self.build_program_view(
             trip_id,
-            latest["program"],
+            program_data,
             version=int(latest["version"]),
             version_id=int(latest["id"]),
             scope=latest["scope"],

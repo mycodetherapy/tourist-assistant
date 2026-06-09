@@ -199,6 +199,9 @@ def _collect_latest_tool_messages(
         return []
 
     needed = set(required_tools_for_scope(rebuild_scope))
+    # При routes/events/dining поиск не обязателен, но ToolMessage в истории — учитываем.
+    if rebuild_scope in ("routes", "events", "dining"):
+        needed.add("search_route_materials")
     latest: dict[str, ToolMessage] = {}
     for msg in messages:
         if not isinstance(msg, ToolMessage) or not msg.name:
@@ -221,12 +224,22 @@ def prepare_finalize_messages(
     messages: list[Any],
     *,
     rebuild_scope: str = "full",
+    trip_id: int | None = None,
 ) -> list[HumanMessage]:
     """
     Для finalize — slim-данные инструментов в HumanMessage.
     ToolMessage без предшествующего tool_calls OpenAI API не принимает.
     """
     tool_messages = _collect_latest_tool_messages(messages, rebuild_scope=rebuild_scope)
+    if not tool_messages and rebuild_scope in ("routes", "events", "dining"):
+        if trip_id is not None:
+            from search.route_materials_store import cached_materials_finalize_block
+
+            cached = cached_materials_finalize_block(int(trip_id))
+            if cached:
+                return [HumanMessage(content=cached)]
+        return []
+
     if not tool_messages:
         return []
 
@@ -281,10 +294,17 @@ def _normalize_city_key(city: str) -> str:
     return city.lower().replace("ё", "е").strip()
 
 
+def _materials_city_ok(materials: RouteMaterials, expected_city: str | None) -> bool:
+    if not expected_city:
+        return True
+    return _normalize_city_key(materials.city) == _normalize_city_key(expected_city)
+
+
 def load_route_materials(
     messages: list[Any],
     *,
     expected_city: str | None = None,
+    trip_id: int | None = None,
 ) -> RouteMaterials | None:
     data = _tool_payload(messages, "search_route_materials")
     raw = data.get("materials")
@@ -292,13 +312,34 @@ def load_route_materials(
         try:
             materials = RouteMaterials.model_validate(raw)
         except Exception:
-            return None
-        if expected_city and _normalize_city_key(materials.city) != _normalize_city_key(
-            expected_city
-        ):
-            return None
-        return materials
+            materials = None
+        else:
+            if _materials_city_ok(materials, expected_city):
+                return materials
+    if trip_id is not None:
+        from search.route_materials_store import load_route_materials_for_trip
+
+        cached = load_route_materials_for_trip(int(trip_id))
+        if cached is not None and _materials_city_ok(cached, expected_city):
+            return cached
+    from search.context import get_route_materials
+
+    session_raw = get_route_materials()
+    if isinstance(session_raw, dict):
+        try:
+            session = RouteMaterials.model_validate(session_raw)
+        except Exception:
+            session = None
+        else:
+            if _materials_city_ok(session, expected_city):
+                return session
     return None
+
+
+def _routes_need_maps_finalize(program: RouteProgram) -> bool:
+    if len(program.cases) < 3:
+        return False
+    return any(not str(case.maps_route_url).strip() for case in program.cases)
 
 
 def resolve_routes_program(
@@ -309,15 +350,30 @@ def resolve_routes_program(
     transport: str = "mixed",
     pace: str = "moderate",
     expected_city: str | None = None,
+    trip_id: int | None = None,
+    dates: str = "",
 ) -> tuple[RouteProgram, str]:
     from agents.route_postprocess import (
         build_fallback_route_program,
         build_hybrid_route_program,
+        finalize_route_program,
         format_routes_text,
     )
     from models.routes import RouteProgram
 
-    materials = load_route_materials(messages, expected_city=expected_city)
+    if trip_id is not None:
+        from search.route_materials_store import ensure_route_materials_for_trip
+
+        ensure_route_materials_for_trip(
+            int(trip_id),
+            city=expected_city or "",
+            dates=dates,
+            base_program=base_program,
+        )
+
+    materials = load_route_materials(
+        messages, expected_city=expected_city, trip_id=trip_id
+    )
     program: RouteProgram | None = None
     if materials:
         draft_prog: RouteProgram | None = None
@@ -344,7 +400,68 @@ def resolve_routes_program(
             program = None
     if program is None:
         program = RouteProgram(cases=[])
+
+    if _routes_need_maps_finalize(program):
+        if materials is None:
+            materials = load_route_materials(
+                messages, expected_city=expected_city, trip_id=trip_id
+            )
+        if materials is None and trip_id is not None:
+            from search.route_materials_store import ensure_route_materials_for_trip
+
+            materials = ensure_route_materials_for_trip(
+                int(trip_id),
+                city=expected_city or "",
+                dates=dates,
+                base_program=base_program,
+            )
+        if materials:
+            program = finalize_route_program(
+                program, materials, transport=transport, pace=pace
+            )
+
     return program, format_routes_text(program)
+
+
+def repair_program_routes(
+    program: dict[str, Any],
+    *,
+    messages: list[Any] | None = None,
+    trip_id: int | None = None,
+    city: str = "",
+    dates: str = "",
+    base_program: dict[str, Any] | None = None,
+    transport: str = "mixed",
+    pace: str = "moderate",
+) -> dict[str, Any]:
+    """Дополняет maps_route_url, если в сохранённой программе они пропали."""
+    routes = program.get("routes")
+    if not isinstance(routes, dict):
+        return program
+    try:
+        current = RouteProgram.model_validate(routes)
+    except Exception:
+        return program
+    if not _routes_need_maps_finalize(current):
+        return program
+
+    repaired, routes_text = resolve_routes_program(
+        messages or [],
+        routes,
+        base_program=base_program,
+        transport=transport,
+        pace=pace,
+        expected_city=city or None,
+        trip_id=trip_id,
+        dates=dates,
+    )
+    if _routes_need_maps_finalize(repaired):
+        return program
+    updated = dict(program)
+    updated["routes"] = repaired.model_dump()
+    if routes_text:
+        updated["routes_text"] = routes_text
+    return updated
 
 
 def build_fallback_program_draft(
@@ -353,12 +470,15 @@ def build_fallback_program_draft(
     city: str,
     walking_area: str = "",
     pace: str = "moderate",
+    trip_id: int | None = None,
 ) -> ProgramDraft:
     """Сборка черновика маршрутов без LLM (если ответ обрезан по length)."""
     from agents.route_postprocess import build_fallback_route_program
     from models.routes import RouteMaterials
 
-    materials = load_route_materials(messages, expected_city=city)
+    materials = load_route_materials(
+        messages, expected_city=city, trip_id=trip_id
+    )
     if materials is None:
         materials = RouteMaterials(city=city, dates="")
     routes = build_fallback_route_program(materials, pace=pace)
@@ -395,6 +515,7 @@ def invoke_program_draft(
     state_messages: list[Any],
     city: str,
     walking_area: str = "",
+    trip_id: int | None = None,
 ) -> ProgramDraft:
     """Вызов structured output с fallback при обрезке ответа (length)."""
     prompt = [system, *tool_messages, human]  # tool_messages — HumanMessage, не ToolMessage
@@ -430,4 +551,5 @@ def invoke_program_draft(
                 if get_session_preferences() is not None
                 else "moderate"
             ),
+            trip_id=trip_id,
         )

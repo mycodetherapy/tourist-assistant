@@ -9,7 +9,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from agents.critic import run_critic
 from agents.finalize_helpers import (
     invoke_program_draft,
+    load_route_materials,
     prepare_finalize_messages,
+    repair_program_routes,
     resolve_routes_program,
     resolve_tickets_section,
 )
@@ -130,8 +132,9 @@ def executor_node(state: AgentState) -> dict[str, list[ToolMessage]]:
         args = resolve_tool_args(state, name, call.get("args") or {})
         tool_call_id = call["id"]
 
+        trip_id = state.get("trip_id")
+        resolved = resolve_tool_name(name)
         try:
-            resolved = resolve_tool_name(name)
             if resolved not in TOOL_MAP:
                 raise KeyError(f"Неизвестный инструмент: {name}")
             if resolved == "search_route_materials":
@@ -141,7 +144,6 @@ def executor_node(state: AgentState) -> dict[str, list[ToolMessage]]:
         except Exception as exc:
             content = f"Ошибка выполнения инструмента {name}: {exc}"
 
-        trip_id = state.get("trip_id")
         if trip_id is not None:
             metrics = parse_tool_result(content)
             log_tool_run(
@@ -158,6 +160,14 @@ def executor_node(state: AgentState) -> dict[str, list[ToolMessage]]:
         tool_messages.append(
             ToolMessage(content=content, tool_call_id=tool_call_id, name=name)
         )
+        if (
+            trip_id is not None
+            and resolved == "search_route_materials"
+            and not str(content).startswith("Ошибка")
+        ):
+            from search.route_materials_store import persist_route_materials_from_tool
+
+            persist_route_materials_from_tool(int(trip_id), content)
 
     ExecutorNodeOutput(tool_messages=tool_messages)
     return {"messages": tool_messages}
@@ -204,9 +214,11 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     human = HumanMessage(content=human_message_for_scope(rebuild_scope))
 
     llm_final = get_llm_final()
+    trip_id = state.get("trip_id")
     finalize_messages = prepare_finalize_messages(
         state["messages"],
         rebuild_scope=rebuild_scope,
+        trip_id=int(trip_id) if trip_id is not None else None,
     )
     draft: ProgramDraft = invoke_program_draft(
         llm_final,
@@ -216,6 +228,7 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
         state_messages=state["messages"],
         city=ctx.city,
         walking_area=ctx.search_context or "",
+        trip_id=int(trip_id) if trip_id is not None else None,
     )
     draft_fields = draft.model_dump()
     prefs = state.get("preferences") or {}
@@ -229,7 +242,19 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
             transport=transport,
             pace=pace,
             expected_city=ctx.city,
+            trip_id=int(trip_id) if trip_id is not None else None,
+            dates=ctx.dates,
         )
+        if trip_id is not None and rebuild_scope == "full":
+            materials = load_route_materials(
+                state["messages"],
+                expected_city=ctx.city,
+                trip_id=int(trip_id),
+            )
+            if materials is not None:
+                from search.route_materials_store import persist_route_materials
+
+                persist_route_materials(int(trip_id), materials, overwrite=True)
         draft_fields["routes"] = routes_program.model_dump()
         draft_fields["routes_text"] = routes_text
     if rebuild_scope in ("full", "lifehacks"):
@@ -255,6 +280,17 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
         walking_area=ctx.search_context or "",
         search_context=ctx.search_context or "",
     )
+    if trip_id is not None:
+        program_dump = repair_program_routes(
+            program_dump,
+            messages=state["messages"],
+            trip_id=int(trip_id),
+            city=ctx.city,
+            dates=ctx.dates,
+            base_program=base_program,
+            transport=transport,
+            pace=pace,
+        )
     program = FinalProgram.model_validate(program_dump)
 
     print_final_program(program)
@@ -332,8 +368,9 @@ def human_review_node(state: AgentState) -> dict[str, Any]:
 
 
 def route_entry(state: AgentState) -> Literal["researcher", "writer"]:
-    """Лайфхаки без веб-поиска — сразу writer."""
-    if state.get("rebuild_scope") == "lifehacks":
+    """Лайфхаки и пересбор маршрутов без POI-поиска — сразу writer."""
+    scope = state.get("rebuild_scope", "full")
+    if scope in ("lifehacks", "routes", "events", "dining"):
         return "writer"
     return "researcher"
 

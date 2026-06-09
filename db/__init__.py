@@ -25,7 +25,9 @@ from db.repository import (
     mark_latest_itinerary_approved,
     save_itinerary_version,
     save_preferences,
+    save_section_artifact,
     save_user_profile,
+    get_section_artifact,
     update_trip_status,
     upsert_item_feedback,
 )
@@ -56,7 +58,9 @@ __all__ = [
     "mark_latest_itinerary_approved",
     "save_itinerary_version",
     "save_preferences",
+    "save_section_artifact",
     "save_user_profile",
+    "get_section_artifact",
     "update_trip_status",
     "upsert_item_feedback",
 ]

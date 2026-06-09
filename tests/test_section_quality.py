@@ -52,6 +52,22 @@ class TestSectionQuality(unittest.TestCase):
         )
         self.assertFalse(is_garbage_section(text, "events"))
 
+    def test_critic_routes_requires_cached_poi(self) -> None:
+        state = {
+            "rebuild_scope": "routes",
+            "trip_id": 99,
+            "messages": [],
+            "program": {
+                "routes": _sample_routes_program(),
+                "routes_text": "## Вариант A\nтест " * 20,
+                "tickets": "ok",
+                "lifehacks": "x",
+            },
+        }
+        passed, notes = run_critic(state)
+        self.assertFalse(passed)
+        self.assertIn("сохранённого пула", notes)
+
     def test_critic_fails_garbage_routes_scope(self) -> None:
         state = {
             "rebuild_scope": "routes",
