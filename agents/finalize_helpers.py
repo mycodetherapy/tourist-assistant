@@ -12,6 +12,7 @@ from models.routes import RouteMaterials, RouteProgram
 from models.schemas import ProgramDraft
 from models.tickets import TicketsSearchOutput
 from planning.rebuild import required_tools_for_scope, resolve_tool_name
+from search.context import get_session_preferences
 from search.ticket_links import format_offers_summary
 from search.tickets_search import run_tickets_search
 from search.transport_codes import ground_transport_available
@@ -276,14 +277,27 @@ def _tool_payload(messages: list[Any], tool_name: str) -> dict[str, Any]:
     return {}
 
 
-def load_route_materials(messages: list[Any]) -> RouteMaterials | None:
+def _normalize_city_key(city: str) -> str:
+    return city.lower().replace("ё", "е").strip()
+
+
+def load_route_materials(
+    messages: list[Any],
+    *,
+    expected_city: str | None = None,
+) -> RouteMaterials | None:
     data = _tool_payload(messages, "search_route_materials")
     raw = data.get("materials")
     if isinstance(raw, dict):
         try:
-            return RouteMaterials.model_validate(raw)
+            materials = RouteMaterials.model_validate(raw)
         except Exception:
             return None
+        if expected_city and _normalize_city_key(materials.city) != _normalize_city_key(
+            expected_city
+        ):
+            return None
+        return materials
     return None
 
 
@@ -293,6 +307,8 @@ def resolve_routes_program(
     *,
     base_program: Optional[dict[str, Any]],
     transport: str = "mixed",
+    pace: str = "moderate",
+    expected_city: str | None = None,
 ) -> tuple[RouteProgram, str]:
     from agents.route_postprocess import (
         build_fallback_route_program,
@@ -301,7 +317,7 @@ def resolve_routes_program(
     )
     from models.routes import RouteProgram
 
-    materials = load_route_materials(messages)
+    materials = load_route_materials(messages, expected_city=expected_city)
     program: RouteProgram | None = None
     if materials:
         draft_prog: RouteProgram | None = None
@@ -312,10 +328,10 @@ def resolve_routes_program(
                 draft_prog = None
         if draft_prog and len(draft_prog.cases) >= 3:
             program = build_hybrid_route_program(
-                materials, draft_prog, transport=transport
+                materials, draft_prog, transport=transport, pace=pace
             )
         else:
-            program = build_fallback_route_program(materials)
+            program = build_fallback_route_program(materials, pace=pace)
     elif draft_routes:
         try:
             program = RouteProgram.model_validate(draft_routes)
@@ -336,15 +352,16 @@ def build_fallback_program_draft(
     *,
     city: str,
     walking_area: str = "",
+    pace: str = "moderate",
 ) -> ProgramDraft:
     """Сборка черновика маршрутов без LLM (если ответ обрезан по length)."""
     from agents.route_postprocess import build_fallback_route_program
     from models.routes import RouteMaterials
 
-    materials = load_route_materials(messages)
+    materials = load_route_materials(messages, expected_city=city)
     if materials is None:
         materials = RouteMaterials(city=city, dates="")
-    routes = build_fallback_route_program(materials)
+    routes = build_fallback_route_program(materials, pace=pace)
     from agents.lifehacks_quality import build_default_lifehacks
 
     lifehacks = build_default_lifehacks(
@@ -408,4 +425,9 @@ def invoke_program_draft(
             state_messages,
             city=city or "город",
             walking_area=walking_area,
+            pace=(
+                get_session_preferences().pace
+                if get_session_preferences() is not None
+                else "moderate"
+            ),
         )

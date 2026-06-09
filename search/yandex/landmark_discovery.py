@@ -1,16 +1,19 @@
-"""Поиск названий достопримечательностей в вебе → запросы к Geocoder."""
+"""Поиск названий достопримечательностей в вебе → match к OSM/Wikidata пулу."""
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
 from models.routes import LeisureTag
-from search.web import web_search_multi
+from search.web import format_search_digest, web_search_multi
 from search.yandex.leisure_tags import infer_leisure_tag
 from search.yandex.poi_filters import is_city_only_name, looks_like_leisure_poi
 
 _MAX_CANDIDATES = 24
+_MAX_TRACE_RESULTS = 12
+_MAX_SNIPPET_LEN = 320
 _MIN_NAME_LEN = 4
 _MAX_NAME_LEN = 90
 
@@ -108,6 +111,92 @@ _HINT_TAIL_RE = re.compile(
 )
 
 _TITLE_SPLIT_RE = re.compile(r"\s*[—–\-|:]\s*")
+
+
+@dataclass
+class LandmarkDiscoveryTrace:
+    """Метаданные веб-поиска для LangGraph / tool JSON."""
+
+    provider: str = ""
+    queries: list[str] = field(default_factory=list)
+    results_count: int = 0
+    raw_results_count: int = 0
+    filter_fallback: bool = False
+    answer: str | None = None
+    search_results: list[dict[str, str | None]] = field(default_factory=list)
+    landmark_names: list[str] = field(default_factory=list)
+    geocode_queries: list[dict[str, str]] = field(default_factory=list)
+    matched_pois: list[dict[str, str | float]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "queries": self.queries,
+            "results_count": self.results_count,
+            "raw_results_count": self.raw_results_count,
+            "filter_fallback": self.filter_fallback,
+            "answer": self.answer,
+            "search_results": self.search_results,
+            "landmark_names": self.landmark_names,
+            "geocode_queries": self.geocode_queries,
+            "matched_pois": self.matched_pois,
+        }
+
+
+def _trim_search_results(
+    results: list[dict[str, str | None]],
+    *,
+    limit: int = _MAX_TRACE_RESULTS,
+) -> list[dict[str, str | None]]:
+    trimmed: list[dict[str, str | None]] = []
+    for item in results[:limit]:
+        snippet = str(item.get("snippet") or "")
+        if len(snippet) > _MAX_SNIPPET_LEN:
+            snippet = snippet[: _MAX_SNIPPET_LEN - 1] + "…"
+        trimmed.append(
+            {
+                "title": item.get("title"),
+                "url": item.get("url"),
+                "snippet": snippet or None,
+            }
+        )
+    return trimmed
+
+
+def format_landmark_discovery_digest(trace: LandmarkDiscoveryTrace) -> str:
+    """Текстовая сводка discovery для трейса и LLM."""
+    lines: list[str] = []
+    lines.append(
+        f"Веб-поиск достопримечательностей ({trace.provider or 'unknown'}): "
+        f"{trace.results_count} ссылок после фильтра "
+        f"(до фильтра: {trace.raw_results_count})."
+    )
+    if trace.queries:
+        lines.append("Запросы:")
+        for index, query in enumerate(trace.queries, start=1):
+            lines.append(f"  Q{index}. {query}")
+    if trace.answer:
+        answer = trace.answer.strip()
+        if len(answer) > 600:
+            answer = answer[:599] + "…"
+        lines.append(f"Answer (Tavily): {answer}")
+    if trace.search_results:
+        lines.append("Сниппеты:")
+        lines.append(format_search_digest(trace.search_results))
+    lines.append(f"Извлечённые названия для match: {len(trace.landmark_names)}.")
+    if trace.matched_pois:
+        lines.append(f"Сопоставлено с OSM/Wikidata: {len(trace.matched_pois)}.")
+        for index, item in enumerate(trace.matched_pois, start=1):
+            lines.append(
+                f"  M{index}. {item['discovery_name']} → "
+                f"{item['poi_name']} (poi_id={item['poi_id']}, score={item['score']})"
+            )
+    elif trace.geocode_queries:
+        for index, item in enumerate(trace.geocode_queries, start=1):
+            lines.append(
+                f"  N{index}. {item['name']} → query={item['query']!r}"
+            )
+    return "\n".join(lines)
 
 
 def landmark_search_queries(city: str) -> list[str]:
@@ -277,11 +366,38 @@ def extract_landmark_names(
     return ordered[:max_names]
 
 
-def discover_landmark_names(city: str, *, max_names: int = _MAX_CANDIDATES) -> list[str]:
-    """Веб-поиск → текстовый список мест для Geocoder."""
+def run_landmark_discovery(
+    city: str,
+    *,
+    max_names: int = _MAX_CANDIDATES,
+) -> tuple[list[str], LandmarkDiscoveryTrace]:
+    """Веб-поиск → названия + trace для LangGraph."""
     queries = landmark_search_queries(city)
     payload = web_search_multi(queries, kind="landmarks", cities=[city])
-    return extract_landmark_names(payload, city=city, max_names=max_names)
+    names = extract_landmark_names(payload, city=city, max_names=max_names)
+    geocode_queries = [
+        {"name": name, "query": query}
+        for name in names
+        if (query := geocode_query_for_name(name, city))
+    ]
+    trace = LandmarkDiscoveryTrace(
+        provider=str(payload.get("provider") or ""),
+        queries=list(payload.get("queries") or queries),
+        results_count=int(payload.get("results_count") or 0),
+        raw_results_count=int(payload.get("raw_results_count") or 0),
+        filter_fallback=bool(payload.get("filter_fallback")),
+        answer=str(payload["answer"]) if payload.get("answer") else None,
+        search_results=_trim_search_results(list(payload.get("results") or [])),
+        landmark_names=names,
+        geocode_queries=geocode_queries,
+    )
+    return names, trace
+
+
+def discover_landmark_names(city: str, *, max_names: int = _MAX_CANDIDATES) -> list[str]:
+    """Веб-поиск → текстовый список мест для Geocoder."""
+    names, _trace = run_landmark_discovery(city, max_names=max_names)
+    return names
 
 
 def infer_tag_for_name(name: str) -> LeisureTag:

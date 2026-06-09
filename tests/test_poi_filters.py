@@ -81,8 +81,20 @@ class TestPoiFilters(unittest.TestCase):
         self.assertIn("rtext=", url)
         self.assertIn("57.768072,40.927155", decoded)
         self.assertIn("57.7672,40.9263", decoded)
+        self.assertIn("mode=routes", url)
         self.assertIn("rtt=pd", url)
         self.assertNotIn("Сусанинская", decoded)
+
+    def test_route_url_always_pedestrian_even_for_taxi_pref(self) -> None:
+        url = build_maps_route_url(
+            [
+                GeoPoint(lon=50.1, lat=53.2),
+                GeoPoint(lon=50.11, lat=53.21),
+            ],
+            transport="taxi",
+        )
+        self.assertIn("rtt=pd", url)
+        self.assertNotIn("rtt=auto", url)
 
     def test_rejects_city_only_name(self) -> None:
         from search.yandex.poi_filters import is_city_only_name

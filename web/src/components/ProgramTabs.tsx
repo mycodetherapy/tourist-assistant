@@ -3,7 +3,7 @@ import { Alert, Tabs, notification } from "antd";
 import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
-import { parseRouteProgram } from "../api/routeTypes";
+import { parseRouteProgram, routeCaseAtIndex } from "../api/routeTypes";
 import type { ItemVote, ProgramResponse, VotableSectionKey } from "../api/types";
 import { ItemVoteButtons } from "./ItemVoteButtons";
 import { RouteCaseDetails } from "./RouteCaseDetails";
@@ -152,7 +152,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
           message="Три варианта маршрута на всю поездку"
           description={
             (data.program.routes_text || "").includes("(fallback)")
-              ? "Использованы демо-точки: нужен ключ API Геокодера в YANDEX_MAPS_API_KEY. python3 scripts/test_yandex_maps.py"
+              ? "Использованы демо-точки: проверьте доступ к Overpass/Nominatim. python3 scripts/test_yandex_maps.py Город"
               : "Оцените варианты A / B / C. Карта встроена в каждый вариант; ссылка на Яндекс.Карты — в описании."
           }
         />
@@ -190,7 +190,9 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
                   <ul className="space-y-2">
                     {section.items.map((item) => {
                       const routeCase =
-                        sectionKey === "routes" ? routeCases[item.index] : undefined;
+                        sectionKey === "routes"
+                          ? routeCaseAtIndex(routeCases, item.index)
+                          : undefined;
                       const useRouteCard =
                         sectionKey === "routes" &&
                         routeCase &&

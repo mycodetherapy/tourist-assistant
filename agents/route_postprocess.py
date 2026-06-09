@@ -170,21 +170,48 @@ def _stops_for_pool(case_id: RouteCaseId, pool_size: int, span_km: float) -> tup
     return n, n
 
 
-def _adapt_profiles(leisure: list[PoiPoint]) -> dict[RouteCaseId, RouteProfile]:
-    """Профили A/B/C с учётом пула и размаха города."""
+def _pace_max_stops(case_id: RouteCaseId, max_stops: int, *, pace: str) -> int:
+    """Ограничивает число точек на маршруте по темпу (пул при этом полный)."""
+    if pace == "relaxed":
+        caps: dict[RouteCaseId, int] = {"A": 3, "B": 5, "C": 6}
+        return min(max_stops, caps[case_id])
+    if pace == "packed":
+        caps = {"A": 4, "B": 7, "C": 10}
+        return max(max_stops, caps[case_id])
+    return max_stops
+
+
+def _pace_km_scale(pace: str) -> float:
+    if pace == "relaxed":
+        return 0.88
+    if pace == "packed":
+        return 1.08
+    return 1.0
+
+
+def _adapt_profiles(
+    leisure: list[PoiPoint],
+    *,
+    pace: str = "moderate",
+) -> dict[RouteCaseId, RouteProfile]:
+    """Профили A/B/C с учётом пула, размаха города и темпа поездки."""
     pool_size = len(leisure)
     span_km = _pool_span_km(leisure)
     abs_min = _abs_min_route_km(span_km)
+    km_scale = _pace_km_scale(pace)
     out: dict[RouteCaseId, RouteProfile] = {}
     for case_id in ("A", "B", "C"):
         base = _BASE_PROFILES[case_id]
         min_s, max_s = _stops_for_pool(case_id, pool_size, span_km)
-        km_scale = 0.9 if pool_size < 5 else 1.0
+        max_s = _pace_max_stops(case_id, max_s, pace=pace)
+        min_s = min(min_s, max_s)
+        pool_km_scale = 0.9 if pool_size < 5 else 1.0
+        scale = pool_km_scale * km_scale
         if case_id == "A":
             out[case_id] = RouteProfile(
                 title=base.title,
-                target_km_min=max(_MIN_ROUTE_KM_SHORT, base.target_km_min * km_scale * 0.9),
-                target_km_max=min(_MAX_ROUTE_KM_SHORT, base.target_km_max * km_scale),
+                target_km_min=max(_MIN_ROUTE_KM_SHORT, base.target_km_min * scale * 0.9),
+                target_km_max=min(_MAX_ROUTE_KM_SHORT, base.target_km_max * scale),
                 min_stops=min_s,
                 max_stops=max_s,
                 max_leg_km=base.max_leg_km,
@@ -193,8 +220,8 @@ def _adapt_profiles(leisure: list[PoiPoint]) -> dict[RouteCaseId, RouteProfile]:
             continue
         out[case_id] = RouteProfile(
             title=base.title,
-            target_km_min=max(abs_min, base.target_km_min * km_scale),
-            target_km_max=base.target_km_max * km_scale,
+            target_km_min=max(abs_min, base.target_km_min * scale),
+            target_km_max=base.target_km_max * scale,
             min_stops=min_s,
             max_stops=max_s,
             max_leg_km=base.max_leg_km,
@@ -203,10 +230,12 @@ def _adapt_profiles(leisure: list[PoiPoint]) -> dict[RouteCaseId, RouteProfile]:
     return out
 
 
-def route_profile_for_case(case_id: str, *, pool_size: int) -> RouteProfile:
+def route_profile_for_case(
+    case_id: str, *, pool_size: int, pace: str = "moderate"
+) -> RouteProfile:
     key: RouteCaseId = case_id if case_id in _BASE_PROFILES else "A"  # type: ignore[assignment]
     dummy = [PoiPoint(poi_id="x", tag="landmarks", name="x", coordinates=GeoPoint(lon=0, lat=0), maps_url="")]
-    profiles = _adapt_profiles(dummy * max(pool_size, 1))
+    profiles = _adapt_profiles(dummy * max(pool_size, 1), pace=pace)
     return profiles[key]
 
 
@@ -758,6 +787,7 @@ def finalize_route_program(
     materials: RouteMaterials,
     *,
     transport: str = "mixed",
+    pace: str = "moderate",
 ) -> RouteProgram:
     index = _poi_index(materials)
     leisure = _landmark_pool(materials.leisure_points)
@@ -770,7 +800,7 @@ def finalize_route_program(
                 ),
             }
         )
-    profiles = _adapt_profiles(leisure)
+    profiles = _adapt_profiles(leisure, pace=pace)
     span_km = _pool_span_km(leisure)
     cases: list[TripRouteCase] = []
     for case in program.cases:
@@ -1005,15 +1035,16 @@ def build_hybrid_route_program(
     draft: RouteProgram,
     *,
     transport: str = "walking",
+    pace: str = "moderate",
 ) -> RouteProgram:
     """
     LLM ранжирует poi_id по вариантам; алгоритм валидирует km/дубли или подставляет fallback.
     """
     leisure = _landmark_pool(materials.leisure_points)
     if not leisure:
-        return build_fallback_route_program(materials)
+        return build_fallback_route_program(materials, pace=pace)
     ordered = _order_indices(leisure)
-    profiles = _adapt_profiles(leisure)
+    profiles = _adapt_profiles(leisure, pace=pace)
     span_km = _pool_span_km(leisure)
     algo = _compute_algorithm_indices(leisure, ordered, profiles, span_km)
     draft_cases = _draft_case_map(draft)
@@ -1060,10 +1091,14 @@ def build_hybrid_route_program(
             cases = _cases_from_indices()
 
     program = RouteProgram(cases=cases)
-    return finalize_route_program(program, materials, transport=transport)
+    return finalize_route_program(program, materials, transport=transport, pace=pace)
 
 
-def build_fallback_route_program(materials: RouteMaterials) -> RouteProgram:
+def build_fallback_route_program(
+    materials: RouteMaterials,
+    *,
+    pace: str = "moderate",
+) -> RouteProgram:
     """Три пеших варианта разной длины — только leisure из пула (алгоритм)."""
     leisure = _landmark_pool(materials.leisure_points)
     if not leisure:
@@ -1074,7 +1109,7 @@ def build_fallback_route_program(materials: RouteMaterials) -> RouteProgram:
             ]
         )
     ordered = _order_indices(leisure)
-    profiles = _adapt_profiles(leisure)
+    profiles = _adapt_profiles(leisure, pace=pace)
     span_km = _pool_span_km(leisure)
     algo = _compute_algorithm_indices(leisure, ordered, profiles, span_km)
 
@@ -1086,7 +1121,7 @@ def build_fallback_route_program(materials: RouteMaterials) -> RouteProgram:
             for case_id in ("A", "B", "C")
         ]
     )
-    return finalize_route_program(program, materials, transport="walking")
+    return finalize_route_program(program, materials, transport="walking", pace=pace)
 
 
 def leisure_overlap_ratio(a: TripRouteCase, b: TripRouteCase) -> float:

@@ -1,158 +1,33 @@
-"""Поиск мест досуга через HTTP Геокодер (ключ API Геокодера)."""
+"""Поиск мест досуга: Overpass + Wikidata + веб-discovery (без Yandex Geocoder)."""
 
 from __future__ import annotations
 
 import math
+import os
+from dataclasses import dataclass
 
 from models.routes import GeoPoint, LeisureTag, PoiPoint
-from search.yandex.client import (
-    center_bbox,
-    geocode_city,
-    geocode_places,
-    get_api_key,
-)
-from search.yandex.leisure_tags import (
-    geocode_queries_for_tag,
-    leisure_pool_limit,
-)
-from search.yandex.parse import feature_to_poi
-from search.yandex.poi_filters import (
-    coord_key,
-    is_landmark_poi_name,
-    poi_name_conflict,
-    route_name_key,
-    within_walkable_radius,
-)
+from search.osm.nominatim import resolve_city_center
+from search.osm.overpass import fetch_overpass_leisure
+from search.poi_collect import merge_poi_pools, rank_leisure_pool
+from search.poi_match import match_names_to_pool, strong_match_ids
+from search.wikidata.places import fetch_wikidata_leisure
+from search.yandex.leisure_tags import leisure_search_pool_limit
 
 
-def _rank_key(poi: PoiPoint) -> tuple[float, float, float]:
-    rating = poi.rating if poi.rating is not None else 0.0
-    landmark = 1.0 if is_landmark_poi_name(poi.name) else 0.0
-    return (landmark, rating, 1.0 if poi.address else 0.0)
+def _use_wikidata() -> bool:
+    return os.getenv("POI_USE_WIKIDATA", "true").lower() in {"1", "true", "yes"}
 
 
-def _append_poi(
-    collected: list[PoiPoint],
-    seen_ids: set[str],
-    seen_coords: set[str],
-    seen_names: set[str],
-    feature: dict,
-    *,
-    tag: LeisureTag,
-    center: GeoPoint,
-    city: str,
-) -> bool:
-    poi = feature_to_poi(feature, tag=tag)
-    if poi is None or poi.poi_id in seen_ids:
-        return False
-    if not is_landmark_poi_name(poi.name, city_hint=city):
-        return False
-    name_key = route_name_key(poi.name)
-    if name_key in seen_names:
-        return False
-    for existing in collected:
-        if poi_name_conflict(
-            poi.name, poi.coordinates, existing.name, existing.coordinates
-        ):
-            return False
-    if not within_walkable_radius(poi.coordinates, center):
-        return False
-    key = coord_key(poi.coordinates)
-    if key in seen_coords:
-        return False
-    seen_ids.add(poi.poi_id)
-    seen_coords.add(key)
-    seen_names.add(name_key)
-    collected.append(poi)
-    return True
+def _use_discovery() -> bool:
+    return os.getenv("POI_USE_DISCOVERY", "true").lower() in {"1", "true", "yes"}
 
 
-def _collect_from_discovery(
-    *,
-    city: str,
-    center: GeoPoint,
-    bbox: str,
-    limit: int,
-    collected: list[PoiPoint],
-    seen_ids: set[str],
-    seen_coords: set[str],
-    seen_names: set[str],
-) -> None:
-    """Сначала веб-поиск названий, затем Geocoder по каждому месту."""
-    from search.yandex.landmark_discovery import (
-        discover_landmark_names,
-        geocode_query_for_name,
-        infer_tag_for_name,
-    )
-
-    names = discover_landmark_names(city)
-    for name in names:
-        if len(collected) >= limit:
-            break
-        query = geocode_query_for_name(name, city)
-        if not query:
-            continue
-        batch = geocode_places(
-            query,
-            results=3,
-            bbox=bbox,
-            city_hint=city,
-        )
-        tag = infer_tag_for_name(name)
-        for feature in batch:
-            if len(collected) >= limit:
-                break
-            _append_poi(
-                collected,
-                seen_ids,
-                seen_coords,
-                seen_names,
-                feature,
-                tag=tag,
-                center=center,
-                city=city,
-            )
-
-
-def _collect_from_geocoder(
-    *,
-    city: str,
-    categories: list[LeisureTag],
-    center: GeoPoint,
-    bbox: str,
-    limit: int,
-    collected: list[PoiPoint],
-    seen_ids: set[str],
-    seen_coords: set[str],
-    seen_names: set[str],
-) -> None:
-    """Пул POI только из ответов HTTP Геокодера по шаблонным запросам."""
-    for tag in categories:
-        if len(collected) >= limit:
-            break
-        per_tag_limit = max(3, limit // max(len(categories), 1))
-        for query in geocode_queries_for_tag(tag, city):
-            if len(collected) >= limit:
-                break
-            batch = geocode_places(
-                query,
-                results=min(10, per_tag_limit),
-                bbox=bbox,
-                city_hint=city,
-            )
-            for feature in batch:
-                if len(collected) >= limit:
-                    break
-                _append_poi(
-                    collected,
-                    seen_ids,
-                    seen_coords,
-                    seen_names,
-                    feature,
-                    tag=tag,
-                    center=center,
-                    city=city,
-                )
+@dataclass
+class LeisureSearchResult:
+    points: list[PoiPoint]
+    landmark_discovery: dict | None = None
+    poi_sources: dict | None = None
 
 
 def search_leisure_points(
@@ -160,61 +35,96 @@ def search_leisure_points(
     city: str,
     categories: list[LeisureTag],
     pace: str = "moderate",
-) -> list[PoiPoint]:
-    geo = geocode_city(city)
-    if geo is None:
-        return []
-    lon, lat, (spn_lon, spn_lat) = geo
-    center = GeoPoint(lon=lon, lat=lat)
-    bbox = center_bbox(lon, lat)
-    limit = leisure_pool_limit(pace)
-    seen_ids: set[str] = set()
-    seen_coords: set[str] = set()
-    seen_names: set[str] = set()
-    collected: list[PoiPoint] = []
+) -> LeisureSearchResult:
+    del categories  # теги выводятся из OSM/Wikidata, не из шаблонов Geocoder
+    del pace  # темп влияет на сборку A/B/C, не на размер поискового пула
+    limit = leisure_search_pool_limit()
+    center = resolve_city_center(city)
+    if center is None:
+        return LeisureSearchResult(points=_demo_leisure(city, limit))
 
-    if get_api_key():
-        _collect_from_discovery(
-            city=city,
-            center=center,
-            bbox=bbox,
-            limit=limit,
-            collected=collected,
-            seen_ids=seen_ids,
-            seen_coords=seen_coords,
-            seen_names=seen_names,
+    geo_center = GeoPoint(lon=center.lon, lat=center.lat)
+    osm_points = fetch_overpass_leisure(city, center, max_elements=max(limit * 4, 40))
+    wikidata_points: list[PoiPoint] = []
+    if _use_wikidata():
+        wikidata_points = fetch_wikidata_leisure(
+            city, center, wikidata_id=center.wikidata_id, max_items=max(limit * 2, 30)
         )
-        if len(collected) < limit:
-            _collect_from_geocoder(
-                city=city,
-                categories=categories,
-                center=center,
-                bbox=bbox,
-                limit=limit,
-                collected=collected,
-                seen_ids=seen_ids,
-                seen_coords=seen_coords,
-                seen_names=seen_names,
-            )
-    else:
-        collected = _demo_leisure(city, categories, lon, lat, spn_lon, spn_lat, limit)
 
-    collected.sort(key=_rank_key, reverse=True)
-    return collected[:limit]
+    pool = merge_poi_pools(
+        [osm_points, wikidata_points],
+        center=geo_center,
+        city=city,
+        max_items=max(limit * 5, 80),
+    )
+
+    discovery_trace: dict | None = None
+    boosted_ids: set[str] = set()
+    match_scores: dict[str, float] = {}
+
+    if _use_discovery() and pool:
+        from search.yandex.landmark_discovery import run_landmark_discovery
+
+        names, trace = run_landmark_discovery(city)
+        matches = match_names_to_pool(names, pool)
+        trace.matched_pois = [
+            {
+                "discovery_name": m.discovery_name,
+                "poi_id": m.poi_id,
+                "poi_name": m.poi_name,
+                "score": m.score,
+            }
+            for m in matches
+        ]
+        boosted_ids = strong_match_ids(matches)
+        match_scores = {m.poi_id: m.score for m in matches}
+        discovery_trace = trace.to_dict()
+
+    ranked = rank_leisure_pool(
+        pool,
+        boosted_poi_ids=boosted_ids,
+        match_scores=match_scores,
+        city=city,
+        limit=limit,
+    )
+
+    if not ranked:
+        return LeisureSearchResult(
+            points=_demo_leisure(city, limit, lon=center.lon, lat=center.lat),
+            poi_sources={
+                "center": "nominatim",
+                "osm_count": len(osm_points),
+                "wikidata_count": len(wikidata_points),
+                "pool_count": len(pool),
+            },
+        )
+
+    return LeisureSearchResult(
+        points=ranked,
+        landmark_discovery=discovery_trace,
+        poi_sources={
+            "center": "nominatim",
+            "osm_count": len(osm_points),
+            "wikidata_count": len(wikidata_points),
+            "pool_count": len(pool),
+            "matched_count": len(boosted_ids),
+        },
+    )
 
 
 def _demo_leisure(
     city: str,
-    categories: list[LeisureTag],
-    lon: float,
-    lat: float,
-    spn_lon: float,
-    spn_lat: float,
     limit: int,
+    *,
+    lon: float = 37.62,
+    lat: float = 55.75,
+    spn_lon: float = 0.1,
+    spn_lat: float = 0.08,
 ) -> list[PoiPoint]:
-    """Демо-POI без ключа."""
-    from search.yandex.leisure_tags import TAG_SPECS
+    """Демо-POI когда open-data не вернула места."""
+    from search.yandex.leisure_tags import TAG_SPECS, default_geocoder_tags
 
+    categories = default_geocoder_tags()
     collected: list[PoiPoint] = []
     seen_ids: set[str] = set()
     index = 0
@@ -228,20 +138,19 @@ def _demo_leisure(
         radius_lat = spn_lat * 0.12 * (0.6 + (index % 2) * 0.25)
         point_lon = lon + math.cos(angle) * radius_lon
         point_lat = lat + math.sin(angle) * radius_lat
-        feature = {
-            "geometry": {"coordinates": [point_lon, point_lat]},
-            "properties": {
-                "CompanyMetaData": {
-                    "name": name,
-                    "url": f"https://yandex.ru/maps/org/demo_{tag}/{index}",
-                    "address": city,
-                    "rating": {"value": 4.5 - (index % 5) * 0.1},
-                }
-            },
-        }
-        poi = feature_to_poi(feature, tag=tag)
-        if poi and poi.poi_id not in seen_ids:
-            seen_ids.add(poi.poi_id)
-            collected.append(poi)
+        coords = GeoPoint(lon=point_lon, lat=point_lat)
+        poi_id = f"demo_{tag}_{index}"
+        collected.append(
+            PoiPoint(
+                poi_id=poi_id,
+                tag=tag,
+                name=name,
+                coordinates=coords,
+                maps_url=f"https://yandex.ru/maps/org/demo_{tag}/{index}",
+                rating=4.5 - (index % 5) * 0.1,
+                address=city,
+            )
+        )
+        seen_ids.add(poi_id)
         index += 1
     return collected

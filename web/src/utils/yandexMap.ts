@@ -16,6 +16,15 @@ export function mapsUrlToWidgetUrl(mapsRouteUrl: string): string | null {
     source.searchParams.forEach((value, key) => {
       widget.searchParams.set(key, value);
     });
+    if (widget.searchParams.has("rtext")) {
+      if (!widget.searchParams.has("mode")) {
+        widget.searchParams.set("mode", "routes");
+      }
+      const rtt = widget.searchParams.get("rtt");
+      if (!rtt || rtt === "auto") {
+        widget.searchParams.set("rtt", "pd");
+      }
+    }
     if (!widget.searchParams.has("rtext") && !widget.searchParams.has("pt") && !widget.searchParams.has("text")) {
       return null;
     }

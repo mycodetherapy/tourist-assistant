@@ -55,6 +55,35 @@ class TestLandmarkDiscovery(unittest.TestCase):
         self.assertEqual(infer_tag_for_name("Центральный парк"), "parks")
         self.assertEqual(infer_tag_for_name("Республиканский музей"), "museums")
 
+    def test_format_discovery_digest(self) -> None:
+        from search.yandex.landmark_discovery import (
+            LandmarkDiscoveryTrace,
+            format_landmark_discovery_digest,
+        )
+
+        digest = format_landmark_discovery_digest(
+            LandmarkDiscoveryTrace(
+                provider="tavily",
+                queries=["достопримечательности Йошкар-Ола"],
+                results_count=2,
+                raw_results_count=5,
+                search_results=[
+                    {
+                        "title": "Что посмотреть",
+                        "url": "https://example.com",
+                        "snippet": "набережная Брюгге",
+                    }
+                ],
+                landmark_names=["набережная Брюгге"],
+                geocode_queries=[
+                    {"name": "набережная Брюгге", "query": "набережная Брюгге Йошкар-Ола"}
+                ],
+            )
+        )
+        self.assertIn("tavily", digest)
+        self.assertIn("набережная Брюгге", digest)
+        self.assertIn("match", digest)
+
 
 if __name__ == "__main__":
     unittest.main()

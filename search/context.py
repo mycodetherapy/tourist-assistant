@@ -42,6 +42,11 @@ def get_route_materials() -> dict[str, Any] | None:
     return _route_materials
 
 
+def clear_route_materials() -> None:
+    global _route_materials
+    _route_materials = None
+
+
 def clear_search_context() -> None:
     global _search_context, _session_preferences, _route_materials
     _search_context = ""

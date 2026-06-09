@@ -1,6 +1,6 @@
 # Туристический ассистент (LangGraph)
 
-Агент составляет **культурную программу поездки** по городу и датам: билеты туда-обратно (самолёт, поезд, автобус), **три альтернативных маршрута** на всю поездку (варианты A/B/C) с досугом и ресторанами из **Яндекс.Карт**, и лайфхаки. **Билеты** — структурированные **deep links** (`search_roundtrip_tickets`, JSON `schema_version=1`). **Маршруты** — общий пул POI (`search_route_materials`) + structured `routes` и markdown `routes_text`; ссылки на маршрут в картах собирает код (`maps_route_url`). Перед планированием — **опросник** (темп, бюджет, интересы, кухня…); поездки, предпочтения и версии программы хранятся в **SQLite**. Старые программы с разделами `events`/`dining` по-прежнему отображаются в вебе и CLI.
+Агент составляет **культурную программу поездки** по городу и датам: билеты туда-обратно (самолёт, поезд, автобус), **три альтернативных маршрута** на всю поездку (варианты A/B/C) с досугом из **OpenStreetMap/Wikidata** (координаты для Яндекс.Карт), и лайфхаки. **Билеты** — структурированные **deep links** (`search_roundtrip_tickets`, JSON `schema_version=1`). **Маршруты** — общий пул POI (`search_route_materials`) + structured `routes` и markdown `routes_text`; ссылки на маршрут в картах собирает код (`maps_route_url`). Перед планированием — **опросник** (темп, бюджет, интересы, кухня…); поездки, предпочтения и версии программы хранятся в **SQLite**. Старые программы с разделами `events`/`dining` по-прежнему отображаются в вебе и CLI.
 
 ## Быстрый старт
 
@@ -202,7 +202,12 @@ python3 -m eval --suite smoke
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure`. Для альтернатив через VPN — `OpenAI` |
 | `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`, регион `ru-ru`) |
 | `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
-| `YANDEX_MAPS_API_KEY` | Нет | Ключ **API Геокодера** (не JavaScript API) — центр города и поиск POI. `python3 scripts/test_yandex_maps.py Москва` |
+| `POI_USE_WIKIDATA` | Нет | `true` (по умолчанию) — дополнять пул из Wikidata SPARQL |
+| `POI_USE_DISCOVERY` | Нет | `true` (по умолчанию) — веб-поиск названий и fuzzy-match к OSM-пулу |
+| `OVERPASS_URL` | Нет | Overpass API, по умолчанию `https://overpass-api.de/api/interpreter` |
+| `NOMINATIM_URL` | Нет | Центр/bbox города, по умолчанию `https://nominatim.openstreetmap.org` |
+| `NOMINATIM_USER_AGENT` | Нет | User-Agent для Nominatim (обязателен по ToS OSM) |
+| `YANDEX_MAPS_API_KEY` | Нет | Legacy: API Геокодера **не используется для POI**. Проверка пула: `python3 scripts/test_yandex_maps.py Самара` |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
@@ -300,7 +305,7 @@ python3 scripts/render_graph.py
 | Инструмент | Что ищет |
 |------------|----------|
 | `search_roundtrip_tickets` | Deep links + опционально API авиа (`TRAVELPAYOUTS_API_KEY`); JSON `offers[]`, `schema_version=1` |
-| `search_route_materials` | Пул POI: веб-поиск названий → Geocoder по каждому месту + шаблонные запросы; `search/yandex/*` |
+| `search_route_materials` | Полный пул POI (до 25): Overpass + Wikidata + discovery; темп влияет только на длину A/B/C |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
@@ -343,8 +348,9 @@ python3 scripts/render_graph.py
 | **РЖД / Tutu.ru** | Deep links на жд (`ticket.rzd.ru`, `tutu.ru/poezda/…`) |
 | **Bus.tutu.ru** | Deep links на автобус (в одну сторону) |
 | **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
-| **Яндекс.Карты API** | API Геокодера (`YANDEX_MAPS_API_KEY`): координаты POI по названиям из веб-поиска |
-| **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок |
+| **OpenStreetMap** (Overpass + Nominatim) | POI с координатами: музеи, парки, памятники в рамке города |
+| **Wikidata SPARQL** | Дополнение известных достопримечательностей (P625) |
+| **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок (без Search API) |
 
 Билеты: `search/ticket_links.py` + `search/providers/avia.py`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
 
@@ -474,7 +480,9 @@ tourist-assistant/
 ├── search/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool, TOOLS, TOOL_MAP
-│   ├── yandex/             # Geocoder, landmark_discovery, POI filters, maps_route_url
+│   ├── osm/                # Nominatim, Overpass, парсинг OSM-тегов
+│   ├── wikidata/           # SPARQL достопримечательностей
+│   ├── yandex/             # landmark_discovery, POI filters, maps_route_url
 │   ├── tickets_search.py   # оркестрация билетов
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
 │   ├── transport_codes.py  # коды Tutu/РЖД для URL

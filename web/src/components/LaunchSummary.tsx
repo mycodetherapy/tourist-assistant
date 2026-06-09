@@ -33,9 +33,8 @@ export function LaunchSummary({
         </Descriptions.Item>
       </Descriptions>
       <p className="text-sm text-neutral-500">
-        Для реальных мест нужен ключ <code className="text-xs">YANDEX_MAPS_API_KEY</code>{" "}
-        (продукт «API Геокодера», не JavaScript API) в <code className="text-xs">.env</code>. Проверка:{" "}
-        <code className="text-xs">python3 scripts/test_yandex_maps.py Москва</code>
+        POI берутся из OpenStreetMap (Overpass) и Wikidata; проверка пула:{" "}
+        <code className="text-xs">python3 scripts/test_yandex_maps.py Самара</code>
       </p>
     </div>
   );

@@ -12,7 +12,11 @@ from models.schemas import RouteMaterialsInput
 from models.routes import RouteMaterials
 from search.context import get_session_preferences, set_route_materials
 from search.tickets_search import run_tickets_search
-from search.yandex.materials import format_materials_digest, run_route_materials_search
+from search.yandex.materials import (
+    format_materials_digest,
+    run_route_materials_search,
+)
+from search.yandex.landmark_discovery import format_landmark_discovery_digest
 
 __all__ = [
     "TOOLS",
@@ -43,8 +47,8 @@ def search_roundtrip_tickets(
 @tool
 def search_route_materials(city: str, dates: str) -> str:
     """
-    Единый пул мест досуга на Яндекс.Картах для всей поездки.
-    POI: веб-поиск названий → Geocoder по каждому месту; затем шаблонные запросы.
+    Единый пул мест досуга для всей поездки.
+    POI: Overpass (OSM) + Wikidata + веб-discovery → fuzzy-match.
     """
     try:
         params = RouteMaterialsInput(city=city, dates=dates)
@@ -52,7 +56,7 @@ def search_route_materials(city: str, dates: str) -> str:
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
     prefs = get_session_preferences()
-    materials, api_warnings = run_route_materials_search(
+    materials, api_warnings, landmark_discovery, poi_sources = run_route_materials_search(
         city=params.city,
         dates=params.dates,
         preferences=prefs,
@@ -76,11 +80,18 @@ def search_route_materials(city: str, dates: str) -> str:
             "Не выдумывай места и URL."
         ),
     }
+    if poi_sources:
+        payload["poi_sources"] = poi_sources
+    if landmark_discovery is not None:
+        payload["landmark_discovery"] = landmark_discovery.to_dict()
+        payload["landmark_discovery_digest"] = format_landmark_discovery_digest(
+            landmark_discovery
+        )
     if api_warnings:
         payload["warnings"] = api_warnings
         payload["warning"] = api_warnings[0]
     elif not materials.leisure_points:
-        payload["warning"] = "Пул мест пуст — проверьте YANDEX_MAPS_API_KEY или город."
+        payload["warning"] = "Пул мест пуст — проверьте Overpass/Nominatim или город."
     set_route_materials(materials.model_dump())
     print(
         f"  → route materials: {len(materials.leisure_points)} досуг "

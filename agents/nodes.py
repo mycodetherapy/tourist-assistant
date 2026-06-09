@@ -33,8 +33,31 @@ from planning import (
     planner_tools_hint,
 )
 from planning.rebuild import resolve_tool_name
+from search.context import clear_route_materials
 from search.tool_logging import parse_tool_result
 from search.tools import TOOL_MAP
+
+
+def _normalize_city_key(city: str) -> str:
+    return city.lower().replace("ё", "е").strip()
+
+
+def resolve_tool_args(
+    state: AgentState,
+    tool_name: str,
+    args: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Подставляет city/dates из state — LLM иногда путает город поездки."""
+    merged = dict(args or {})
+    resolved = resolve_tool_name(tool_name)
+    if resolved == "search_route_materials":
+        merged["city"] = state["city"]
+        merged["dates"] = state["dates"]
+    elif resolved == "search_roundtrip_tickets":
+        merged["origin_city"] = state["origin_city"]
+        merged["destination_city"] = state["city"]
+        merged["dates"] = state["dates"]
+    return merged
 
 __all__ = [
     "critic_node",
@@ -104,13 +127,15 @@ def executor_node(state: AgentState) -> dict[str, list[ToolMessage]]:
 
     for call in last.tool_calls:
         name = call["name"]
-        args = call.get("args") or {}
+        args = resolve_tool_args(state, name, call.get("args") or {})
         tool_call_id = call["id"]
 
         try:
             resolved = resolve_tool_name(name)
             if resolved not in TOOL_MAP:
                 raise KeyError(f"Неизвестный инструмент: {name}")
+            if resolved == "search_route_materials":
+                clear_route_materials()
             result = TOOL_MAP[resolved].invoke(args)
             content = result if isinstance(result, str) else str(result)
         except Exception as exc:
@@ -195,12 +220,15 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     draft_fields = draft.model_dump()
     prefs = state.get("preferences") or {}
     transport = str(prefs.get("transport_preference") or "mixed")
+    pace = str(prefs.get("pace") or "moderate")
     if rebuild_scope in ("full", "routes", "events", "dining"):
         routes_program, routes_text = resolve_routes_program(
             state["messages"],
             draft_fields.get("routes"),
             base_program=base_program,
             transport=transport,
+            pace=pace,
+            expected_city=ctx.city,
         )
         draft_fields["routes"] = routes_program.model_dump()
         draft_fields["routes_text"] = routes_text

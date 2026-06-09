@@ -1,44 +1,78 @@
-"""Тесты поиска leisure через Geocoder без city seeds."""
+"""Тесты поиска leisure через Overpass + discovery match."""
 
 from __future__ import annotations
 
 import unittest
 from unittest.mock import patch
 
+from models.routes import GeoPoint, PoiPoint
 from search.yandex.leisure_search import search_leisure_points
 
 
+def _samara_center():
+    from search.osm.nominatim import CityCenter
+
+    return CityCenter(
+        city="Самара",
+        lon=50.15,
+        lat=53.20,
+        bbox=(49.95, 53.05, 50.35, 53.35),
+        wikidata_id="Q894",
+    )
+
+
+def _sample_osm_poi(name: str, poi_id: str, lon: float, lat: float) -> PoiPoint:
+    return PoiPoint(
+        poi_id=poi_id,
+        tag="landmarks",
+        name=name,
+        coordinates=GeoPoint(lon=lon, lat=lat),
+        maps_url=f"https://yandex.ru/maps/?pt={lon},{lat}&z=16",
+    )
+
+
 class TestLeisureSearch(unittest.TestCase):
-    @patch("search.yandex.leisure_search.get_api_key", return_value=True)
-    @patch("search.yandex.landmark_discovery.discover_landmark_names")
-    @patch("search.yandex.leisure_search.geocode_city")
-    @patch("search.yandex.leisure_search.geocode_places")
-    def test_collects_from_discovery_then_geocoder(
+    @patch("search.yandex.landmark_discovery.run_landmark_discovery")
+    @patch("search.yandex.leisure_search.fetch_wikidata_leisure")
+    @patch("search.yandex.leisure_search.fetch_overpass_leisure")
+    @patch("search.yandex.leisure_search.resolve_city_center")
+    def test_collects_osm_pool_with_discovery_boost(
         self,
-        geocode_places,
-        geocode_city,
-        discover_landmark_names,
-        _key,
+        resolve_city_center,
+        fetch_overpass,
+        fetch_wikidata,
+        run_landmark_discovery,
     ) -> None:
-        geocode_city.return_value = (40.93, 57.77, (0.1, 0.08))
-        discover_landmark_names.return_value = ["Сусанинская площадь"]
-        geocode_places.return_value = [
-            {
-                "geometry": {"coordinates": [40.927155, 57.768072]},
-                "properties": {
-                    "CompanyMetaData": {
-                        "name": "Сусанинская площадь",
-                        "address": "Сусанинская площадь, Кострома, Россия",
-                        "url": "https://yandex.ru/maps/?text=sq",
-                    }
-                },
-            },
+        from search.yandex.landmark_discovery import LandmarkDiscoveryTrace
+
+        resolve_city_center.return_value = _samara_center()
+        fetch_overpass.return_value = [
+            _sample_osm_poi("Музей модерна", "osm_node_1", 50.11, 53.19),
+            _sample_osm_poi("Стела «Ладья»", "osm_node_2", 50.12, 53.20),
+            _sample_osm_poi("Самарская набережная", "osm_node_3", 50.13, 53.21),
         ]
-        points = search_leisure_points(city="Кострома", categories=["landmarks"], pace="relaxed")
-        names = [p.name for p in points]
-        self.assertTrue(any("Сусанинская" in n for n in names))
-        discover_landmark_names.assert_called_once_with("Кострома")
-        self.assertGreaterEqual(geocode_places.call_count, 1)
+        fetch_wikidata.return_value = []
+        run_landmark_discovery.return_value = (
+            ["Музей модерна", "Стела Ладья"],
+            LandmarkDiscoveryTrace(
+                provider="ddgs",
+                landmark_names=["Музей модерна", "Стела Ладья"],
+            ),
+        )
+        result = search_leisure_points(city="Самара", categories=["landmarks"], pace="relaxed")
+        names = [p.name for p in result.points]
+        self.assertGreaterEqual(len(names), 2)
+        self.assertTrue(any("Музей" in n for n in names))
+        self.assertIsNotNone(result.landmark_discovery)
+        self.assertGreaterEqual(len(result.landmark_discovery.get("matched_pois") or []), 1)
+        fetch_overpass.assert_called_once()
+        fetch_wikidata.assert_called_once()
+        run_landmark_discovery.assert_called_once_with("Самара")
+
+    @patch("search.yandex.leisure_search.resolve_city_center", return_value=None)
+    def test_demo_when_city_not_found(self, _resolve) -> None:
+        result = search_leisure_points(city="Несуществующий", categories=["landmarks"])
+        self.assertTrue(all("/org/demo_" in p.maps_url for p in result.points))
 
 
 if __name__ == "__main__":

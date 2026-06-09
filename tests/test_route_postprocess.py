@@ -301,5 +301,18 @@ class TestRoutePostprocess(unittest.TestCase):
                 )
 
 
+    def test_pace_shortens_routes_from_full_pool(self) -> None:
+        materials = _kostroma_materials()
+        relaxed = build_fallback_route_program(materials, pace="relaxed")
+        packed = build_fallback_route_program(materials, pace="packed")
+        relaxed_stops = max(len(c.stops) for c in relaxed.cases)
+        packed_stops = max(len(c.stops) for c in packed.cases)
+        self.assertLessEqual(relaxed_stops, packed_stops)
+        self.assertLess(
+            leisure_overlap_ratio(relaxed.cases[0], relaxed.cases[2]),
+            1.0,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

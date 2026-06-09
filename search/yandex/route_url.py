@@ -32,10 +32,9 @@ def build_maps_route_url(
     """
     Маршрут по координатам POI (rtext=lat,lon~lat,lon).
 
-    Текстовые подписи в rtext Яндекс часто резолвит в «Кострома» или улицу —
-    координаты из пула надёжнее для длины и порядка точек.
+    Всегда пеший режим (rtt=pd) — варианты A/B/C это прогулки между точками.
     """
-    _ = labels
+    _ = labels, transport
     points = _dedupe_points(points)
     if len(points) < 2:
         if points:
@@ -50,7 +49,13 @@ def build_maps_route_url(
             return f"https://yandex.ru/maps/?pt={p.lon},{p.lat}&z=15"
         return ""
 
-    rtt = "pd" if transport in ("walking", "mixed") else "auto"
     parts = [f"{p.lat},{p.lon}" for p in points[:max_stops]]
-    params = {"rtext": "~".join(parts), "rtt": rtt}
+    params: dict[str, str] = {
+        "mode": "routes",
+        "rtext": "~".join(parts),
+        "rtt": "pd",
+    }
+    first = points[0]
+    params["ll"] = f"{first.lon},{first.lat}"
+    params["z"] = "14"
     return f"https://yandex.ru/maps/?{urlencode(params)}"

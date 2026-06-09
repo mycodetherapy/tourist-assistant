@@ -101,11 +101,17 @@ def infer_leisure_tag(name: str) -> LeisureTag:
 
 
 def leisure_pool_limit(pace: str) -> int:
+    """Сколько POI может попасть в один маршрут (legacy; см. leisure_search_pool_limit)."""
     if pace == "relaxed":
         return 8
     if pace == "packed":
         return 20
     return 14
+
+
+def leisure_search_pool_limit() -> int:
+    """Размер пула при поиске OSM/Wikidata — всегда максимум, не зависит от темпа."""
+    return 25
 
 
 def dining_per_anchor_limit(pace: str) -> int:

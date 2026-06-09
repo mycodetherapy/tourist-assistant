@@ -53,7 +53,7 @@ class RouteMaterialsInput(BaseModel):
 
 class RouteMaterials(BaseModel):
     schema_version: Literal[1] = 1
-    provider: Literal["yandex_maps", "fallback"] = "yandex_maps"
+    provider: Literal["osm", "yandex_maps", "fallback"] = "osm"
     city: str
     dates: str
     leisure_points: list[PoiPoint] = Field(default_factory=list)

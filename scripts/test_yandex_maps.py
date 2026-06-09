@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Проверка ключа API Геокодера Яндекс.Карт."""
+"""Проверка сбора POI: Overpass + Wikidata + discovery match."""
 
 from __future__ import annotations
 
@@ -13,18 +13,15 @@ _MIN_PYTHON = (3, 10)
 
 
 def _ensure_python() -> None:
-    """Проект требует Python 3.10+ (Pydantic, typing). Перезапуск через .venv."""
     if sys.version_info >= _MIN_PYTHON:
         return
     if _VENV_PYTHON.is_file():
         os.execv(str(_VENV_PYTHON), [str(_VENV_PYTHON), *__file__, *sys.argv[1:]])
     print(
-        "Ошибка: нужен Python 3.10+, сейчас "
-        f"{sys.version_info.major}.{sys.version_info.minor}.\n"
-        "Создайте venv и запустите снова:\n"
+        "Ошибка: нужен Python 3.10+.\n"
         "  python3 -m venv .venv && source .venv/bin/activate\n"
         "  pip install -r requirements.txt\n"
-        "  python3 scripts/test_yandex_maps.py Москва",
+        "  python3 scripts/test_yandex_maps.py Самара",
         file=sys.stderr,
     )
     raise SystemExit(1)
@@ -35,29 +32,19 @@ _ensure_python()
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import config.settings  # noqa: F401 — загружает .env
+import config.settings  # noqa: F401
 
 from onboarding.preferences import TripPreferences
-from search.yandex.client import check_api_access, geocode_city, get_api_key
+from search.osm.nominatim import resolve_city_center
 from search.yandex.materials import run_route_materials_search
 
 
 def main() -> int:
-    key = get_api_key()
-    print("YANDEX_MAPS_API_KEY (API Геокодера):", "задан" if key else "нет")
-    print(f"Python: {sys.version_info.major}.{sys.version_info.minor}")
-
-    status = check_api_access()
-    print(f"Geocoder OK: {status.geocoder_ok}")
-    if status.geocoder_error:
-        print(f"  ошибка: {status.geocoder_error}")
-    print(f"Поиск мест OK: {status.places_ok}")
-    if status.places_error:
-        print(f"  ошибка: {status.places_error}")
-
-    city = sys.argv[1] if len(sys.argv) > 1 else "Москва"
-    geo = geocode_city(city)
-    print(f"Центр {city}:", geo)
+    city = sys.argv[1] if len(sys.argv) > 1 else "Самара"
+    center = resolve_city_center(city)
+    print(f"Nominatim центр {city}:", center)
+    if center and center.wikidata_id:
+        print(f"  Wikidata: {center.wikidata_id}")
 
     prefs = TripPreferences(
         pace="moderate",
@@ -65,23 +52,30 @@ def main() -> int:
         transport_preference="mixed",
         travel_party="couple",
     )
-    materials, warnings = run_route_materials_search(
+    materials, warnings, discovery, poi_sources = run_route_materials_search(
         city=city,
         dates="тест",
         preferences=prefs,
     )
-    print(f"Пул: {len(materials.leisure_points)} досуг, {len(materials.dining_options)} ресторанов")
+    print(f"Пул: {len(materials.leisure_points)} досуг")
     print(f"provider: {materials.provider}")
+    if poi_sources:
+        print(f"OSM: {poi_sources.get('osm_count')}, Wikidata: {poi_sources.get('wikidata_count')}")
+    if discovery is not None:
+        print(
+            f"Discovery: {len(discovery.landmark_names)} названий "
+            f"({discovery.provider}), matched={len(discovery.matched_pois)}"
+        )
     for w in warnings:
         print(f"WARNING: {w}")
-    for poi in materials.leisure_points[:5]:
-        print(f"  - {poi.name} @ {poi.coordinates.lat:.4f},{poi.coordinates.lon:.4f}")
-
-    if not status.geocoder_ok:
+    for poi in materials.leisure_points[:8]:
         print(
-            "\nПодсказка: в https://developer.tech.yandex.ru/ подключите "
-            "продукт «API Геокодера» (не JavaScript API) и вставьте ключ в YANDEX_MAPS_API_KEY."
+            f"  - {poi.name} ({poi.tag}) @ "
+            f"{poi.coordinates.lat:.4f},{poi.coordinates.lon:.4f} id={poi.poi_id}"
         )
+
+    if materials.provider == "fallback":
+        print("\nПодсказка: проверьте сеть и доступ к Overpass/Nominatim.")
         return 1
     return 0
 
