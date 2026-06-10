@@ -281,6 +281,25 @@ class TestRoutePostprocess(unittest.TestCase):
         self.assertGreaterEqual(counts[2], 5)
         self.assertLess(counts[0], counts[2])
 
+    def test_finalize_separates_identical_llm_drafts(self) -> None:
+        materials = _kostroma_materials()
+        poi_ids = ["susan", "kal", "ryady", "bogo", "nab"]
+        same_stops = [
+            RouteStop(order=i + 1, kind="leisure", poi_id=pid, narrative="")
+            for i, pid in enumerate(poi_ids)
+        ]
+        draft = RouteProgram(
+            cases=[
+                TripRouteCase(case_id="A", title="A", summary="", stops=same_stops),
+                TripRouteCase(case_id="B", title="B", summary="", stops=same_stops),
+                TripRouteCase(case_id="C", title="C", summary="", stops=same_stops),
+            ]
+        )
+        program = finalize_route_program(draft, materials)
+        a, b, c = program.cases
+        self.assertLess(leisure_overlap_ratio(a, b), 0.85)
+        self.assertLess(leisure_overlap_ratio(b, c), 0.85)
+
     def test_kostroma_routes_are_diverse(self) -> None:
         materials = _kostroma_materials()
         program = build_fallback_route_program(materials)

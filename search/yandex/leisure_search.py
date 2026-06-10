@@ -1,4 +1,4 @@
-"""Поиск мест досуга: Overpass + Wikidata + веб-discovery (без Yandex Geocoder)."""
+"""Поиск мест досуга: Wikidata + веб-discovery; Overpass опционален."""
 
 from __future__ import annotations
 
@@ -67,7 +67,10 @@ def search_leisure_points(
         osm_points = fetch_overpass_leisure(
             city, center, max_elements=max(limit * 4, 40)
         )
-    embankment_points = fetch_nominatim_embankments(city, center, max_items=4)
+    # Набережные уже в Wikidata SPARQL; Nominatim — только без Wikidata.
+    embankment_points: list[PoiPoint] = []
+    if not fetch_wd:
+        embankment_points = fetch_nominatim_embankments(city, center, max_items=4)
 
     pool = merge_poi_pools(
         [osm_points, wikidata_points, embankment_points],

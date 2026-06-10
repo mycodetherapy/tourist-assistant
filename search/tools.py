@@ -91,7 +91,7 @@ def search_route_materials(city: str, dates: str) -> str:
         payload["warnings"] = api_warnings
         payload["warning"] = api_warnings[0]
     elif not materials.leisure_points:
-        payload["warning"] = "Пул мест пуст — проверьте Overpass/Nominatim или город."
+        payload["warning"] = "Пул мест пуст — проверьте Wikidata/Nominatim или город."
     set_route_materials(materials.model_dump())
     print(
         f"  → route materials: {len(materials.leisure_points)} досуг "

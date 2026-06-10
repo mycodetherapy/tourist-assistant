@@ -453,7 +453,9 @@ python3 -m scripts.metrics_report --limit 50
 | **Повторный запуск без опросника** | `user_profile` + `trip_preferences`; fallback из последней поездки |
 | **Конфликт категорий** (музей в «Билетах») | Постфильтрация `SEARCH_FILTERS` в `search/web.py` |
 | **Даты в далёком будущем** | В поиске может не быть цен — в ответе ссылки «уточните на сайте» |
-| **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap B/C &gt; 85% — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
+| **Демо-точки вместо POI** | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
+| **Одинаковые маршруты A/B/C** | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → пересбор researcher |
+| **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
 | **Кольцевой маршрут** | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км |
 
 ### Как понять, что агент работает хорошо?

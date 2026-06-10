@@ -100,7 +100,7 @@ class TestLeisureSearch(unittest.TestCase):
     @patch("search.yandex.leisure_search.fetch_wikidata_leisure")
     @patch("search.yandex.leisure_search.fetch_overpass_leisure")
     @patch("search.yandex.leisure_search.resolve_city_center")
-    def test_embankments_fetched_for_any_city(
+    def test_embankments_skipped_when_wikidata_enabled(
         self,
         resolve_city_center,
         fetch_overpass,
@@ -111,14 +111,29 @@ class TestLeisureSearch(unittest.TestCase):
         from search.yandex.landmark_discovery import LandmarkDiscoveryTrace
 
         resolve_city_center.return_value = _samara_center()
-        fetch_wikidata.return_value = []
+        fetch_wikidata.return_value = [_sample_osm_poi("Музей", "Q1", 50.13, 53.21)]
         fetch_overpass.return_value = []
-        emb = _sample_osm_poi("Волжская набережная", "osm_way_9", 50.13, 53.21)
-        fetch_embankments.return_value = [emb.model_copy(update={"tag": "embankments"})]
         run_landmark_discovery.return_value = (
             [],
             LandmarkDiscoveryTrace(provider="ddgs", landmark_names=[]),
         )
+        search_leisure_points(city="Самара", categories=["landmarks"])
+        fetch_embankments.assert_not_called()
+
+    @patch.dict("os.environ", {"POI_USE_WIKIDATA": "false"}, clear=False)
+    @patch("search.yandex.leisure_search.fetch_nominatim_embankments")
+    @patch("search.yandex.leisure_search.fetch_overpass_leisure")
+    @patch("search.yandex.leisure_search.resolve_city_center")
+    def test_embankments_from_nominatim_without_wikidata(
+        self,
+        resolve_city_center,
+        fetch_overpass,
+        fetch_embankments,
+    ) -> None:
+        resolve_city_center.return_value = _samara_center()
+        fetch_overpass.return_value = []
+        emb = _sample_osm_poi("Волжская набережная", "osm_way_9", 50.13, 53.21)
+        fetch_embankments.return_value = [emb.model_copy(update={"tag": "embankments"})]
         result = search_leisure_points(city="Самара", categories=["landmarks"])
         fetch_embankments.assert_called_once_with("Самара", _samara_center(), max_items=4)
         self.assertTrue(any(p.tag == "embankments" for p in result.points))

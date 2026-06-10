@@ -15,6 +15,9 @@ from models.routes import (
     GeoPoint,
     PoiPoint,
     RouteMaterials,
+    RouteProgram,
+    RouteStop,
+    TripRouteCase,
 )
 from agents.route_postprocess import build_fallback_route_program, finalize_route_program
 
@@ -84,6 +87,41 @@ class TestSectionQuality(unittest.TestCase):
         passed, notes = run_critic(state)
         self.assertFalse(passed)
         self.assertIn("routes", notes)
+
+    def test_critic_flags_identical_routes(self) -> None:
+        dup = TripRouteCase(
+            case_id="A",
+            title="A",
+            summary="s",
+            stops=[
+                RouteStop(order=1, kind="leisure", poi_id="l1", narrative="1"),
+                RouteStop(order=2, kind="leisure", poi_id="l2", narrative="2"),
+            ],
+            maps_route_url="https://yandex.ru/maps/?same",
+        )
+        issues = critic_program_issues(
+            {
+                "routes": RouteProgram(
+                    cases=[
+                        dup,
+                        dup.model_copy(update={"case_id": "B", "title": "B"}),
+                        TripRouteCase(
+                            case_id="C",
+                            title="C",
+                            summary="s",
+                            stops=[
+                                RouteStop(order=1, kind="leisure", poi_id="l7", narrative="7"),
+                            ],
+                            maps_route_url="https://yandex.ru/maps/?other",
+                        ),
+                    ]
+                ).model_dump(),
+                "routes_text": "## Вариант A\nтест " * 20,
+            },
+            "routes",
+        )
+        self.assertTrue(any("совпадают" in i or "похожи" in i for i in issues))
+        self.assertTrue(any("maps_route_url" in i for i in issues))
 
     def test_critic_program_issues_routes_ok(self) -> None:
         routes = _sample_routes_program()

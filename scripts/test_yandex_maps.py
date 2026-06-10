@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Проверка сбора POI: Overpass + Wikidata + discovery match."""
+"""Проверка сбора POI: Wikidata + discovery match."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def main() -> int:
         )
 
     if materials.provider == "fallback":
-        print("\nПодсказка: проверьте сеть и доступ к Overpass/Nominatim.")
+        print("\nПодсказка: проверьте сеть и доступ к Wikidata/Nominatim.")
         return 1
     return 0
 

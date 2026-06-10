@@ -67,6 +67,45 @@ def walkable_bbox(
     return _bbox_around(center.lon, center.lat, half_km=half)
 
 
+_PLACE_ADDRESSTYPES = frozenset(
+    {"city", "town", "municipality", "village", "hamlet", "suburb"}
+)
+
+
+def _nominatim_item_score(item: dict) -> tuple[int, float, int]:
+    """Выше — лучше: place/city важнее administrative boundary (Москва → 55.75, не 55.62)."""
+    category = str(item.get("category") or "")
+    addresstype = str(item.get("addresstype") or "")
+    typ = str(item.get("type") or "")
+    try:
+        importance = float(item.get("importance") or 0)
+    except (TypeError, ValueError):
+        importance = 0.0
+    try:
+        place_rank = int(item.get("place_rank") or 0)
+    except (TypeError, ValueError):
+        place_rank = 0
+
+    if category == "place" and addresstype in _PLACE_ADDRESSTYPES:
+        tier = 3
+    elif typ == "city":
+        tier = 2
+    elif category == "boundary" and addresstype in {"state", "region"}:
+        tier = -1
+    elif category == "boundary":
+        tier = 0
+    else:
+        tier = 1
+    return tier, importance, place_rank
+
+
+def _pick_best_nominatim_item(items: list[dict]) -> dict | None:
+    candidates = [item for item in items if isinstance(item, dict)]
+    if not candidates:
+        return None
+    return max(candidates, key=_nominatim_item_score)
+
+
 def _search_nominatim(query: str) -> CityCenter | None:
     _throttle()
     try:
@@ -75,7 +114,7 @@ def _search_nominatim(query: str) -> CityCenter | None:
             params={
                 "q": query,
                 "format": "jsonv2",
-                "limit": 1,
+                "limit": 5,
                 "addressdetails": 1,
                 "extratags": 1,
             },
@@ -88,7 +127,9 @@ def _search_nominatim(query: str) -> CityCenter | None:
         return None
     if not payload:
         return None
-    item = payload[0]
+    item = _pick_best_nominatim_item(payload)
+    if item is None:
+        return None
     try:
         lon = float(item["lon"])
         lat = float(item["lat"])

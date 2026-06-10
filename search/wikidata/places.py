@@ -27,8 +27,12 @@ from search.yandex.poi_filters import (
 _WIKIDATA_SPARQL = os.getenv(
     "WIKIDATA_SPARQL_URL", "https://query.wikidata.org/sparql"
 ).rstrip("/")
+_SPARQL_TIMEOUT = int(os.getenv("WIKIDATA_SPARQL_TIMEOUT", "45"))
+_SPARQL_RETRIES = max(1, int(os.getenv("WIKIDATA_SPARQL_RETRIES", "3")))
+_SPARQL_RETRY_DELAY = float(os.getenv("WIKIDATA_SPARQL_RETRY_DELAY", "2"))
 _LAST_CALL = 0.0
 _MIN_INTERVAL = 1.0
+_RETRYABLE_HTTP = frozenset({429, 500, 502, 503, 504})
 
 # Типы: музей, памятник, парк, театр, tourist attraction… (без generic architecture)
 _PLACE_CLASSES = (
@@ -108,23 +112,29 @@ LIMIT 30
 
 
 def _run_sparql(query: str) -> list[dict[str, Any]]:
-    _throttle()
-    try:
-        response = requests.get(
-            _WIKIDATA_SPARQL,
-            params={"query": query, "format": "json"},
-            headers={
-                "User-Agent": "tourist-assistant/1.0",
-                "Accept": "application/sparql-results+json",
-            },
-            timeout=30,
-        )
-        response.raise_for_status()
-        payload = response.json()
-    except (requests.RequestException, ValueError):
-        return []
-    bindings = payload.get("results", {}).get("bindings") or []
-    return [row for row in bindings if isinstance(row, dict)]
+    for attempt in range(_SPARQL_RETRIES):
+        if attempt:
+            time.sleep(_SPARQL_RETRY_DELAY * attempt)
+        _throttle()
+        try:
+            response = requests.get(
+                _WIKIDATA_SPARQL,
+                params={"query": query, "format": "json"},
+                headers={
+                    "User-Agent": "tourist-assistant/1.0",
+                    "Accept": "application/sparql-results+json",
+                },
+                timeout=_SPARQL_TIMEOUT,
+            )
+            if response.status_code in _RETRYABLE_HTTP:
+                continue
+            response.raise_for_status()
+            payload = response.json()
+        except (requests.RequestException, ValueError):
+            continue
+        bindings = payload.get("results", {}).get("bindings") or []
+        return [row for row in bindings if isinstance(row, dict)]
+    return []
 
 
 def _row_qid(row: dict[str, Any]) -> str:

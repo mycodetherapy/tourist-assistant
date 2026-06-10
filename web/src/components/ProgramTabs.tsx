@@ -188,7 +188,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
           message="Три варианта маршрута на всю поездку"
           description={
             (data.program.routes_text || "").includes("(fallback)")
-              ? "Использованы демо-точки: проверьте доступ к Overpass/Nominatim. python3 scripts/test_yandex_maps.py Город"
+              ? "Использованы демо-точки: проверьте доступ к Wikidata/Nominatim. python3 scripts/test_yandex_maps.py Город"
               : "Оцените варианты A / B / C. Карта встроена в каждый вариант; ссылка на Яндекс.Карты — в описании."
           }
         />

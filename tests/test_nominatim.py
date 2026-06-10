@@ -19,6 +19,36 @@ class TestGeocodePlaceQueries(unittest.TestCase):
         self.assertEqual(geocode_place_queries("Казань"), ("Казань", "Казань, Россия"))
 
 
+class TestNominatimPickBest(unittest.TestCase):
+    def test_moscow_prefers_city_over_admin_boundary(self) -> None:
+        from search.osm.nominatim import _pick_best_nominatim_item
+
+        items = [
+            {
+                "category": "boundary",
+                "type": "administrative",
+                "addresstype": "state",
+                "importance": 0.87,
+                "place_rank": 8,
+                "lat": "55.6255780",
+                "lon": "37.6063916",
+            },
+            {
+                "category": "place",
+                "type": "city",
+                "addresstype": "city",
+                "importance": 0.87,
+                "place_rank": 15,
+                "lat": "55.7505412",
+                "lon": "37.6174782",
+            },
+        ]
+        best = _pick_best_nominatim_item(items)
+        self.assertIsNotNone(best)
+        assert best is not None
+        self.assertEqual(best["lat"], "55.7505412")
+
+
 class TestResolveCityCenter(unittest.TestCase):
     @patch("search.osm.nominatim._search_nominatim")
     def test_istanbul_found_on_bare_query(self, search) -> None:

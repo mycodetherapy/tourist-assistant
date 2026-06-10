@@ -1026,6 +1026,48 @@ def backfill_route_maps_only(
     return program.model_copy(update={"cases": cases})
 
 
+def _finalize_case_from_indices(
+    case: TripRouteCase,
+    indices: list[int],
+    leisure: list[PoiPoint],
+    profile: RouteProfile,
+    materials: RouteMaterials,
+    *,
+    transport: str,
+    span_km: float,
+    compact: bool,
+    max_km: float | None,
+) -> TripRouteCase:
+    close_loop, indices = _resolve_route_loop(
+        case,
+        leisure,
+        indices,
+        span_km,
+        profile,
+        compact=compact,
+        max_km=max_km,
+        city_hint=materials.city,
+    )
+    points = [leisure[i].coordinates for i in indices]
+    labels = [leisure[i].name for i in indices]
+    return case.model_copy(
+        update={
+            "title": public_route_title(profile.title),
+            "stops": _stops_from_indices(leisure, indices),
+            "summary": _route_summary(materials.city, len(indices), loop=close_loop),
+            "loop_route": close_loop,
+            "maps_route_url": build_maps_route_url(
+                points,
+                labels=labels,
+                city=materials.city,
+                transport=transport,
+                max_stops=profile.max_stops + (1 if close_loop else 0),
+                close_loop=close_loop,
+            ),
+        }
+    )
+
+
 def finalize_route_program(
     program: RouteProgram,
     materials: RouteMaterials,
@@ -1035,7 +1077,7 @@ def finalize_route_program(
     banned_poi_ids: set[str] | None = None,
     prefer_poi_ids: set[str] | None = None,
 ) -> RouteProgram:
-    index = _poi_index(materials)
+    del prefer_poi_ids  # учитывается в hybrid/enforce, не в finalize
     leisure = _landmark_pool(materials.leisure_points)
     if not leisure:
         return program.model_copy(
@@ -1048,16 +1090,22 @@ def finalize_route_program(
         )
     profiles = _adapt_profiles(leisure, pace=pace)
     span_km = _pool_span_km(leisure)
-    cases: list[TripRouteCase] = []
+    ordered = _order_indices(leisure)
+    avoid_extra = _avoid_indices(leisure, banned_poi_ids)
+
+    case_by_id: dict[RouteCaseId, TripRouteCase] = {}
+    indices_by_id: dict[RouteCaseId, list[int]] = {}
     for case in program.cases:
         if case.preserved:
-            cases.append(case)
             continue
         profile_key = _profile_for_case_id(case.case_id)
+        if profile_key not in ("A", "B", "C"):
+            continue
         profile = profiles[profile_key]  # type: ignore[index]
         compact = profile_key == "A"
         max_km = _MAX_ROUTE_KM_SHORT if compact else None
-        indices = _finalize_leisure_indices(
+        case_by_id[profile_key] = case
+        indices_by_id[profile_key] = _finalize_leisure_indices(
             case,
             leisure,
             profile,
@@ -1066,39 +1114,54 @@ def finalize_route_program(
             max_km=max_km,
             banned_poi_ids=banned_poi_ids,
         )
-        close_loop, indices = _resolve_route_loop(
-            case,
+
+    if len(indices_by_id) == 3:
+        algo = _compute_algorithm_indices(
             leisure,
-            indices,
+            ordered,
+            profiles,
             span_km,
+            avoid_extra=avoid_extra,
+        )
+        indices_by_id = _repair_route_indices_diversity(
+            indices_by_id,
+            leisure,
+            ordered,
+            profiles,
+            span_km,
+            algo,
+        )
+
+    finalized: dict[RouteCaseId, TripRouteCase] = {}
+    for case_id in ("A", "B", "C"):
+        case = case_by_id.get(case_id)
+        if case is None:
+            continue
+        profile = profiles[case_id]
+        compact = case_id == "A"
+        max_km = _MAX_ROUTE_KM_SHORT if compact else None
+        finalized[case_id] = _finalize_case_from_indices(
+            case,
+            indices_by_id[case_id],
+            leisure,
             profile,
+            materials,
+            transport=transport,
+            span_km=span_km,
             compact=compact,
             max_km=max_km,
-            city_hint=materials.city,
         )
-        valid_stops = _stops_from_indices(leisure, indices)
-        points = [leisure[i].coordinates for i in indices]
-        labels = [leisure[i].name for i in indices]
-        cases.append(
-            case.model_copy(
-                update={
-                    "title": public_route_title(profile.title),
-                    "stops": valid_stops,
-                    "summary": _route_summary(
-                        materials.city, len(indices), loop=close_loop
-                    ),
-                    "loop_route": close_loop,
-                    "maps_route_url": build_maps_route_url(
-                        points,
-                        labels=labels,
-                        city=materials.city,
-                        transport=transport,
-                        max_stops=profile.max_stops + (1 if close_loop else 0),
-                        close_loop=close_loop,
-                    ),
-                }
-            )
-        )
+
+    cases: list[TripRouteCase] = []
+    for case in program.cases:
+        if case.preserved:
+            cases.append(case)
+            continue
+        profile_key = _profile_for_case_id(case.case_id)
+        if profile_key in finalized:
+            cases.append(finalized[profile_key])
+        else:
+            cases.append(case)
     summary = (
         f"Пул: {len(materials.leisure_points)} мест досуга"
         + (
@@ -1304,7 +1367,96 @@ def _draft_case_map(draft: RouteProgram) -> dict[RouteCaseId, TripRouteCase]:
     return out
 
 
-_HYBRID_MAX_OVERLAP = 0.85
+_ROUTE_PAIR_OVERLAP_LIMITS: dict[tuple[RouteCaseId, RouteCaseId], float] = {
+    ("A", "B"): 0.72,
+    ("B", "C"): 0.76,
+    ("A", "C"): 0.82,
+}
+CRITIC_ROUTE_PAIR_LIMITS: dict[tuple[RouteCaseId, RouteCaseId], float] = {
+    ("A", "B"): 0.75,
+    ("B", "C"): 0.78,
+    ("A", "C"): 0.85,
+}
+
+
+def overlap_limits_for_pool(
+    pool_size: int,
+    *,
+    limits: dict[tuple[RouteCaseId, RouteCaseId], float],
+) -> dict[tuple[RouteCaseId, RouteCaseId], float]:
+    """Ослабляет порог, если POI в пуле мало — иначе различить A/B/C невозможно."""
+    if pool_size >= 12:
+        return dict(limits)
+    if pool_size >= 8:
+        return {pair: min(0.92, ratio + 0.08) for pair, ratio in limits.items()}
+    return {pair: 0.95 for pair in limits}
+
+
+def _indices_overlap_ratio(a: list[int], b: list[int]) -> float:
+    sa, sb = set(a), set(b)
+    if not sa or not sb:
+        return 1.0
+    return len(sa & sb) / max(len(sa), len(sb))
+
+
+def _repair_route_indices_diversity(
+    indices_by_id: dict[RouteCaseId, list[int]],
+    leisure: list[PoiPoint],
+    ordered: list[int],
+    profiles: dict[RouteCaseId, RouteProfile],
+    span_km: float,
+    algo: dict[RouteCaseId, list[int]],
+    *,
+    limits: dict[tuple[RouteCaseId, RouteCaseId], float] | None = None,
+) -> dict[RouteCaseId, list[int]]:
+    """Подменяет слишком похожие варианты алгоритмическим подбором с avoid."""
+    limits = limits or overlap_limits_for_pool(
+        len(leisure), limits=_ROUTE_PAIR_OVERLAP_LIMITS
+    )
+    out: dict[RouteCaseId, list[int]] = {
+        cid: list(indices_by_id.get(cid) or []) for cid in ("A", "B", "C")
+    }
+
+    def _too_similar(left: RouteCaseId, right: RouteCaseId) -> bool:
+        cap = limits.get((left, right), limits.get((right, left), 0.8))
+        return _indices_overlap_ratio(out[left], out[right]) > cap
+
+    if _too_similar("A", "B"):
+        avoid = set(out["A"])
+        repaired = _pick_window(
+            leisure,
+            ordered,
+            profiles["B"],
+            span_km=span_km,
+            avoid=avoid,
+            min_unique=2,
+        )
+        if repaired:
+            out["B"] = repaired
+        if _too_similar("A", "B"):
+            out["B"] = list(algo.get("B") or out["B"])
+
+    if _too_similar("B", "C"):
+        avoid = set(out["B"])
+        repaired = _pick_novel_route(
+            leisure, ordered, profiles["C"], span_km, avoid
+        )
+        if repaired:
+            out["C"] = repaired
+        if _too_similar("B", "C"):
+            out["C"] = list(algo.get("C") or out["C"])
+
+    if _too_similar("A", "C"):
+        avoid = set(out["A"]) | set(out["B"])
+        repaired = _pick_novel_route(
+            leisure, ordered, profiles["C"], span_km, avoid
+        )
+        if repaired:
+            out["C"] = repaired
+        if _too_similar("A", "C"):
+            out["C"] = list(algo.get("C") or out["C"])
+
+    return out
 
 
 def _preferred_indices(
@@ -1387,18 +1539,15 @@ def build_hybrid_route_program(
             for case_id in ("A", "B", "C")
         ]
 
-    cases = _cases_from_indices()
-    if len(cases) == 3:
-        a, b, c = cases
-        if leisure_overlap_ratio(b, c) > _HYBRID_MAX_OVERLAP:
-            indices_by_id["C"] = algo["C"]
-            cases = _cases_from_indices()
-            a, b, c = cases
-        if leisure_overlap_ratio(a, b) > _HYBRID_MAX_OVERLAP:
-            indices_by_id["B"] = algo["B"]
-            cases = _cases_from_indices()
-
-    program = RouteProgram(cases=cases)
+    indices_by_id = _repair_route_indices_diversity(
+        indices_by_id,
+        leisure,
+        ordered,
+        profiles,
+        span_km,
+        algo,
+    )
+    program = RouteProgram(cases=_cases_from_indices())
     return finalize_route_program(program, materials, transport=transport, pace=pace)
 
 

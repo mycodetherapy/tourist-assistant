@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import unittest
+import unittest.mock
 from unittest.mock import patch
 
 from search.osm.nominatim import CityCenter
 from search.wikidata.places import (
     _dedupe_sparql_rows,
+    _run_sparql,
     _wikidata_backfill_score,
     fetch_wikidata_leisure,
 )
@@ -132,6 +134,21 @@ class FetchWikidataLeisureTests(unittest.TestCase):
         )
         self.assertEqual(len(points), 1)
         self.assertEqual(points[0].tag, "embankments")
+
+    @patch("search.wikidata.places.time.sleep")
+    @patch("search.wikidata.places.requests.get")
+    def test_sparql_retries_on_transient_failure(self, get, _sleep) -> None:
+        import requests
+
+        ok = unittest.mock.MagicMock()
+        ok.status_code = 200
+        ok.json.return_value = {
+            "results": {"bindings": [{"item": {"value": "http://www.wikidata.org/entity/Q1"}}]}
+        }
+        get.side_effect = [requests.Timeout(), ok]
+        rows = _run_sparql("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(get.call_count, 2)
 
     @patch("search.wikidata.places._run_sparql")
     def test_sparql_query_orders_by_sitelinks(self, run_sparql) -> None:

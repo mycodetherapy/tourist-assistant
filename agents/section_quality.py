@@ -8,8 +8,13 @@ from typing import Any, Optional
 
 from langchain_core.messages import ToolMessage
 
-from agents.route_postprocess import leisure_overlap_ratio
-from models.routes import RouteProgram
+from agents.route_postprocess import (
+    CRITIC_ROUTE_PAIR_LIMITS,
+    _profile_for_case_id,
+    leisure_overlap_ratio,
+    overlap_limits_for_pool,
+)
+from models.routes import RouteProgram, TripRouteCase
 from planning.rebuild import resolve_tool_name
 from search.transport_codes import ground_transport_available
 
@@ -93,8 +98,46 @@ def _routes_issues(program: dict[str, Any]) -> list[str]:
                         f"новый {new_case.case_id} слишком похож на сохранённый {kept.case_id}"
                     )
     elif len(routes.cases) >= 3:
-        if leisure_overlap_ratio(routes.cases[0], routes.cases[2]) > 0.85:
-            issues.append("варианты A и C слишком похожи")
+        active = [c for c in routes.cases if not c.preserved]
+        if len(active) >= 2:
+            pool_guess = max(
+                (
+                    len({s.poi_id for s in c.stops if s.kind == "leisure" and s.poi_id})
+                    for c in active
+                ),
+                default=0,
+            )
+            limits = overlap_limits_for_pool(
+                max(pool_guess * 2, 8), limits=CRITIC_ROUTE_PAIR_LIMITS
+            )
+            by_profile: dict[str, TripRouteCase] = {}
+            for case in active:
+                profile_key = _profile_for_case_id(case.case_id)
+                if profile_key in ("A", "B", "C"):
+                    by_profile[profile_key] = case
+            for left, right in (("A", "B"), ("B", "C"), ("A", "C")):
+                a_case = by_profile.get(left)
+                b_case = by_profile.get(right)
+                if a_case is None or b_case is None:
+                    continue
+                cap = limits.get((left, right), 0.8)
+                ratio = leisure_overlap_ratio(a_case, b_case)
+                if ratio >= 1.0:
+                    issues.append(
+                        f"варианты {left} и {right} совпадают по остановкам"
+                    )
+                elif ratio > cap:
+                    issues.append(
+                        f"варианты {left} и {right} слишком похожи "
+                        f"({int(ratio * 100)}% общих POI)"
+                    )
+            urls = [
+                str(c.maps_route_url).strip()
+                for c in active
+                if str(c.maps_route_url).strip()
+            ]
+            if len(urls) >= 2 and len(urls) != len(set(urls)):
+                issues.append("разные варианты ведут на один maps_route_url")
     if text and is_garbage_section(text, "routes_text"):
         issues.append("routes_text похож на обломок JSON")
     return issues
