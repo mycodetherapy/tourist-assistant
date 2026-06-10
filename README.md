@@ -426,7 +426,10 @@ LangSmith можно включить одновременно с LangFuse:
 
 ```bash
 python3 -m scripts.metrics_report --limit 50
+python3 -m scripts.metrics_report --trip-id 12
 ```
+
+В `agent_runs` сохраняются `duration_ms`, tokens/cost и **`node_timings`** (JSON: узлы `researcher` / `executor` / `writer` / `critic` / `human_review` + tools).
 
 Примечание: стоимость/токены пишутся через `get_openai_callback()` и могут быть пустыми для не-OpenAI провайдеров.
 

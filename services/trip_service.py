@@ -9,7 +9,6 @@ from typing import Any, Callable, Literal
 
 from langchain_core.messages import HumanMessage
 
-from agents.graph import app
 from db import (
     TripSummary,
     create_trip,
@@ -284,11 +283,13 @@ class TripService:
         except Exception:
             get_openai_callback = None  # type: ignore
 
+        from services.graph_metrics import stream_graph_with_metrics
+
         if get_openai_callback is not None:
             with get_openai_callback() as cb:
-                result = app.invoke(run_state, config=config)
+                result, run_metrics = stream_graph_with_metrics(run_state, config)
         else:
-            result = app.invoke(run_state, config=config)
+            result, run_metrics = stream_graph_with_metrics(run_state, config)
 
         flush_langfuse()
 
@@ -302,6 +303,7 @@ class TripService:
             completion_tokens=int(getattr(cb, "completion_tokens", 0)) if cb else None,
             total_tokens=int(getattr(cb, "total_tokens", 0)) if cb else None,
             total_cost_usd=float(getattr(cb, "total_cost", 0.0)) if cb else None,
+            node_timings=run_metrics.to_dict(),
         )
 
         version_id: int | None = None

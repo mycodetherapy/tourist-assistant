@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     completion_tokens INTEGER,
     total_tokens INTEGER,
     total_cost_usd REAL,
+    node_timings_json TEXT,
     created_at TEXT NOT NULL
 );
 

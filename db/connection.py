@@ -58,10 +58,24 @@ def _migrate_program_item_feedback(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_agent_runs_timings(conn: sqlite3.Connection) -> None:
+    """Добавляет node_timings_json в agent_runs для per-node метрик."""
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_runs'"
+    ).fetchone()
+    if row is None:
+        return
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(agent_runs)").fetchall()}
+    if "node_timings_json" in columns:
+        return
+    conn.execute("ALTER TABLE agent_runs ADD COLUMN node_timings_json TEXT")
+
+
 def init_db() -> None:
     """Создаёт таблицы по schema.sql, если их ещё нет."""
     schema_sql = _SCHEMA_PATH.read_text(encoding="utf-8")
     with connect() as conn:
         conn.executescript(schema_sql)
         _migrate_program_item_feedback(conn)
+        _migrate_agent_runs_timings(conn)
         conn.commit()

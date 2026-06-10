@@ -389,18 +389,24 @@ def log_agent_run(
     completion_tokens: int | None = None,
     total_tokens: int | None = None,
     total_cost_usd: float | None = None,
+    node_timings: dict[str, Any] | None = None,
 ) -> int:
     """Пишет агрегированные метрики одного прогона графа."""
     now = _utc_now()
+    timings_json = (
+        json.dumps(node_timings, ensure_ascii=False, separators=(",", ":"))
+        if node_timings
+        else None
+    )
     with connect() as conn:
         cursor = conn.execute(
             """
             INSERT INTO agent_runs (
                 trip_id, run_id, rebuild_scope, duration_ms,
                 prompt_tokens, completion_tokens, total_tokens, total_cost_usd,
-                created_at
+                node_timings_json, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 trip_id,
@@ -411,6 +417,7 @@ def log_agent_run(
                 completion_tokens,
                 total_tokens,
                 total_cost_usd,
+                timings_json,
                 now,
             ),
         )
@@ -430,7 +437,7 @@ def list_agent_runs(trip_id: int | None = None, limit: int = 50) -> list[dict[st
             f"""
             SELECT trip_id, run_id, rebuild_scope, duration_ms,
                    prompt_tokens, completion_tokens, total_tokens, total_cost_usd,
-                   created_at
+                   node_timings_json, created_at
             FROM agent_runs
             {where}
             ORDER BY id DESC
@@ -438,7 +445,19 @@ def list_agent_runs(trip_id: int | None = None, limit: int = 50) -> list[dict[st
             """,
             params,
         ).fetchall()
-    return [dict(r) for r in rows]
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        raw = item.pop("node_timings_json", None)
+        if raw:
+            try:
+                item["node_timings"] = json.loads(raw)
+            except json.JSONDecodeError:
+                item["node_timings"] = None
+        else:
+            item["node_timings"] = None
+        out.append(item)
+    return out
 
 
 def list_tool_runs(trip_id: int, limit: int = 50) -> list[dict[str, Any]]:

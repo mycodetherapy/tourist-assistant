@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from time import perf_counter
+
 from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -38,6 +40,7 @@ from planning.rebuild import resolve_tool_name
 from search.context import clear_route_materials
 from search.tool_logging import parse_tool_result
 from search.tools import TOOL_MAP
+from services.graph_metrics import record_tool_timing
 
 
 def _normalize_city_key(city: str) -> str:
@@ -139,7 +142,11 @@ def executor_node(state: AgentState) -> dict[str, list[ToolMessage]]:
                 raise KeyError(f"Неизвестный инструмент: {name}")
             if resolved == "search_route_materials":
                 clear_route_materials()
-            result = TOOL_MAP[resolved].invoke(args)
+            tool_started = perf_counter()
+            try:
+                result = TOOL_MAP[resolved].invoke(args)
+            finally:
+                record_tool_timing(resolved, perf_counter() - tool_started)
             content = result if isinstance(result, str) else str(result)
         except Exception as exc:
             content = f"Ошибка выполнения инструмента {name}: {exc}"
