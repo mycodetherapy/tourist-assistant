@@ -81,6 +81,17 @@ class TestTicketLinks(unittest.TestCase):
         self.assertIn("короче 500", (raw.instruction or "").lower())
         self.assertIn("самолёт не предлагаем", (raw.warning or "").lower())
 
+    def test_build_offers_moscow_novosibirsk_no_bus(self) -> None:
+        parsed = parse_trip_dates("7-8 июля 2026")
+        with patch(
+            "search.transport_codes.city_pair_distance_km", return_value=2800.0
+        ):
+            offers = build_ticket_offers("Москва", "Новосибирск", parsed)
+        modes = {o.mode for o in offers}
+        self.assertIn(TransportMode.plane, modes)
+        self.assertIn(TransportMode.train, modes)
+        self.assertNotIn(TransportMode.bus, modes)
+
     def test_build_offers_moscow_istanbul(self) -> None:
         parsed = parse_trip_dates("1-4 июля 2026")
         offers = build_ticket_offers("Москва", "Стамбул", parsed)
@@ -104,7 +115,7 @@ class TestTicketLinks(unittest.TestCase):
         modes = {o.mode for o in offers}
         self.assertIn(TransportMode.plane, modes)
         self.assertIn(TransportMode.train, modes)
-        self.assertIn(TransportMode.bus, modes)
+        self.assertNotIn(TransportMode.bus, modes)
         providers = {o.provider for o in offers}
         self.assertEqual(
             {p for o in offers if o.mode == TransportMode.plane for p in [o.provider]},
@@ -135,12 +146,15 @@ class TestTicketLinks(unittest.TestCase):
 
     def test_bus_tutu_one_way_url(self) -> None:
         parsed = parse_trip_dates("15 июня 2026")
-        with patch(
-            "search.providers.tutu_bus.resolve_tutu_bus_city",
-            side_effect=lambda c: {
-                "Саратов": ("gorod_Saratov", "1433947"),
-                "Москва": ("gorod_Moskva", "1447874"),
-            }.get(c),
+        with (
+            patch(
+                "search.providers.tutu_bus.resolve_tutu_bus_city",
+                side_effect=lambda c: {
+                    "Саратов": ("gorod_Saratov", "1433947"),
+                    "Москва": ("gorod_Moskva", "1447874"),
+                }.get(c),
+            ),
+            patch("search.transport_codes.city_pair_distance_km", return_value=400.0),
         ):
             offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="solo")
         bus = next(o for o in offers if o.provider == "Bus.tutu.ru")
@@ -185,12 +199,15 @@ class TestTicketLinks(unittest.TestCase):
 
     def test_travel_party_family_two(self) -> None:
         parsed = parse_trip_dates("18 июня 2026")
-        with patch(
-            "search.providers.tutu_bus.resolve_tutu_bus_city",
-            side_effect=lambda c: {
-                "Саратов": ("gorod_Saratov", "1433947"),
-                "Москва": ("gorod_Moskva", "1447874"),
-            }.get(c),
+        with (
+            patch(
+                "search.providers.tutu_bus.resolve_tutu_bus_city",
+                side_effect=lambda c: {
+                    "Саратов": ("gorod_Saratov", "1433947"),
+                    "Москва": ("gorod_Moskva", "1447874"),
+                }.get(c),
+            ),
+            patch("search.transport_codes.city_pair_distance_km", return_value=400.0),
         ):
             offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="family_two")
         avia = next(o for o in offers if o.provider == "Aviasales")
@@ -236,11 +253,10 @@ class TestTicketLinks(unittest.TestCase):
             ),
         ]
         summary = format_offers_summary("Казань", "Самара", parsed, offers)
-        self.assertIn(
-            "**Самолёт:** [Все рейсы на Aviasales: Казань → Самара]",
-            summary,
-        )
-        self.assertIn("\n\n- DP 6859", summary)
+        self.assertIn("**Самолёт:**", summary)
+        self.assertIn("[Aviasales: Казань → Самара]", summary)
+        self.assertNotIn("[Все рейсы на Aviasales]", summary)
+        self.assertIn("\n- DP 6859", summary)
         self.assertIn("\n- N4 59", summary)
         self.assertNotIn(" · ", summary)
 
@@ -267,38 +283,20 @@ class TestTicketLinks(unittest.TestCase):
             offers,
             passengers=passengers_for_travel_party("family"),
         )
-        self.assertIn(
-            "**Самолёт:** [Все рейсы на Aviasales: Москва → Пермь (2 взр., 1 реб.)]",
-            summary,
-        )
+        self.assertIn("[Aviasales: Москва → Пермь]", summary)
 
-    def test_normalize_enriches_short_aviasales_link(self) -> None:
+    def test_normalize_keeps_aviasales_route_link(self) -> None:
         from search.ticket_links import normalize_tickets_markdown
 
         raw = (
             "Маршрут: Москва → Пермь, даты: 03.07.2026 — 05.07.2026.\n"
-            "Пассажиры в ссылках: 2 взр., 2 реб.\n"
-            "**Самолёт:** [Все рейсы на Aviasales](https://www.aviasales.ru/search/x)\n"
+            "**Самолёт:**\n"
+            "[Aviasales: Москва → Пермь](https://www.aviasales.ru/search/x)\n"
             "- FV 6399, прямой, от 14266 ₽"
         )
         normalized = normalize_tickets_markdown(raw)
         self.assertIn(
-            "[Все рейсы на Aviasales: Москва → Пермь (2 взр., 2 реб.)]",
-            normalized,
-        )
-
-    def test_normalize_enriches_aviasales_from_train_link(self) -> None:
-        from search.ticket_links import normalize_tickets_markdown
-
-        raw = (
-            "**Самолёт:** [Все рейсы на Aviasales](https://www.aviasales.ru/search/x)\n"
-            "- FV 6399, прямой, от 14266 ₽\n"
-            "**Поезд:** [Tutu (жд): Москва → Пермь (2 взр., 2 реб.)]"
-            "(https://www.tutu.ru/poezda/Moskva/Perm/)"
-        )
-        normalized = normalize_tickets_markdown(raw)
-        self.assertIn(
-            "[Все рейсы на Aviasales: Москва → Пермь (2 взр., 2 реб.)]",
+            "[Aviasales: Москва → Пермь](https://www.aviasales.ru/search/x)",
             normalized,
         )
 
@@ -329,9 +327,9 @@ class TestTicketLinks(unittest.TestCase):
         ):
             offers = build_ticket_offers("Казань", "Самара", parsed, travel_party="couple")
             summary = format_offers_summary("Казань", "Самара", parsed, offers)
-        self.assertIn("**Поезд:** [", summary)
+        self.assertIn("**Поезд:**\n[", summary)
         self.assertIn("](https://www.tutu.ru/poezda/", summary)
-        self.assertIn("**Автобус:** [", summary)
+        self.assertIn("**Автобус:**\n[", summary)
         self.assertIn("](https://bus.tutu.ru/raspisanie/", summary)
         self.assertNotRegex(summary, r"\]: https://")
 

@@ -233,15 +233,6 @@ def _adapt_profiles(
     return out
 
 
-def route_profile_for_case(
-    case_id: str, *, pool_size: int, pace: str = "moderate"
-) -> RouteProfile:
-    key: RouteCaseId = case_id if case_id in _BASE_PROFILES else "A"  # type: ignore[assignment]
-    dummy = [PoiPoint(poi_id="x", tag="landmarks", name="x", coordinates=GeoPoint(lon=0, lat=0), maps_url="")]
-    profiles = _adapt_profiles(dummy * max(pool_size, 1), pace=pace)
-    return profiles[key]
-
-
 def estimate_path_km(coords: list[GeoPoint], *, close_loop: bool = False) -> float:
     if len(coords) < 2:
         return 0.0
@@ -642,6 +633,7 @@ def _pick_window(
     span_km: float,
     must_include: list[int] | None = None,
     avoid: set[int] | None = None,
+    forbidden: set[int] | None = None,
     min_unique: int = 0,
     compact: bool = False,
     max_km: float | None = None,
@@ -655,6 +647,7 @@ def _pick_window(
         leg_limit = max(leg_limit, _novel_leg_limit_km(profile, span_km))
     must = set(must_include or [])
     avoid_set = avoid or set()
+    forbidden_set = forbidden or set()
     best: list[int] = []
     best_score = -1e9
 
@@ -664,6 +657,8 @@ def _pick_window(
             if must and not must.issubset(set(window)):
                 continue
             ordered_window = _order_indices_by_path(leisure, window)
+            if forbidden_set & set(ordered_window):
+                continue
             if _window_has_duplicate_names(leisure, ordered_window):
                 continue
             if avoid_set:
@@ -919,6 +914,7 @@ def _finalize_leisure_indices(
         ):
             return _trim_indices_to_profile(leisure, indices, profile)
 
+    forbidden = _avoid_indices(leisure, banned_poi_ids)
     return _pick_window(
         leisure,
         ordered,
@@ -926,7 +922,8 @@ def _finalize_leisure_indices(
         span_km=span_km,
         compact=compact,
         max_km=max_km,
-        avoid=_avoid_indices(leisure, banned_poi_ids),
+        avoid=forbidden,
+        forbidden=forbidden,
     )
 
 
@@ -1130,7 +1127,13 @@ def finalize_route_program(
             profiles,
             span_km,
             algo,
+            avoid_extra=avoid_extra,
         )
+        if avoid_extra:
+            indices_by_id = {
+                case_id: [idx for idx in indices if idx not in avoid_extra]
+                for case_id, indices in indices_by_id.items()
+            }
 
     finalized: dict[RouteCaseId, TripRouteCase] = {}
     for case_id in ("A", "B", "C"):
@@ -1295,6 +1298,7 @@ def _compute_algorithm_indices(
         span_km=span_km,
         must_include=a_must,
         avoid=outliers | extra,
+        forbidden=extra,
         compact=True,
         max_km=_MAX_ROUTE_KM_SHORT,
     )
@@ -1308,6 +1312,7 @@ def _compute_algorithm_indices(
         span_km=span_km,
         must_include=b_must,
         avoid=used_a | extra,
+        forbidden=extra,
         min_unique=2,
     )
     used_b = set(b_idx)
@@ -1334,6 +1339,7 @@ def _compute_algorithm_indices(
             profiles["C"],
             span_km=span_km,
             avoid=set(b_idx),
+            forbidden=extra,
             min_unique=2,
             must_include=c_must,
         )
@@ -1408,11 +1414,13 @@ def _repair_route_indices_diversity(
     algo: dict[RouteCaseId, list[int]],
     *,
     limits: dict[tuple[RouteCaseId, RouteCaseId], float] | None = None,
+    avoid_extra: set[int] | None = None,
 ) -> dict[RouteCaseId, list[int]]:
     """Подменяет слишком похожие варианты алгоритмическим подбором с avoid."""
     limits = limits or overlap_limits_for_pool(
         len(leisure), limits=_ROUTE_PAIR_OVERLAP_LIMITS
     )
+    banned = avoid_extra or set()
     out: dict[RouteCaseId, list[int]] = {
         cid: list(indices_by_id.get(cid) or []) for cid in ("A", "B", "C")
     }
@@ -1422,13 +1430,14 @@ def _repair_route_indices_diversity(
         return _indices_overlap_ratio(out[left], out[right]) > cap
 
     if _too_similar("A", "B"):
-        avoid = set(out["A"])
+        avoid = set(out["A"]) | banned
         repaired = _pick_window(
             leisure,
             ordered,
             profiles["B"],
             span_km=span_km,
             avoid=avoid,
+            forbidden=banned,
             min_unique=2,
         )
         if repaired:
@@ -1437,7 +1446,7 @@ def _repair_route_indices_diversity(
             out["B"] = list(algo.get("B") or out["B"])
 
     if _too_similar("B", "C"):
-        avoid = set(out["B"])
+        avoid = set(out["B"]) | banned
         repaired = _pick_novel_route(
             leisure, ordered, profiles["C"], span_km, avoid
         )
@@ -1447,7 +1456,7 @@ def _repair_route_indices_diversity(
             out["C"] = list(algo.get("C") or out["C"])
 
     if _too_similar("A", "C"):
-        avoid = set(out["A"]) | set(out["B"])
+        avoid = set(out["A"]) | set(out["B"]) | banned
         repaired = _pick_novel_route(
             leisure, ordered, profiles["C"], span_km, avoid
         )
@@ -1546,6 +1555,7 @@ def build_hybrid_route_program(
         profiles,
         span_km,
         algo,
+        avoid_extra=avoid_extra,
     )
     program = RouteProgram(cases=_cases_from_indices())
     return finalize_route_program(program, materials, transport=transport, pace=pace)
@@ -1714,6 +1724,7 @@ def enforce_route_poi_policy(
             span_km=span_km,
             must_include=must,
             avoid=avoid_idx,
+            forbidden=avoid_idx,
             compact=compact,
             max_km=max_km,
         )
