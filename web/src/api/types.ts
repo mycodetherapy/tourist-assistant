@@ -35,7 +35,7 @@ export interface TripPreferences {
   cuisine: string;
   min_restaurant_rating: number;
   transport_preference: "metro" | "taxi" | "walking" | "mixed";
-  travel_party: "solo" | "couple" | "family" | "friends";
+  travel_party: "solo" | "couple" | "family" | "friends" | "parent_child" | "family_two";
   special_notes: string;
 }
 

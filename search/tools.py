@@ -38,9 +38,14 @@ def search_roundtrip_tickets(
     """
     Билеты туда-обратно: deep links на агрегаторы с датами и маршрутом.
     Самолёт (Aviasales + API), поезд (РЖД, Tutu), автобус (Bus.tutu.ru).
+    Число пассажиров берётся из состава группы (сессионные предпочтения).
     Возвращает JSON schema_version=1 с полем offers.
     """
-    result = run_tickets_search(origin_city, destination_city, dates)
+    prefs = get_session_preferences()
+    travel_party = prefs.travel_party if prefs else "couple"
+    result = run_tickets_search(
+        origin_city, destination_city, dates, travel_party=travel_party
+    )
     return result.model_dump_json(ensure_ascii=False, indent=2)
 
 

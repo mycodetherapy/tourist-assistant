@@ -31,6 +31,8 @@ from cli.feedback import run_feedback_session
 from services import TripService
 from services.errors import format_runtime_error
 
+DEFAULT_USER_QUERY = "Составь культурную программу поездки"
+
 
 def _prompt_line(label: str, default: str = "") -> str:
     """Запрашивает строку в терминале; Enter — значение по умолчанию."""
@@ -44,11 +46,7 @@ def _collect_new_trip_inputs() -> tuple[str, str, str, str]:
     city_raw = _prompt_line("Город поездки")
     dates_raw = _prompt_line("Даты (например, 15-18 июля 2026)")
     origin_raw = _prompt_line("Город вылета", default="Москва")
-    user_message_raw = _prompt_line(
-        "Ваш запрос",
-        default="Составь культурную программу поездки",
-    )
-    return city_raw, dates_raw, origin_raw, user_message_raw
+    return city_raw, dates_raw, origin_raw, DEFAULT_USER_QUERY
 
 
 def _choose_rebuild_scope(*, has_program: bool) -> str:

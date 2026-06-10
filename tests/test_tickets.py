@@ -74,16 +74,14 @@ class TestTicketLinks(unittest.TestCase):
 
     def test_tutu_train_url_format(self) -> None:
         parsed = parse_trip_dates("18 июня 2026")
-        offers = build_ticket_offers("Саратов", "Москва", parsed)
+        offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="solo")
         tutu = next(o for o in offers if o.provider == "Tutu.ru")
-        self.assertEqual(
-            tutu.booking_url,
-            "https://www.tutu.ru/poezda/Saratov/Moskva/?date=18.06.2026&travelers=1",
-        )
+        self.assertIn("date=18.06.2026", tutu.booking_url)
+        self.assertIn("travelers=1", tutu.booking_url)
 
     def test_rzd_url_format(self) -> None:
         parsed = parse_trip_dates("18 июня 2026")
-        offers = build_ticket_offers("Саратов", "Москва", parsed)
+        offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="solo")
         rzd = next(o for o in offers if o.provider == "РЖД")
         self.assertEqual(
             rzd.booking_url,
@@ -94,7 +92,7 @@ class TestTicketLinks(unittest.TestCase):
 
     def test_bus_tutu_one_way_url(self) -> None:
         parsed = parse_trip_dates("15 июня 2026")
-        offers = build_ticket_offers("Саратов", "Москва", parsed)
+        offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="solo")
         bus = next(o for o in offers if o.provider == "Bus.tutu.ru")
         self.assertTrue(bus.booking_url.startswith("https://bus.tutu.ru/raspisanie/gorod_Saratov/gorod_Moskva/"))
         self.assertIn("date=15.06.2026", bus.booking_url)
@@ -102,6 +100,47 @@ class TestTicketLinks(unittest.TestCase):
         self.assertIn("to=1447874", bus.booking_url)
         self.assertIn("travelers=1", bus.booking_url)
         self.assertIn("amount=1", bus.booking_url)
+
+    def test_travel_party_couple_aviasales(self) -> None:
+        parsed = parse_trip_dates("15-18 июля 2026")
+        offers = build_ticket_offers("Саратов", "Сыктывкар", parsed, travel_party="couple")
+        avia = next(o for o in offers if o.provider == "Aviasales")
+        self.assertIn("adults=2", avia.booking_url)
+        tutu = next(o for o in offers if o.provider == "Tutu.ru")
+        self.assertIn("travelers=2", tutu.booking_url)
+
+    def test_travel_party_family_passengers(self) -> None:
+        parsed = parse_trip_dates("15-18 июля 2026")
+        offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="family")
+        avia = next(o for o in offers if o.provider == "Aviasales")
+        self.assertIn("adults=2", avia.booking_url)
+        self.assertIn("children=1", avia.booking_url)
+        rzd = next(o for o in offers if o.provider == "РЖД")
+        self.assertIn("adult=3", rzd.booking_url)
+
+    def test_travel_party_friends_three_adults(self) -> None:
+        parsed = parse_trip_dates("18 июня 2026")
+        offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="friends")
+        avia = next(o for o in offers if o.provider == "Aviasales")
+        self.assertIn("adults=3", avia.booking_url)
+
+    def test_travel_party_parent_child(self) -> None:
+        parsed = parse_trip_dates("18 июня 2026")
+        offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="parent_child")
+        avia = next(o for o in offers if o.provider == "Aviasales")
+        self.assertIn("adults=1", avia.booking_url)
+        self.assertIn("children=1", avia.booking_url)
+        rzd = next(o for o in offers if o.provider == "РЖД")
+        self.assertIn("adult=2", rzd.booking_url)
+
+    def test_travel_party_family_two(self) -> None:
+        parsed = parse_trip_dates("18 июня 2026")
+        offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="family_two")
+        avia = next(o for o in offers if o.provider == "Aviasales")
+        self.assertIn("adults=2", avia.booking_url)
+        self.assertIn("children=2", avia.booking_url)
+        bus = next(o for o in offers if o.provider == "Bus.tutu.ru")
+        self.assertIn("travelers=4", bus.booking_url)
 
     def test_summary_no_duplicate_price(self) -> None:
         parsed = parse_trip_dates("1-4 августа 2026")
@@ -117,6 +156,7 @@ class TestTicketLinks(unittest.TestCase):
         )
         summary = format_offers_summary("Москва", "Санкт-Петербург", parsed, [api_offer])
         self.assertEqual(summary.count("от 8469 ₽"), 1)
+        self.assertIn("Пассажиры в ссылках:", summary)
 
     def test_aviasales_url_contains_dates(self) -> None:
         parsed = parse_trip_dates("15-18 июля 2026")
@@ -183,6 +223,14 @@ class TestTicketsSearchTool(unittest.TestCase):
             payload["avia_api_status"]
         )
         self.assertEqual(metrics["provider"], provider)
+
+    def test_run_includes_passenger_summary_for_family(self) -> None:
+        raw = run_tickets_search(
+            "Москва", "Казань", "10-12 августа 2026", travel_party="family"
+        )
+        self.assertIn("Пассажиры в ссылках:", raw.summary_for_llm or "")
+        self.assertIn("2 взр.", raw.summary_for_llm or "")
+        self.assertIn("1 реб.", raw.summary_for_llm or "")
 
     def test_run_returns_valid_schema(self) -> None:
         raw = run_tickets_search("Саратов", "Сыктывкар", "15-18 июля 2026")

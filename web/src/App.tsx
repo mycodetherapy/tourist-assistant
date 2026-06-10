@@ -16,8 +16,8 @@ export default function App() {
       : "list";
 
   return (
-    <Layout className="min-h-screen">
-      <Header className="flex items-center gap-6 px-6">
+    <Layout className="min-h-screen flex flex-1 flex-col bg-[#f5f5f5]">
+      <Header className="flex shrink-0 items-center gap-6 px-6">
         <Link to="/" className="flex items-center gap-2 text-white text-lg font-medium">
           <CompassOutlined />
           Туристический ассистент
@@ -33,7 +33,7 @@ export default function App() {
           ]}
         />
       </Header>
-      <Content className="mx-auto w-full max-w-5xl px-4 py-6">
+      <Content className="mx-auto flex flex-1 w-full max-w-5xl flex-col px-4 py-6">
         <Routes>
           <Route path="/" element={<TripListPage />} />
           <Route path="/trips/new" element={<NewTripPage />} />

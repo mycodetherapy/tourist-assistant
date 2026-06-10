@@ -1,6 +1,15 @@
 import { Alert, Descriptions } from "antd";
 import type { TripPreferences } from "../api/types";
 
+const PARTY_LABELS: Record<TripPreferences["travel_party"], string> = {
+  solo: "1 взрослый",
+  couple: "2 взрослых",
+  family: "2 взрослых + 1 ребёнок",
+  parent_child: "1 взрослый + 1 ребёнок",
+  family_two: "2 взрослых + 2 ребёнка",
+  friends: "3 взрослых",
+};
+
 interface LaunchSummaryProps {
   city: string;
   dates: string;
@@ -20,21 +29,23 @@ export function LaunchSummary({
         type="info"
         showIcon
         message="Что соберёт агент"
-        description="Билеты туда-обратно и три альтернативных маршрута на всю поездку (варианты A, B, C) с местами досуга и ресторанами из Яндекс.Карт. У каждого варианта будет ссылка «Открыть маршрут в Яндекс.Картах»."
+        description="Билеты туда-обратно и три альтернативных маршрута на всю поездку (варианты A, B, C) с местами досуга из Wikidata. У каждого варианта — ссылка «Открыть маршрут в Яндекс.Картах» и лайфхаки."
       />
       <Descriptions column={1} size="small" bordered>
         <Descriptions.Item label="Маршрут">
           {originCity} → {city}
         </Descriptions.Item>
         <Descriptions.Item label="Даты">{dates}</Descriptions.Item>
-        <Descriptions.Item label="Темп">{preferences.pace}</Descriptions.Item>
-        <Descriptions.Item label="Рестораны от">
-          {preferences.min_restaurant_rating} ★
+        <Descriptions.Item label="Состав группы">
+          {PARTY_LABELS[preferences.travel_party]}
+        </Descriptions.Item>
+        <Descriptions.Item label="Темп и передвижение">
+          Насыщенный; метро + пешком
         </Descriptions.Item>
       </Descriptions>
       <p className="text-sm text-neutral-500">
-        POI берутся из OpenStreetMap (Overpass) и Wikidata; проверка пула:{" "}
-        <code className="text-xs">python3 scripts/test_yandex_maps.py Самара</code>
+        POI из Wikidata; проверка пула:{" "}
+        <code className="text-xs">python3 scripts/test_yandex_maps.py {city}</code>
       </p>
     </div>
   );

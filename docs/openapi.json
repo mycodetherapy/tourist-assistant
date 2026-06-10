@@ -1113,7 +1113,7 @@
               "packed"
             ],
             "title": "Pace",
-            "description": "Темп поездки"
+            "description": "Темп поездки (в UI скрыт, по умолчанию packed)"
           },
           "budget": {
             "type": "string",
@@ -1123,7 +1123,7 @@
               "unlimited"
             ],
             "title": "Budget",
-            "description": "Бюджет на билеты и питание"
+            "description": "Legacy: не используется в поиске"
           },
           "interests": {
             "items": {
@@ -1131,12 +1131,12 @@
             },
             "type": "array",
             "title": "Interests",
-            "description": "Свободные интересы (афиша, музеи и т.д.)"
+            "description": "Legacy: не влияет на пул POI"
           },
           "cuisine": {
             "type": "string",
             "title": "Cuisine",
-            "description": "Предпочтения по кухне",
+            "description": "Legacy: поиск ресторанов отключён",
             "default": ""
           },
           "min_restaurant_rating": {
@@ -1144,7 +1144,7 @@
             "maximum": 5.0,
             "minimum": 1.0,
             "title": "Min Restaurant Rating",
-            "description": "Минимальный рейтинг ресторанов",
+            "description": "Legacy: не используется",
             "default": 4.0
           },
           "transport_preference": {
@@ -1156,7 +1156,7 @@
               "mixed"
             ],
             "title": "Transport Preference",
-            "description": "Как передвигаться по городу"
+            "description": "Передвижение (в UI скрыт, по умолчанию mixed)"
           },
           "travel_party": {
             "type": "string",
@@ -1164,7 +1164,9 @@
               "solo",
               "couple",
               "family",
-              "friends"
+              "friends",
+              "parent_child",
+              "family_two"
             ],
             "title": "Travel Party",
             "description": "Состав группы"
@@ -1172,7 +1174,7 @@
           "special_notes": {
             "type": "string",
             "title": "Special Notes",
-            "description": "Дополнительные пожелания",
+            "description": "Legacy: доп. пожелания",
             "default": ""
           }
         },

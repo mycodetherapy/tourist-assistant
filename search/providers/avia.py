@@ -16,6 +16,7 @@ from models.tickets import (
     TransportMode,
 )
 from search.aviasales_urls import build_aviasales_search_url
+from search.ticket_passengers import TicketPassengers
 
 API_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
 
@@ -70,6 +71,7 @@ def fetch_avia_offers(
     destination_iata: str,
     parsed: ParsedTripDates,
     *,
+    passengers: TicketPassengers | None = None,
     limit: Optional[int] = None,
 ) -> Tuple[List[TicketOffer], AviaApiStatus]:
     """
@@ -126,6 +128,7 @@ def fetch_avia_offers(
         destination_iata,
         parsed.departure,
         parsed.return_date,
+        passengers=passengers,
     )
     offers = [
         _map_item(row, origin_iata, destination_iata, search_url)

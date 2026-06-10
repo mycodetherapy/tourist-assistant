@@ -14,6 +14,7 @@ from planning.dates import parse_trip_dates
 from search.city_codes import city_to_iata
 from search.providers.avia import fetch_avia_offers
 from search.ticket_links import build_ticket_offers, format_offers_summary
+from search.ticket_passengers import passengers_for_travel_party
 from search.transport_codes import ground_transport_available
 
 _TICKETS_INSTRUCTION_BASE = (
@@ -59,8 +60,11 @@ def run_tickets_search(
     origin_city: str,
     destination_city: str,
     dates: str,
+    *,
+    travel_party: str = "couple",
 ) -> TicketsSearchOutput:
     """Собирает структурированный ответ инструмента билетов."""
+    passengers = passengers_for_travel_party(travel_party)
     try:
         params = TicketsSearchInput(
             origin_city=origin_city,
@@ -103,7 +107,7 @@ def run_tickets_search(
     api_plane: list[TicketOffer] = []
     if origin_iata and dest_iata and parsed.departure:
         api_plane, avia_api_status = fetch_avia_offers(
-            origin_iata, dest_iata, parsed
+            origin_iata, dest_iata, parsed, passengers=passengers
         )
     elif origin_iata and dest_iata:
         avia_api_status = "empty"
@@ -112,6 +116,7 @@ def run_tickets_search(
         params.origin_city,
         params.destination_city,
         parsed,
+        travel_party=travel_party,
     )
     offers = _merge_offers(api_plane, deep_offers)
 
@@ -127,11 +132,18 @@ def run_tickets_search(
     elif avia_api_status == "error":
         warnings.append("API авиа недоступен — только deep links.")
 
+    if avia_api_status == "ok" and passengers.seats > 1:
+        warnings.append(
+            "Цены API авиа — ориентир за 1 взрослого; итог на Aviasales с учётом "
+            f"{passengers.summary_ru()}."
+        )
+
     summary = format_offers_summary(
         params.origin_city,
         params.destination_city,
         parsed,
         offers,
+        passengers=passengers,
     )
 
     instruction = _instruction_for(avia_api_status)

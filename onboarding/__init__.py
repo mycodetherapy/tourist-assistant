@@ -1,6 +1,10 @@
 """Опросник и модель предпочтений пользователя."""
 
-from onboarding.preferences import TripPreferences, build_search_context
+from onboarding.preferences import (
+    TripPreferences,
+    build_search_context,
+    normalize_trip_preferences,
+)
 from onboarding.questionnaire import (
     resolve_preferences_for_new_trip,
     run_clarifying_questionnaire,
@@ -10,6 +14,7 @@ from onboarding.questionnaire import (
 __all__ = [
     "TripPreferences",
     "build_search_context",
+    "normalize_trip_preferences",
     "resolve_preferences_for_new_trip",
     "run_clarifying_questionnaire",
     "run_questionnaire",

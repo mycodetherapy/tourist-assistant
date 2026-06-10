@@ -17,7 +17,7 @@ from api.schemas.responses import (
     TripSummaryResponse,
 )
 from services.trip_service import ProgramView
-from onboarding.preferences import TripPreferences
+from onboarding.preferences import TripPreferences, normalize_trip_preferences
 from services.run_manager import RunManager
 from services.trip_service import TripService
 
@@ -92,12 +92,13 @@ def create_trip(
     service: TripService = Depends(get_trip_service),
     run_manager: RunManager = Depends(get_run_manager),
 ) -> CreateTripResponse:
+    preferences = normalize_trip_preferences(body.preferences)
     trip_id = service.create_new_trip(
         city=body.city,
         dates=body.dates,
         origin_city=body.origin_city,
         user_query=body.user_query,
-        preferences=body.preferences,
+        preferences=preferences,
     )
     run_id: str | None = None
     if body.start_run:
@@ -109,8 +110,8 @@ def create_trip(
             city=trip["city"],
             dates=trip["dates"],
             origin_city=trip["origin_city"],
-            search_context=service.apply_preferences(body.preferences),
-            preferences_dict=body.preferences.model_dump(),
+            search_context=service.apply_preferences(preferences),
+            preferences_dict=preferences.model_dump(),
             rebuild_scope="full",
             user_message=trip.get("user_query") or body.user_query,
             review_mode="deferred",

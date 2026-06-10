@@ -6,40 +6,60 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+FIXED_PACE: Literal["packed"] = "packed"
+FIXED_BUDGET: Literal["medium"] = "medium"
+FIXED_TRANSPORT: Literal["mixed"] = "mixed"
+
+TRAVEL_PARTY_VALUES = (
+    "solo",
+    "couple",
+    "family",
+    "friends",
+    "parent_child",
+    "family_two",
+)
+
 
 class TripPreferences(BaseModel):
     """Результат опросника перед планированием программы."""
 
     pace: Literal["relaxed", "moderate", "packed"] = Field(
         ...,
-        description="Темп поездки",
+        description="Темп поездки (в UI скрыт, по умолчанию packed)",
     )
     budget: Literal["economy", "medium", "unlimited"] = Field(
         ...,
-        description="Бюджет на билеты и питание",
+        description="Legacy: не используется в поиске",
     )
     interests: list[str] = Field(
         default_factory=list,
-        description="Свободные интересы (афиша, музеи и т.д.)",
+        description="Legacy: не влияет на пул POI",
     )
-    cuisine: str = Field(default="", description="Предпочтения по кухне")
+    cuisine: str = Field(default="", description="Legacy: поиск ресторанов отключён")
     min_restaurant_rating: float = Field(
         default=4.0,
         ge=1.0,
         le=5.0,
-        description="Минимальный рейтинг ресторанов",
+        description="Legacy: не используется",
     )
     transport_preference: Literal["metro", "taxi", "walking", "mixed"] = Field(
         ...,
-        description="Как передвигаться по городу",
+        description="Передвижение (в UI скрыт, по умолчанию mixed)",
     )
-    travel_party: Literal["solo", "couple", "family", "friends"] = Field(
+    travel_party: Literal[
+        "solo",
+        "couple",
+        "family",
+        "friends",
+        "parent_child",
+        "family_two",
+    ] = Field(
         ...,
         description="Состав группы",
     )
     special_notes: str = Field(
         default="",
-        description="Дополнительные пожелания",
+        description="Legacy: доп. пожелания",
     )
 
     @model_validator(mode="before")
@@ -50,9 +70,9 @@ class TripPreferences(BaseModel):
             return data
         merged = {
             **{
-                "pace": "moderate",
-                "budget": "medium",
-                "transport_preference": "mixed",
+                "pace": FIXED_PACE,
+                "budget": FIXED_BUDGET,
+                "transport_preference": FIXED_TRANSPORT,
                 "travel_party": "couple",
                 "interests": [],
                 "cuisine": "",
@@ -70,55 +90,47 @@ class TripPreferences(BaseModel):
         return merged
 
 
-_PACE_RU = {
-    "relaxed": "спокойный темп, 1–2 объекта в день",
-    "moderate": "умеренный темп, 2–3 объекта в день",
-    "packed": "насыщенный темп, максимум мероприятий",
-}
+def normalize_trip_preferences(data: TripPreferences | dict[str, Any]) -> TripPreferences:
+    """Скрытые поля фиксированы; из UI/профиля берётся только travel_party."""
+    if isinstance(data, TripPreferences):
+        party = data.travel_party
+    else:
+        party = str(data.get("travel_party") or "couple")
+    if party not in TRAVEL_PARTY_VALUES:
+        party = "couple"
+    return TripPreferences(
+        pace=FIXED_PACE,
+        budget=FIXED_BUDGET,
+        interests=[],
+        cuisine="",
+        min_restaurant_rating=4.0,
+        transport_preference=FIXED_TRANSPORT,
+        travel_party=party,  # type: ignore[arg-type]
+        special_notes="",
+    )
 
-_BUDGET_RU = {
-    "economy": "эконом, недорогие варианты",
-    "medium": "средний бюджет",
-    "unlimited": "без жёстких ограничений по цене",
-}
-
-_TRANSPORT_RU = {
-    "metro": "метро и общественный транспорт",
-    "taxi": "такси и каршеринг",
-    "walking": "пешие прогулки",
-    "mixed": "метро + пешком",
-}
 
 _PARTY_RU = {
-    "solo": "один",
-    "couple": "пара",
-    "family": "с детьми",
-    "friends": "компания друзей",
+    "solo": "1 взрослый",
+    "couple": "2 взрослых",
+    "family": "2 взрослых + 1 ребёнок",
+    "parent_child": "1 взрослый + 1 ребёнок",
+    "family_two": "2 взрослых + 2 ребёнка",
+    "friends": "3 взрослых",
 }
 
 
 def build_search_context(preferences: TripPreferences) -> str:
-    """
-    Сжатый контекст для дополнения поисковых запросов и системного промпта.
-    """
-    parts: list[str] = [
-        _PACE_RU[preferences.pace],
-        _BUDGET_RU[preferences.budget],
-        _TRANSPORT_RU[preferences.transport_preference],
-        f"группа: {_PARTY_RU[preferences.travel_party]}",
-    ]
-    if preferences.interests:
-        parts.append("интересы: " + ", ".join(preferences.interests))
-    if preferences.cuisine.strip():
-        parts.append(f"кухня: {preferences.cuisine.strip()}")
-    parts.append(f"рестораны от {preferences.min_restaurant_rating} звёзд/рейтинга")
-    if preferences.special_notes.strip():
-        parts.append(preferences.special_notes.strip()[:200])
-    return "; ".join(parts)
+    """Сжатый контекст для промпта planner/writer."""
+    prefs = normalize_trip_preferences(preferences)
+    return (
+        f"группа: {_PARTY_RU[prefs.travel_party]}; "
+        "насыщенный темп; метро + пешком"
+    )
 
 
 def budget_query_suffix(budget: str) -> str:
-    """Короткий суффикс для запросов билетов и ресторанов."""
+    """Legacy: раньше для запросов билетов и ресторанов."""
     if budget == "economy":
         return "недорого бюджет"
     if budget == "unlimited":
@@ -127,14 +139,14 @@ def budget_query_suffix(budget: str) -> str:
 
 
 def interests_query_suffix(interests: list[str]) -> str:
-    """Ключевые слова для афиши и музеев."""
+    """Legacy: ключевые слова для афиши."""
     if not interests:
         return ""
     return " ".join(interests[:5])
 
 
 def restaurant_rating_suffix(rating: float) -> str:
-    """Суффикс для поиска ресторанов."""
+    """Legacy: суффикс для поиска ресторанов."""
     if rating >= 4.5:
         return f"рейтинг от {rating}"
     return "лучшие отзывы"

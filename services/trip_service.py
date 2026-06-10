@@ -41,7 +41,7 @@ from observability import (
     invoke_config,
     langfuse_metadata,
 )
-from onboarding import TripPreferences, build_search_context
+from onboarding import TripPreferences, build_search_context, normalize_trip_preferences
 from planning import human_message_for_scope
 from program.item_key import make_item_key, make_route_stop_key
 from program.parse_items import (
@@ -121,8 +121,9 @@ class TripService:
 
     def apply_preferences(self, prefs: TripPreferences) -> str:
         """Сохраняет предпочтения в search/context для tools и промптов."""
-        ctx = build_search_context(prefs)
-        set_session(prefs, ctx)
+        normalized = normalize_trip_preferences(prefs)
+        ctx = build_search_context(normalized)
+        set_session(normalized, ctx)
         return ctx
 
     def create_new_trip(
@@ -139,6 +140,7 @@ class TripService:
         dates_v = sanitize_and_validate(dates, "dates")
         origin_v = sanitize_and_validate(origin_city, "city")
         query_v = sanitize_and_validate(user_query, "message")
+        preferences = normalize_trip_preferences(preferences)
         prefs_dict = preferences.model_dump()
         self.apply_preferences(preferences)
         save_user_profile(prefs_dict)

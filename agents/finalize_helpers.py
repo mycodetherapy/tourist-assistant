@@ -14,6 +14,7 @@ from models.tickets import TicketsSearchOutput
 from planning.rebuild import required_tools_for_scope, resolve_tool_name
 from search.context import get_session_preferences
 from search.ticket_links import format_offers_summary
+from search.ticket_passengers import passengers_for_travel_party
 from search.tickets_search import run_tickets_search
 from search.transport_codes import ground_transport_available
 
@@ -78,11 +79,15 @@ def extract_tickets_summary(messages: list[Any]) -> Optional[str]:
         origin_city = output.params.origin_city
         destination_city = output.params.destination_city
         if output.offers:
+            prefs = get_session_preferences()
+            party = prefs.travel_party if prefs else "couple"
+            passengers = passengers_for_travel_party(party)
             built = format_offers_summary(
                 origin_city,
                 destination_city,
                 output.parsed_dates,
                 output.offers,
+                passengers=passengers,
             )
             if not _is_garbage_tickets(
                 built,
@@ -108,7 +113,11 @@ def resolve_tickets_section(
         return from_tool
 
     if rebuild_scope in ("full", "tickets"):
-        output = run_tickets_search(origin_city, destination_city, dates)
+        prefs = get_session_preferences()
+        party = prefs.travel_party if prefs else "couple"
+        output = run_tickets_search(
+            origin_city, destination_city, dates, travel_party=party
+        )
         summary = (output.summary_for_llm or "").strip()
         if summary and not _is_garbage_tickets(
             summary,

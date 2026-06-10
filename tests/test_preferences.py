@@ -4,34 +4,41 @@ from __future__ import annotations
 
 import unittest
 
-from onboarding.preferences import TripPreferences, build_search_context
+from onboarding.preferences import (
+    TripPreferences,
+    build_search_context,
+    normalize_trip_preferences,
+)
 from search.context import clear_search_context, enrich_query, set_session
 
 
 class TestPreferences(unittest.TestCase):
     def test_build_search_context(self) -> None:
-        prefs = TripPreferences(
-            pace="relaxed",
-            budget="economy",
-            interests=["музеи", "архитектура"],
-            cuisine="итальянская",
-            min_restaurant_rating=4.7,
-            transport_preference="metro",
-            travel_party="couple",
-            special_notes="без очередей",
-        )
+        prefs = normalize_trip_preferences({"travel_party": "family"})
         ctx = build_search_context(prefs)
-        self.assertIn("музеи", ctx)
-        self.assertIn("4.7", ctx)
+        self.assertIn("2 взрослых + 1 ребёнок", ctx)
+        self.assertIn("насыщенный", ctx)
+        self.assertNotIn("ресторан", ctx.lower())
+
+    def test_normalize_strips_legacy_fields(self) -> None:
+        prefs = normalize_trip_preferences(
+            {
+                "travel_party": "solo",
+                "pace": "relaxed",
+                "interests": ["театр"],
+                "cuisine": "итальянская",
+                "special_notes": "без очередей",
+            }
+        )
+        self.assertEqual(prefs.travel_party, "solo")
+        self.assertEqual(prefs.pace, "packed")
+        self.assertEqual(prefs.transport_preference, "mixed")
+        self.assertEqual(prefs.interests, [])
+        self.assertEqual(prefs.special_notes, "")
 
     def test_enrich_query(self) -> None:
         clear_search_context()
-        prefs = TripPreferences(
-            pace="moderate",
-            budget="medium",
-            transport_preference="mixed",
-            travel_party="solo",
-        )
+        prefs = normalize_trip_preferences({"travel_party": "solo"})
         set_session(prefs, build_search_context(prefs))
         enriched = enrich_query("афиша Москва")
         self.assertIn("афиша Москва", enriched)
@@ -51,11 +58,12 @@ class TestPreferences(unittest.TestCase):
         self.assertEqual(prefs.min_restaurant_rating, 4.0)
 
     def test_legacy_profile_dict_gets_defaults(self) -> None:
-        prefs = TripPreferences.model_validate(
+        prefs = normalize_trip_preferences(
             {"pace": "packed", "budget": "medium", "interests": ["театр"]}
         )
         self.assertEqual(prefs.transport_preference, "mixed")
         self.assertEqual(prefs.travel_party, "couple")
+        self.assertEqual(prefs.interests, [])
 
 
 if __name__ == "__main__":
