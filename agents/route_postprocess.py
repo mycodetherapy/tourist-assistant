@@ -18,6 +18,7 @@ from models.routes import (
 )
 from search.yandex.poi_filters import (
     haversine_km,
+    is_embankment_poi_name,
     is_landmark_poi_name,
     is_leisure_route_poi,
     poi_name_conflict,
@@ -34,6 +35,7 @@ _MAX_ROUTE_KM_SHORT = 5.0
 _KM_PER_STOP_TARGET = 2.5
 _ROUTE_PARENS = re.compile(r"\s*\([^)]*\)")
 _KM_SNIPPET = re.compile(r"~?\s*\d+(?:[.,]\d+)?\s*(?:–\s*\d+(?:[.,]\d+)?)?\s*км\.?", re.IGNORECASE)
+_BRIDGE_NAME_RE = re.compile(r"\bмост\b", re.IGNORECASE)
 
 
 def public_route_title(title: str) -> str:
@@ -240,13 +242,144 @@ def route_profile_for_case(
     return profiles[key]
 
 
-def estimate_path_km(coords: list[GeoPoint]) -> float:
+def estimate_path_km(coords: list[GeoPoint], *, close_loop: bool = False) -> float:
     if len(coords) < 2:
         return 0.0
+    path = coords
+    if close_loop and len(path) >= 3:
+        path = [*path, path[0]]
     total = sum(
-        haversine_km(coords[i - 1], coords[i]) for i in range(1, len(coords))
+        haversine_km(path[i - 1], path[i]) for i in range(1, len(path))
     )
     return total * _WALK_FACTOR
+
+
+def _is_embankment_poi(poi: PoiPoint, *, city_hint: str = "") -> bool:
+    return poi.tag == "embankments" or is_embankment_poi_name(
+        poi.name, city_hint=city_hint
+    )
+
+
+def _is_bridge_poi(poi: PoiPoint) -> bool:
+    return bool(_BRIDGE_NAME_RE.search(poi.name))
+
+
+def _wants_route_loop(
+    case: TripRouteCase,
+    leisure: list[PoiPoint],
+    indices: list[int],
+    span_km: float,
+    *,
+    city_hint: str = "",
+) -> bool:
+    if case.loop_route:
+        return True
+    if len(indices) < 3:
+        return False
+    selected = [leisure[i] for i in indices]
+    embankments = sum(1 for poi in selected if _is_embankment_poi(poi, city_hint=city_hint))
+    bridges = sum(1 for poi in selected if _is_bridge_poi(poi))
+    if bridges >= 2 and embankments >= 1:
+        return True
+    if bridges >= 1 and embankments >= 1:
+        return True
+    if span_km < _SPAN_SMALL_CITY_KM and embankments >= 1:
+        return True
+    if span_km < _SPAN_SMALL_CITY_KM and len(indices) >= 4:
+        return True
+    return False
+
+
+def _order_indices_for_loop(
+    leisure: list[PoiPoint],
+    indices: list[int],
+    leg_limit: float,
+) -> list[int]:
+    """Переставляет точки так, чтобы замыкание кольца было короче."""
+    if len(indices) <= 2:
+        return list(indices)
+    best_path = list(indices)
+    best_close = float("inf")
+    for start in indices:
+        remaining = set(indices) - {start}
+        path = [start]
+        while remaining:
+            last = path[-1]
+            nxt = min(
+                remaining,
+                key=lambda i: haversine_km(
+                    leisure[last].coordinates, leisure[i].coordinates
+                ),
+            )
+            path.append(nxt)
+            remaining.remove(nxt)
+        close_km = haversine_km(
+            leisure[path[-1]].coordinates, leisure[path[0]].coordinates
+        )
+        coords = _window_coords(leisure, path)
+        if close_km > leg_limit * 1.15:
+            continue
+        if not _legs_within_limit(coords, leg_limit):
+            continue
+        if close_km < best_close:
+            best_close = close_km
+            best_path = path
+    return best_path
+
+
+def _closing_leg_ok(
+    leisure: list[PoiPoint],
+    indices: list[int],
+    profile: RouteProfile,
+    span_km: float,
+    *,
+    compact: bool,
+    max_km: float | None,
+    leg_limit: float,
+) -> bool:
+    if len(indices) < 3:
+        return False
+    close_km = haversine_km(
+        leisure[indices[-1]].coordinates, leisure[indices[0]].coordinates
+    )
+    if close_km > leg_limit * 1.15:
+        return False
+    loop_km = estimate_path_km(_window_coords(leisure, indices), close_loop=True)
+    if max_km is not None and loop_km > max_km * 1.08:
+        return False
+    if compact and loop_km > _MAX_ROUTE_KM_SHORT * 1.05:
+        return False
+    if not compact and loop_km > profile.target_km_max * 1.35:
+        return False
+    return True
+
+
+def _resolve_route_loop(
+    case: TripRouteCase,
+    leisure: list[PoiPoint],
+    indices: list[int],
+    span_km: float,
+    profile: RouteProfile,
+    *,
+    compact: bool,
+    max_km: float | None,
+    city_hint: str = "",
+) -> tuple[bool, list[int]]:
+    if not _wants_route_loop(case, leisure, indices, span_km, city_hint=city_hint):
+        return False, indices
+    leg_limit = profile.max_leg_km if compact else _leg_limit_km(profile, span_km)
+    reordered = _order_indices_for_loop(leisure, indices, leg_limit)
+    if _closing_leg_ok(
+        leisure,
+        reordered,
+        profile,
+        span_km,
+        compact=compact,
+        max_km=max_km,
+        leg_limit=leg_limit,
+    ):
+        return True, reordered
+    return False, indices
 
 
 def _poi_index(materials: RouteMaterials) -> dict[str, PoiPoint | DiningOption]:
@@ -589,8 +722,9 @@ def _filter_conflicting_indices(leisure: list[PoiPoint], indices: list[int]) -> 
     return _order_indices_by_path(leisure, filtered)
 
 
-def _route_summary(city: str, stop_count: int) -> str:
-    return f"Пешая прогулка по {city}, {stop_count} остановок."
+def _route_summary(city: str, stop_count: int, *, loop: bool = False) -> str:
+    kind = "Кольцевая пешая прогулка" if loop else "Пешая прогулка"
+    return f"{kind} по {city}, {stop_count} остановок."
 
 
 def _stops_from_indices(leisure: list[PoiPoint], indices: list[int]) -> list[RouteStop]:
@@ -830,7 +964,10 @@ def backfill_route_maps_only(
     if not _needs_maps_backfill(program):
         return program
     index = _poi_index(materials)
-    profiles = _adapt_profiles(_landmark_pool(materials.leisure_points), pace="moderate")
+    leisure = _landmark_pool(materials.leisure_points)
+    span_km = _pool_span_km(leisure)
+    profiles = _adapt_profiles(leisure, pace="moderate")
+    poi_to_idx = {p.poi_id: i for i, p in enumerate(leisure)}
     cases: list[TripRouteCase] = []
     for case in program.cases:
         if str(case.maps_route_url).strip():
@@ -848,6 +985,26 @@ def backfill_route_maps_only(
             labels.append(_label_for_stop(stop, index))
         profile_key = _profile_for_case_id(case.case_id)
         profile = profiles[profile_key]  # type: ignore[index]
+        compact = profile_key == "A"
+        max_km = _MAX_ROUTE_KM_SHORT if compact else None
+        indices = [
+            poi_to_idx[s.poi_id]
+            for s in sorted(case.stops, key=lambda x: x.order)
+            if s.kind == "leisure" and s.poi_id and s.poi_id in poi_to_idx
+        ]
+        close_loop, indices = _resolve_route_loop(
+            case,
+            leisure,
+            indices,
+            span_km,
+            profile,
+            compact=compact,
+            max_km=max_km,
+            city_hint=materials.city,
+        )
+        if indices:
+            points = [leisure[i].coordinates for i in indices]
+            labels = [leisure[i].name for i in indices]
         maps_url = ""
         if points:
             maps_url = build_maps_route_url(
@@ -855,9 +1012,17 @@ def backfill_route_maps_only(
                 labels=labels,
                 city=materials.city,
                 transport=transport,
-                max_stops=profile.max_stops,
+                max_stops=profile.max_stops + (1 if close_loop else 0),
+                close_loop=close_loop,
             )
-        cases.append(case.model_copy(update={"maps_route_url": maps_url}))
+        cases.append(
+            case.model_copy(
+                update={
+                    "maps_route_url": maps_url,
+                    "loop_route": close_loop,
+                }
+            )
+        )
     return program.model_copy(update={"cases": cases})
 
 
@@ -901,29 +1066,35 @@ def finalize_route_program(
             max_km=max_km,
             banned_poi_ids=banned_poi_ids,
         )
+        close_loop, indices = _resolve_route_loop(
+            case,
+            leisure,
+            indices,
+            span_km,
+            profile,
+            compact=compact,
+            max_km=max_km,
+            city_hint=materials.city,
+        )
         valid_stops = _stops_from_indices(leisure, indices)
-        points: list[GeoPoint] = []
-        labels: list[str] = []
-        for stop in valid_stops:
-            if stop.kind != "leisure":
-                continue
-            coord = _coords_for_stop(stop, index)
-            if coord is None:
-                continue
-            points.append(coord)
-            labels.append(_label_for_stop(stop, index))
+        points = [leisure[i].coordinates for i in indices]
+        labels = [leisure[i].name for i in indices]
         cases.append(
             case.model_copy(
                 update={
                     "title": public_route_title(profile.title),
                     "stops": valid_stops,
-                    "summary": _route_summary(materials.city, len(indices)),
+                    "summary": _route_summary(
+                        materials.city, len(indices), loop=close_loop
+                    ),
+                    "loop_route": close_loop,
                     "maps_route_url": build_maps_route_url(
                         points,
                         labels=labels,
                         city=materials.city,
                         transport=transport,
-                        max_stops=profile.max_stops,
+                        max_stops=profile.max_stops + (1 if close_loop else 0),
+                        close_loop=close_loop,
                     ),
                 }
             )
@@ -1112,12 +1283,15 @@ def _trip_case_from_indices(
     leisure: list[PoiPoint],
     profile: RouteProfile,
     city: str,
+    *,
+    loop_route: bool = False,
 ) -> TripRouteCase:
     return TripRouteCase(
         case_id=case_id,
         title=public_route_title(profile.title),
         summary=_route_summary(city, len(indices)),
         stops=_stops_from_indices(leisure, indices)[:-1],
+        loop_route=loop_route,
     )
 
 
@@ -1206,6 +1380,9 @@ def build_hybrid_route_program(
                 leisure,
                 profiles[case_id],
                 materials.city,
+                loop_route=(
+                    draft_cases[case_id].loop_route if case_id in draft_cases else False
+                ),
             )
             for case_id in ("A", "B", "C")
         ]

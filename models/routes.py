@@ -78,6 +78,7 @@ class TripRouteCase(BaseModel):
     summary: str
     stops: list[RouteStop] = Field(default_factory=list)
     maps_route_url: str = ""
+    loop_route: bool = False
     preserved: bool = False
 
 

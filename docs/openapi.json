@@ -1212,6 +1212,11 @@
             "title": "Maps Route Url",
             "default": ""
           },
+          "loop_route": {
+            "type": "boolean",
+            "title": "Loop Route",
+            "default": false
+          },
           "preserved": {
             "type": "boolean",
             "title": "Preserved",

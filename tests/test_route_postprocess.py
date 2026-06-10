@@ -5,15 +5,18 @@ from __future__ import annotations
 import unittest
 
 from agents.route_postprocess import (
+    _resolve_route_loop,
     build_fallback_route_program,
     build_hybrid_route_program,
     enforce_route_poi_policy,
     estimate_path_km,
+    finalize_route_program,
     format_routes_text,
     leisure_overlap_ratio,
     public_route_summary,
     public_route_title,
 )
+from search.yandex.route_url import parse_maps_route_points
 from models.routes import (
     DiningOption,
     GeoPoint,
@@ -59,6 +62,100 @@ def _kostroma_materials() -> RouteMaterials:
 class TestRoutePostprocess(unittest.TestCase):
     def test_public_route_title_strips_parens(self) -> None:
         self.assertEqual(public_route_title("Лёгкая прогулка (~4 км)"), "Лёгкая прогулка")
+
+    def test_estimate_path_km_close_loop_includes_return(self) -> None:
+        coords = [
+            GeoPoint(lon=40.927155, lat=57.768072),
+            GeoPoint(lon=40.9263, lat=57.7672),
+            GeoPoint(lon=40.925538, lat=57.766684),
+        ]
+        linear = estimate_path_km(coords)
+        loop = estimate_path_km(coords, close_loop=True)
+        self.assertGreater(loop, linear)
+
+    def test_loop_route_llm_flag_closes_maps_url(self) -> None:
+        materials = _kostroma_materials()
+        draft = RouteProgram(
+            cases=[
+                TripRouteCase(
+                    case_id="A",
+                    title="A",
+                    summary="",
+                    loop_route=True,
+                    stops=[
+                        RouteStop(order=1, kind="leisure", poi_id="susan", narrative=""),
+                        RouteStop(order=2, kind="leisure", poi_id="kal", narrative=""),
+                        RouteStop(order=3, kind="leisure", poi_id="ryady", narrative=""),
+                    ],
+                ),
+                TripRouteCase(case_id="B", title="B", summary="", stops=[]),
+                TripRouteCase(case_id="C", title="C", summary="", stops=[]),
+            ]
+        )
+        program = finalize_route_program(draft, materials)
+        case_a = program.cases[0]
+        self.assertTrue(case_a.loop_route)
+        self.assertIn("Кольцевая", case_a.summary)
+        points = parse_maps_route_points(case_a.maps_route_url)
+        self.assertGreaterEqual(len(points), 4)
+        self.assertEqual(points[0].lat, points[-1].lat)
+        self.assertEqual(points[0].lon, points[-1].lon)
+
+    def test_bridges_and_embankment_heuristic_suggests_loop(self) -> None:
+        from agents.route_postprocess import _adapt_profiles, _landmark_pool, _pool_span_km
+
+        materials = RouteMaterials(
+            city="Тестград",
+            dates="июнь",
+            provider="fallback",
+            leisure_points=[
+                PoiPoint(
+                    poi_id="bridge_a",
+                    tag="landmarks",
+                    name="Железнодорожный мост",
+                    coordinates=GeoPoint(lon=50.10, lat=53.20),
+                    maps_url="https://yandex.ru/maps/org/bridge_a",
+                ),
+                PoiPoint(
+                    poi_id="bridge_b",
+                    tag="landmarks",
+                    name="Пешеходный мост",
+                    coordinates=GeoPoint(lon=50.11, lat=53.21),
+                    maps_url="https://yandex.ru/maps/org/bridge_b",
+                ),
+                PoiPoint(
+                    poi_id="nab",
+                    tag="embankments",
+                    name="Волжская набережная",
+                    coordinates=GeoPoint(lon=50.105, lat=53.205),
+                    maps_url="https://yandex.ru/maps/org/nab",
+                ),
+                PoiPoint(
+                    poi_id="sq",
+                    tag="landmarks",
+                    name="Центральная площадь",
+                    coordinates=GeoPoint(lon=50.108, lat=53.208),
+                    maps_url="https://yandex.ru/maps/org/sq",
+                ),
+            ],
+            dining_options=[],
+        )
+        pool = _landmark_pool(materials.leisure_points)
+        indices = list(range(len(pool)))
+        span_km = _pool_span_km(pool)
+        profile = _adapt_profiles(pool)["A"]
+        case = TripRouteCase(case_id="A", title="A", summary="", stops=[])
+        close_loop, _ = _resolve_route_loop(
+            case,
+            pool,
+            indices,
+            span_km,
+            profile,
+            compact=True,
+            max_km=5.0,
+            city_hint="Тестград",
+        )
+        self.assertTrue(close_loop)
 
     def test_public_route_summary_strips_km(self) -> None:
         raw = "Пешая прогулка по Кострома: лёгкая прогулка (~4 км), ~2.5 км, 5 остановок."

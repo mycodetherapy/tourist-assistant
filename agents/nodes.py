@@ -234,6 +234,7 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
         "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
         "Только leisure poi_id из materials_digest; без вокзалов и аэропортов. "
         "A — компактный, B — средний, C — длинный. narrative — название места. "
+        "При уместности (набережная, два моста, компактный центр) укажи loop_route: true. "
         "maps_route_url оставь пустым — заполнит пост-процессор.\n"
     )
     if route_feedback_ctx and route_feedback_ctx.liked_cases and rebuild_scope == "routes":
@@ -241,20 +242,22 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
             "- routes: РОВНО 3 НОВЫх пеших маршрута A/B/C (компактный/средний/длинный). "
             "Лайкнутые варианты сохранятся автоматически — не дублируй их poi_id. "
             "Только leisure poi_id из materials_digest. "
-            "maps_route_url оставь пустым.\n"
+            "При уместности укажи loop_route: true. maps_route_url оставь пустым.\n"
             f"{route_feedback_ctx.llm_instructions}"
         )
     elif route_feedback_ctx and route_feedback_ctx.liked_cases:
         routes_instruction = (
             "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
             "Ориентируйся на параметры лайкнутых вариантов ниже (длина, мотивы); "
-            "poi_id выбирай из materials_digest — можно новые места похожего типа.\n"
+            "poi_id выбирай из materials_digest — можно новые места похожего типа. "
+            "При уместности укажи loop_route: true.\n"
             f"{route_feedback_ctx.llm_instructions}"
         )
     elif route_feedback_ctx:
         routes_instruction = (
             "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
-            "Учти оценки остановок ниже при выборе poi_id из materials_digest.\n"
+            "Учти оценки остановок ниже при выборе poi_id из materials_digest. "
+            "При уместности укажи loop_route: true.\n"
             f"{route_feedback_ctx.llm_instructions}"
         )
 

@@ -137,6 +137,20 @@ class TestPoiFilters(unittest.TestCase):
         self.assertIn("rtt=pd", url)
         self.assertNotIn("Сусанинская", decoded)
 
+    def test_route_url_close_loop_repeats_start(self) -> None:
+        start = GeoPoint(lon=40.92, lat=57.76)
+        mid = GeoPoint(lon=40.93, lat=57.77)
+        end = GeoPoint(lon=40.94, lat=57.75)
+        url = build_maps_route_url(
+            [start, mid, end],
+            city="Кострома",
+            close_loop=True,
+        )
+        decoded = unquote(url)
+        parts = decoded.split("rtext=")[1].split("&")[0].split("~")
+        self.assertEqual(len(parts), 4)
+        self.assertEqual(parts[0], parts[-1])
+
     def test_route_url_always_pedestrian_even_for_taxi_pref(self) -> None:
         url = build_maps_route_url(
             [

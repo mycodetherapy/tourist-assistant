@@ -28,6 +28,7 @@ def build_maps_route_url(
     city: str = "",
     transport: str = "mixed",
     max_stops: int = 8,
+    close_loop: bool = False,
 ) -> str:
     """
     Маршрут по координатам POI (rtext=lat,lon~lat,lon).
@@ -36,6 +37,9 @@ def build_maps_route_url(
     """
     _ = labels, transport
     points = _dedupe_points(points)
+    if close_loop and len(points) >= 3:
+        if haversine_km(points[0], points[-1]) >= 0.08:
+            points = [*points, points[0]]
     if len(points) < 2:
         if points:
             p = points[0]
