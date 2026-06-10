@@ -30,9 +30,12 @@ _WALK_FACTOR = 1.35
 _SPAN_SMALL_CITY_KM = 3.0
 _MIN_ROUTE_KM_SMALL = 1.0
 _MIN_ROUTE_KM_MEDIUM = 3.0
-_MIN_ROUTE_KM_SHORT = 2.0
-_MAX_ROUTE_KM_SHORT = 5.0
-_KM_PER_STOP_TARGET = 2.5
+_MIN_ROUTE_KM_SHORT = 1.5
+_MAX_ROUTE_KM_SHORT = 4.0
+_ROUTE_MIN_STOPS = 3
+_ROUTE_MAX_STOPS = 8
+# Целевая плотность при densify: ~1 остановка на 300–400 м пути.
+_KM_PER_STOP_DENSE = 0.35
 _ROUTE_PARENS = re.compile(r"\s*\([^)]*\)")
 _KM_SNIPPET = re.compile(r"~?\s*\d+(?:[.,]\d+)?\s*(?:–\s*\d+(?:[.,]\d+)?)?\s*км\.?", re.IGNORECASE)
 _BRIDGE_NAME_RE = re.compile(r"\bмост\b", re.IGNORECASE)
@@ -67,29 +70,29 @@ class RouteProfile:
 _BASE_PROFILES: dict[RouteCaseId, RouteProfile] = {
     "A": RouteProfile(
         title="Лёгкая прогулка",
-        target_km_min=3.2,
-        target_km_max=4.6,
-        min_stops=3,
-        max_stops=4,
-        max_leg_km=2.2,
-        abs_min_km=_MIN_ROUTE_KM_MEDIUM,
+        target_km_min=2.0,
+        target_km_max=3.5,
+        min_stops=_ROUTE_MIN_STOPS,
+        max_stops=_ROUTE_MAX_STOPS,
+        max_leg_km=1.2,
+        abs_min_km=_MIN_ROUTE_KM_SHORT,
     ),
     "B": RouteProfile(
         title="Средний маршрут",
-        target_km_min=4.8,
-        target_km_max=6.5,
-        min_stops=4,
-        max_stops=6,
-        max_leg_km=2.6,
+        target_km_min=4.0,
+        target_km_max=5.5,
+        min_stops=_ROUTE_MIN_STOPS,
+        max_stops=_ROUTE_MAX_STOPS,
+        max_leg_km=2.0,
         abs_min_km=_MIN_ROUTE_KM_MEDIUM,
     ),
     "C": RouteProfile(
         title="Длинный маршрут",
-        target_km_min=6.5,
-        target_km_max=8.8,
-        min_stops=5,
-        max_stops=10,
-        max_leg_km=3.2,
+        target_km_min=6.0,
+        target_km_max=8.5,
+        min_stops=_ROUTE_MIN_STOPS,
+        max_stops=_ROUTE_MAX_STOPS,
+        max_leg_km=2.8,
         abs_min_km=_MIN_ROUTE_KM_MEDIUM,
     ),
 }
@@ -150,37 +153,15 @@ def _outlier_indices(leisure: list[PoiPoint], *, count: int = 2) -> set[int]:
 
 
 def _stops_for_pool(case_id: RouteCaseId, pool_size: int, span_km: float) -> tuple[int, int]:
-    """min/max точек на карте с учётом размера пула и географического размаха."""
-    base = _BASE_PROFILES[case_id]
-    if pool_size >= 7:
-        max_s = base.max_stops
-        if case_id == "C" and span_km >= 5.0:
-            max_s = min(pool_size, 10)
-        return base.min_stops, max_s
-    if pool_size >= 5:
-        if case_id == "A":
-            return (3, min(4, pool_size)) if pool_size >= 3 else (pool_size, pool_size)
-        if case_id == "B":
-            return 4, min(5, pool_size - 1) if pool_size <= 7 else min(6, pool_size)
-        return 5, min(10, pool_size)
-    if pool_size >= 3:
-        if case_id == "A":
-            return 3, min(4, pool_size)
-        if case_id == "B":
-            return min(4, pool_size), pool_size
-        return min(5, pool_size), pool_size
-    n = max(pool_size, 1)
-    return n, n
+    """min/max точек: сложность — по км, плотность — общий потолок для A/B/C."""
+    del case_id, span_km
+    max_s = min(_ROUTE_MAX_STOPS, max(pool_size, _ROUTE_MIN_STOPS))
+    return _ROUTE_MIN_STOPS, max_s
 
 
 def _pace_max_stops(case_id: RouteCaseId, max_stops: int, *, pace: str) -> int:
-    """Ограничивает число точек на маршруте по темпу (пул при этом полный)."""
-    if pace == "relaxed":
-        caps: dict[RouteCaseId, int] = {"A": 3, "B": 5, "C": 6}
-        return min(max_stops, caps[case_id])
-    if pace == "packed":
-        caps = {"A": 4, "B": 7, "C": 10}
-        return max(max_stops, caps[case_id])
+    """Темп влияет на целевые км, не на плотность остановок."""
+    del case_id, pace
     return max_stops
 
 
@@ -424,6 +405,70 @@ def _leg_limit_km(profile: RouteProfile, span_km: float) -> float:
     )
 
 
+def _profile_km_cap(
+    profile: RouteProfile,
+    *,
+    compact: bool,
+    max_km: float | None,
+) -> float | None:
+    """Потолок длины маршрута для trim/densify."""
+    if max_km is not None:
+        return max_km
+    if compact:
+        return min(_MAX_ROUTE_KM_SHORT, profile.target_km_max * 1.12)
+    return profile.target_km_max * 1.15
+
+
+def _greedy_route_from_pool(
+    leisure: list[PoiPoint],
+    ordered: list[int],
+    pool: list[int],
+    profile: RouteProfile,
+    span_km: float,
+    *,
+    compact: bool,
+    max_km: float | None,
+    km_cap: float | None,
+) -> list[int]:
+    """Жадно собирает маршрут из pool в порядке ordered, не выходя за km_cap."""
+    cap = km_cap or _profile_km_cap(profile, compact=compact, max_km=max_km)
+    pool_set = set(pool)
+    leg_limit = profile.max_leg_km if compact else _leg_limit_km(profile, span_km)
+    indices: list[int] = []
+    for idx in ordered:
+        if idx not in pool_set:
+            continue
+        trial = _order_indices_by_path(leisure, indices + [idx])
+        if _window_has_duplicate_names(leisure, trial):
+            continue
+        trial_coords = _window_coords(leisure, trial)
+        if not _legs_within_limit(trial_coords, leg_limit):
+            continue
+        trial_km = estimate_path_km(trial_coords)
+        if cap is not None and trial_km > cap and len(indices) >= profile.min_stops:
+            continue
+        if max_km is not None and trial_km > max_km:
+            continue
+        indices = trial
+        if len(indices) >= profile.max_stops:
+            break
+    return indices
+
+
+def _grow_leg_limit_km(
+    profile: RouteProfile,
+    span_km: float,
+    *,
+    compact: bool,
+    below_abs_min: bool,
+) -> float:
+    """Лимит перехода при доборе длины до abs_min_km (короткий A может включить набережную)."""
+    base = profile.max_leg_km if compact else _leg_limit_km(profile, span_km)
+    if below_abs_min:
+        return max(base, profile.abs_min_km * 1.15, 2.2)
+    return base
+
+
 def _legs_within_limit(coords: list[GeoPoint], max_leg_km: float) -> bool:
     return all(
         haversine_km(coords[i - 1], coords[i]) <= max_leg_km
@@ -459,10 +504,10 @@ def _order_indices(leisure: list[PoiPoint]) -> list[int]:
 
 
 def _target_stops_for_km(km: float, profile: RouteProfile) -> int:
-    """Сколько точек нужно для длинного маршрута (~1 остановка на 2.5 км)."""
-    if km < 4.0:
+    """Сколько точек добавить при densify (~1 остановка на 350 м пути)."""
+    if km < 1.0:
         return profile.min_stops
-    needed = int(km / _KM_PER_STOP_TARGET) + 1
+    needed = int(km / _KM_PER_STOP_DENSE) + 1
     return max(profile.min_stops, min(needed, profile.max_stops))
 
 
@@ -471,6 +516,8 @@ def _densify_window(
     ordered: list[int],
     window: list[int],
     profile: RouteProfile,
+    *,
+    km_cap: float | None = None,
 ) -> list[int]:
     """Добавляет промежуточные POI между соседними точками маршрута (не через весь пул)."""
     if len(window) < 2:
@@ -494,22 +541,31 @@ def _densify_window(
         prev_pos, curr_pos = ordered.index(prev_idx), ordered.index(idx)
         lo, hi = sorted((prev_pos, curr_pos))
         segment = ordered[lo : hi + 1]
-        if len(segment) <= 4:
-            for mid in segment[1:-1]:
-                if mid in enriched:
-                    continue
-                trial = enriched + [mid, idx]
-                if _window_has_duplicate_names(leisure, trial):
-                    continue
-                if len(trial) >= profile.max_stops:
-                    break
-                enriched.append(mid)
+        mids_added = 0
+        for mid in segment[1:-1]:
+            if mid in enriched:
+                continue
+            trial = enriched + [mid, idx]
+            if _window_has_duplicate_names(leisure, trial):
+                continue
+            if len(trial) >= profile.max_stops:
+                break
+            trial_km = estimate_path_km(_window_coords(leisure, trial))
+            if km_cap is not None and trial_km > km_cap:
+                continue
+            enriched.append(mid)
+            mids_added += 1
+            if mids_added >= 2:
+                break
         enriched.append(idx)
 
     enriched = _order_indices_by_path(leisure, enriched)
     if _window_has_duplicate_names(leisure, enriched):
         return path
-    return enriched if len(enriched) >= len(path) else path
+    result = enriched if len(enriched) >= len(path) else path
+    if km_cap is not None:
+        result = _trim_to_max_km(leisure, result, profile, km_cap)
+    return result
 
 
 def _extend_for_min_km(
@@ -530,7 +586,6 @@ def _extend_for_min_km(
         return current
 
     used = set(current)
-    extend_leg = leg_limit if compact else max(leg_limit, _novel_leg_limit_km(profile, span_km))
     for _ in range(profile.max_stops - len(current)):
         coords = _window_coords(leisure, current)
         km = estimate_path_km(coords)
@@ -538,6 +593,11 @@ def _extend_for_min_km(
             break
         if max_km is not None and km >= max_km:
             break
+        extend_leg = _grow_leg_limit_km(
+            profile, span_km, compact=compact, below_abs_min=True
+        )
+        if not compact:
+            extend_leg = max(extend_leg, _novel_leg_limit_km(profile, span_km))
         best_idx: int | None = None
         best_km = km
         for idx in ordered:
@@ -645,6 +705,7 @@ def _pick_window(
     leg_limit = profile.max_leg_km if compact else _leg_limit_km(profile, span_km)
     if must_include and not compact:
         leg_limit = max(leg_limit, _novel_leg_limit_km(profile, span_km))
+    km_cap = _profile_km_cap(profile, compact=compact, max_km=max_km)
     must = set(must_include or [])
     avoid_set = avoid or set()
     forbidden_set = forbidden or set()
@@ -652,8 +713,10 @@ def _pick_window(
     best_score = -1e9
 
     for start in range(n):
-        for length in range(profile.min_stops, min(profile.max_stops, n - start) + 1):
-            window = ordered[start : start + length]
+        if ordered[start] in forbidden_set:
+            continue
+        for end in range(start + profile.min_stops, min(n, start + profile.max_stops) + 1):
+            window = ordered[start:end]
             if must and not must.issubset(set(window)):
                 continue
             ordered_window = _order_indices_by_path(leisure, window)
@@ -668,15 +731,19 @@ def _pick_window(
             coords = _window_coords(leisure, ordered_window)
             if not _legs_within_limit(coords, leg_limit):
                 continue
-            score = _score_window(leisure, ordered_window, profile)
             km = estimate_path_km(coords)
+            if km > profile.target_km_max * 1.35:
+                break
+            if max_km is not None and km > max_km * 1.08:
+                break
+            score = _score_window(leisure, ordered_window, profile)
             mid = (profile.target_km_min + profile.target_km_max) / 2
-            tie = len(ordered_window) * 0.12 - abs(km - mid) * 0.02
+            tie = (len(ordered_window) - profile.min_stops) * 0.25 - abs(km - mid) * 0.1
             if km >= profile.abs_min_km:
                 tie += 5.0
             overlap = len(set(ordered_window) & avoid_set)
             tie -= overlap * 25.0
-            tie += (len(ordered_window) - overlap) * 4.0
+            tie += (len(ordered_window) - overlap) * 2.0
             total = score * 100 + tie
             if score >= 0.0:
                 total += 50
@@ -685,21 +752,55 @@ def _pick_window(
                 best = ordered_window
 
     if not best:
-        seed = list(must) if must else ordered[: min(profile.max_stops, n)]
-        best = _order_indices_by_path(leisure, seed)
+        available = [
+            i
+            for i in ordered
+            if i not in forbidden_set and (not avoid_set or i not in avoid_set)
+        ]
+        pool = list(dict.fromkeys([*(must or []), *available])) or [
+            i for i in ordered if i not in forbidden_set
+        ]
+        best = _greedy_route_from_pool(
+            leisure,
+            ordered,
+            pool,
+            profile,
+            span_km,
+            compact=compact,
+            max_km=max_km,
+            km_cap=km_cap,
+        )
+        if len(best) < profile.min_stops:
+            shared = [i for i in ordered if i not in forbidden_set]
+            best = _greedy_route_from_pool(
+                leisure,
+                ordered,
+                shared,
+                profile,
+                span_km,
+                compact=compact,
+                max_km=max_km,
+                km_cap=km_cap,
+            )
+        if len(best) < profile.min_stops:
+            best = _order_indices_by_path(
+                leisure, ordered[: min(profile.max_stops, n)]
+            )
 
     if must and not must.issubset(set(best)):
-        best = _order_indices_by_path(leisure, list(must))
+        extra = [i for i in ordered if i not in best and i not in forbidden_set]
+        seed = list(dict.fromkeys([*must, *extra]))[: profile.max_stops]
+        best = _order_indices_by_path(leisure, seed)
 
     best = _extend_for_min_km(
         leisure, best, profile, ordered, span_km=span_km, compact=compact, max_km=max_km
     )
-    best = _densify_window(leisure, ordered, best, profile)
+    best = _densify_window(leisure, ordered, best, profile, km_cap=km_cap)
     best = _extend_for_min_km(
         leisure, best, profile, ordered, span_km=span_km, compact=compact, max_km=max_km
     )
-    if max_km is not None:
-        best = _trim_to_max_km(leisure, best, profile, max_km)
+    if km_cap is not None:
+        best = _trim_to_max_km(leisure, best, profile, km_cap)
 
     if _window_has_duplicate_names(leisure, best):
         best = _filter_conflicting_indices(leisure, best)
@@ -803,12 +904,13 @@ def _indices_from_llm_ranking(
         if not _legs_within_limit(_window_coords(leisure, indices), leg_limit):
             return None
 
-    if max_km is not None:
+    km_cap = _profile_km_cap(profile, compact=compact, max_km=max_km)
+    if km_cap is not None:
         while len(indices) > profile.min_stops:
-            if estimate_path_km(_window_coords(leisure, indices)) <= max_km:
+            if estimate_path_km(_window_coords(leisure, indices)) <= km_cap:
                 break
             indices = indices[:-1]
-        if estimate_path_km(_window_coords(leisure, indices)) > max_km:
+        if estimate_path_km(_window_coords(leisure, indices)) > km_cap:
             return None
 
     grow_limit = profile.max_stops + (1 if compact else 2)
@@ -817,6 +919,9 @@ def _indices_from_llm_ranking(
         and len(indices) < grow_limit
     ):
         added = False
+        grow_leg = _grow_leg_limit_km(
+            profile, span_km, compact=compact, below_abs_min=True
+        )
         for idx in ordered:
             if idx in indices or idx in avoid_idx:
                 continue
@@ -824,7 +929,7 @@ def _indices_from_llm_ranking(
             if _window_has_duplicate_names(leisure, trial):
                 continue
             trial_coords = _window_coords(leisure, trial)
-            if not _legs_within_limit(trial_coords, leg_limit):
+            if not _legs_within_limit(trial_coords, grow_leg):
                 continue
             trial_km = estimate_path_km(trial_coords)
             if max_km is not None and trial_km > max_km:
@@ -1023,6 +1128,39 @@ def backfill_route_maps_only(
     return program.model_copy(update={"cases": cases})
 
 
+def _indices_for_loop_route(
+    case: TripRouteCase,
+    leisure: list[PoiPoint],
+    indices: list[int],
+    span_km: float,
+    profile: RouteProfile,
+    *,
+    compact: bool,
+    max_km: float | None,
+    city_hint: str = "",
+) -> list[int]:
+    """Укорачивает маршрут, если кольцо с loop_route=True не замыкается."""
+    if not case.loop_route:
+        return indices
+    trial = _order_indices_by_path(leisure, indices)
+    while len(trial) > profile.min_stops:
+        loop, reordered = _resolve_route_loop(
+            case,
+            leisure,
+            trial,
+            span_km,
+            profile,
+            compact=compact,
+            max_km=max_km,
+            city_hint=city_hint,
+        )
+        if loop:
+            return reordered
+        trial = trial[:-1]
+        trial = _order_indices_by_path(leisure, trial)
+    return indices
+
+
 def _finalize_case_from_indices(
     case: TripRouteCase,
     indices: list[int],
@@ -1035,6 +1173,16 @@ def _finalize_case_from_indices(
     compact: bool,
     max_km: float | None,
 ) -> TripRouteCase:
+    indices = _indices_for_loop_route(
+        case,
+        leisure,
+        indices,
+        span_km,
+        profile,
+        compact=compact,
+        max_km=max_km,
+        city_hint=materials.city,
+    )
     close_loop, indices = _resolve_route_loop(
         case,
         leisure,
@@ -1221,14 +1369,33 @@ def _pick_novel_route(
     """Маршрут C: в приоритете POI, которых нет в A/B."""
     novel = [i for i in range(len(leisure)) if i not in avoid]
     leg_limit = _novel_leg_limit_km(profile, span_km)
+    km_cap = profile.target_km_max * 1.15
 
     if not novel:
         return []
 
     if len(novel) >= profile.min_stops:
-        indices = _order_indices_by_path(leisure, novel)
-        indices = _extend_for_min_km(leisure, indices, profile, ordered, span_km=span_km)
-        return indices[: profile.max_stops]
+        novel_sorted = sorted(novel, key=lambda i: ordered.index(i))
+        indices: list[int] = []
+        for idx in novel_sorted:
+            trial = _order_indices_by_path(leisure, indices + [idx])
+            if _window_has_duplicate_names(leisure, trial):
+                continue
+            trial_coords = _window_coords(leisure, trial)
+            if not _legs_within_limit(trial_coords, leg_limit):
+                continue
+            trial_km = estimate_path_km(trial_coords)
+            if trial_km > km_cap and len(indices) >= profile.min_stops:
+                continue
+            if len(trial) > profile.max_stops:
+                break
+            indices = trial
+        if len(indices) >= profile.min_stops:
+            indices = _extend_for_min_km(
+                leisure, indices, profile, ordered, span_km=span_km
+            )
+            indices = _trim_to_max_km(leisure, indices, profile, km_cap)
+            return indices[: profile.max_stops]
 
     base = list(novel)
     center = _novel_cluster_center(leisure, novel)
@@ -1270,7 +1437,43 @@ def _pick_novel_route(
                 break
 
     base = _filter_conflicting_indices(leisure, base)
+    km_cap = profile.target_km_max * 1.15
+    base = _trim_to_max_km(leisure, base, profile, km_cap)
     return base[: profile.max_stops]
+
+
+def _clamp_indices_to_profile(
+    leisure: list[PoiPoint],
+    ordered: list[int],
+    indices: list[int],
+    profile: RouteProfile,
+    span_km: float,
+    *,
+    compact: bool,
+    max_km: float | None,
+) -> list[int]:
+    """Укладывает маршрут в km_cap; при невозможности — жадный пересбор из пула."""
+    km_cap = _profile_km_cap(profile, compact=compact, max_km=max_km)
+    if not indices or km_cap is None:
+        return indices
+    trimmed = _trim_to_max_km(leisure, indices, profile, km_cap)
+    km = estimate_path_km(_window_coords(leisure, trimmed))
+    if km <= km_cap and len(trimmed) >= profile.min_stops:
+        return trimmed
+    pool = [i for i in ordered if i not in set(trimmed) or i in trimmed]
+    rebuilt = _greedy_route_from_pool(
+        leisure,
+        ordered,
+        pool,
+        profile,
+        span_km,
+        compact=compact,
+        max_km=max_km,
+        km_cap=km_cap,
+    )
+    if len(rebuilt) >= profile.min_stops:
+        return rebuilt
+    return trimmed if len(trimmed) >= profile.min_stops else indices
 
 
 def _compute_algorithm_indices(
@@ -1313,7 +1516,7 @@ def _compute_algorithm_indices(
         must_include=b_must,
         avoid=used_a | extra,
         forbidden=extra,
-        min_unique=2,
+        min_unique=1,
     )
     used_b = set(b_idx)
     c_prefer = next((i for i in prefer if i not in used_a and i not in used_b), None)
@@ -1328,7 +1531,8 @@ def _compute_algorithm_indices(
         trial = _order_indices_by_path(leisure, list(dict.fromkeys([*c_idx, c_prefer])))
         if len(trial) >= profiles["C"].min_stops:
             c_idx = trial[: profiles["C"].max_stops]
-    if len(c_idx) < profiles["C"].min_stops:
+    c_km = estimate_path_km(_window_coords(leisure, c_idx)) if c_idx else 0.0
+    if len(c_idx) < profiles["C"].min_stops or c_km < profiles["C"].target_km_min:
         outlier_must = [i for i in outliers if i not in set(b_idx)]
         c_must = outlier_must[:2] if outlier_must else (
             [far_idx] if far_idx not in set(b_idx) else None
@@ -1340,10 +1544,22 @@ def _compute_algorithm_indices(
             span_km=span_km,
             avoid=set(b_idx),
             forbidden=extra,
-            min_unique=2,
+            min_unique=1,
             must_include=c_must,
         )
-    return {"A": a_idx, "B": b_idx, "C": c_idx}
+    out = {"A": a_idx, "B": b_idx, "C": c_idx}
+    for case_id, idx in out.items():
+        compact = case_id == "A"
+        out[case_id] = _clamp_indices_to_profile(
+            leisure,
+            ordered,
+            idx,
+            profiles[case_id],
+            span_km,
+            compact=compact,
+            max_km=_MAX_ROUTE_KM_SHORT if compact else None,
+        )
+    return out
 
 
 def _trip_case_from_indices(
@@ -1438,7 +1654,7 @@ def _repair_route_indices_diversity(
             span_km=span_km,
             avoid=avoid,
             forbidden=banned,
-            min_unique=2,
+            min_unique=1,
         )
         if repaired:
             out["B"] = repaired

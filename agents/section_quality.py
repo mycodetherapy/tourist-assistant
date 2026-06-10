@@ -47,7 +47,7 @@ def is_garbage_section(text: str, section: str) -> bool:
 
 def _min_leisure_for_case(case_id: str) -> int:
     key = case_id[2:] if case_id.startswith("N-") else case_id
-    return {"A": 3, "B": 4, "C": 5}.get(key, 2)
+    return {"A": 3, "B": 3, "C": 3}.get(key, 2)
 
 
 def _routes_issues(program: dict[str, Any]) -> list[str]:

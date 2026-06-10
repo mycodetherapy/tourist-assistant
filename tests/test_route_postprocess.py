@@ -201,7 +201,7 @@ class TestRoutePostprocess(unittest.TestCase):
         text = format_routes_text(program)
         self.assertIn("## Вариант A", text)
 
-    def test_route_variants_grow_in_stops(self) -> None:
+    def test_route_variants_grow_in_km(self) -> None:
         materials = RouteMaterials(
             city="Москва",
             dates="июнь",
@@ -214,21 +214,27 @@ class TestRoutePostprocess(unittest.TestCase):
                     coordinates=GeoPoint(lon=37.60 + i * 0.008, lat=55.75 + (i % 2) * 0.004),
                     maps_url=f"https://yandex.ru/maps/org/l{i}",
                 )
-                for i in range(8)
+                for i in range(12)
             ],
             dining_options=[],
         )
         program = build_fallback_route_program(materials)
-        counts = [
-            len([s for s in case.stops if s.kind == "leisure"])
-            for case in program.cases
-        ]
-        self.assertEqual(len(counts), 3)
-        self.assertLessEqual(counts[0], counts[1])
-        self.assertLessEqual(counts[1], counts[2])
-        self.assertGreaterEqual(counts[0], 3)
-        self.assertGreaterEqual(counts[1], 4)
-        self.assertGreaterEqual(counts[2], 5)
+
+        def _km(case: TripRouteCase) -> float:
+            coords = [
+                next(p.coordinates for p in materials.leisure_points if p.poi_id == s.poi_id)
+                for s in case.stops
+                if s.kind == "leisure" and s.poi_id
+            ]
+            return estimate_path_km(coords)
+
+        kms = [_km(case) for case in program.cases]
+        self.assertEqual(len(kms), 3)
+        self.assertLess(kms[0], kms[1])
+        self.assertLess(kms[1], kms[2])
+        for case in program.cases:
+            leisure_n = len([s for s in case.stops if s.kind == "leisure"])
+            self.assertGreaterEqual(leisure_n, 3)
 
     def test_overlap_ratio_differs_for_distinct_cases(self) -> None:
         a = TripRouteCase(
@@ -266,20 +272,27 @@ class TestRoutePostprocess(unittest.TestCase):
             ]
             km = estimate_path_km(coords)
             if case.case_id == "A":
-                self.assertGreaterEqual(km, 2.0, case.case_id)
-                self.assertLessEqual(km, 5.5, case.case_id)
+                self.assertGreaterEqual(km, 1.5, case.case_id)
+                self.assertLessEqual(km, 4.5, case.case_id)
             else:
                 self.assertGreaterEqual(km, 3.0, case.case_id)
 
-    def test_kostroma_long_route_has_more_stops(self) -> None:
+    def test_kostroma_long_route_has_more_km(self) -> None:
         materials = _kostroma_materials()
         program = build_fallback_route_program(materials)
-        counts = [
-            len([s for s in case.stops if s.kind == "leisure"])
-            for case in program.cases
-        ]
-        self.assertGreaterEqual(counts[2], 5)
-        self.assertLess(counts[0], counts[2])
+
+        def _km(case: TripRouteCase) -> float:
+            coords = [
+                materials.leisure_points[
+                    next(i for i, p in enumerate(materials.leisure_points) if p.poi_id == s.poi_id)
+                ].coordinates
+                for s in case.stops
+                if s.kind == "leisure" and s.poi_id
+            ]
+            return estimate_path_km(coords)
+
+        kms = [_km(c) for c in program.cases]
+        self.assertGreater(kms[2], kms[0])
 
     def test_finalize_separates_identical_llm_drafts(self) -> None:
         materials = _kostroma_materials()
@@ -357,8 +370,8 @@ class TestRoutePostprocess(unittest.TestCase):
             for s in a_stops
             if s.poi_id
         ]
-        self.assertGreaterEqual(estimate_path_km(a_coords), 2.0)
-        self.assertLessEqual(estimate_path_km(a_coords), 5.5)
+        self.assertGreaterEqual(estimate_path_km(a_coords), 1.5)
+        self.assertLessEqual(estimate_path_km(a_coords), 4.5)
 
     def test_hybrid_falls_back_when_llm_poi_invalid(self) -> None:
         materials = _kostroma_materials()
@@ -477,9 +490,19 @@ class TestRoutePostprocess(unittest.TestCase):
         materials = _kostroma_materials()
         relaxed = build_fallback_route_program(materials, pace="relaxed")
         packed = build_fallback_route_program(materials, pace="packed")
-        relaxed_stops = max(len(c.stops) for c in relaxed.cases)
-        packed_stops = max(len(c.stops) for c in packed.cases)
-        self.assertLessEqual(relaxed_stops, packed_stops)
+
+        def _max_km(prog: RouteProgram) -> float:
+            best = 0.0
+            for case in prog.cases:
+                coords = [
+                    next(p.coordinates for p in materials.leisure_points if p.poi_id == s.poi_id)
+                    for s in case.stops
+                    if s.kind == "leisure" and s.poi_id
+                ]
+                best = max(best, estimate_path_km(coords))
+            return best
+
+        self.assertLessEqual(_max_km(relaxed), _max_km(packed))
         self.assertLess(
             leisure_overlap_ratio(relaxed.cases[0], relaxed.cases[2]),
             1.0,

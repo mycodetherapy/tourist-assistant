@@ -2,7 +2,7 @@ import { DeleteOutlined } from "@ant-design/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Card, Empty, Popconfirm, Space, notification } from "antd";
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getErrorMessage } from "../api/client";
 import type { RebuildScope, ReviewAction } from "../api/types";
@@ -23,6 +23,7 @@ export function TripDetailPage() {
     searchParams.get("run"),
   );
   const [rebuildScope, setRebuildScope] = useState<RebuildScope>("full");
+  const sawRunInProgressRef = useRef(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -39,7 +40,9 @@ export function TripDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["trips", tripId] });
       queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
       queryClient.invalidateQueries({ queryKey: ["trips"] });
-      notification.success({ message: "Готово" });
+      if (!data.run_id) {
+        notification.success({ message: "Готово" });
+      }
     },
     onError: (error) => {
       notification.error({ message: "Ошибка", description: getErrorMessage(error) });
@@ -100,13 +103,21 @@ export function TripDetailPage() {
   }, [activeRunId, runQuery.isError, runQuery.error, queryClient, setSearchParams]);
 
   useEffect(() => {
-    if (runQuery.data?.status === "completed" || runQuery.data?.status === "failed") {
+    const status = runQuery.data?.status;
+    if (status === "queued" || status === "running") {
+      sawRunInProgressRef.current = true;
+    }
+    if (status === "completed" || status === "failed") {
+      if (status === "completed" && sawRunInProgressRef.current) {
+        notification.success({ message: "Готово" });
+      }
+      sawRunInProgressRef.current = false;
       setSearchParams({}, { replace: true });
       setActiveRunId(null);
       queryClient.invalidateQueries({ queryKey: ["trips", tripId] });
       queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
       queryClient.invalidateQueries({ queryKey: ["trips"] });
-      if (runQuery.data.status === "failed" && runQuery.data.error) {
+      if (status === "failed" && runQuery.data?.error) {
         notification.error({
           message: "Ошибка сборки",
           description: runQuery.data.error,
