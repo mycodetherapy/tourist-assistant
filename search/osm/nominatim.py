@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 
 import requests
 
@@ -248,6 +249,7 @@ def fetch_nominatim_embankments(
     return collected
 
 
+@lru_cache(maxsize=256)
 def resolve_city_center(city: str) -> CityCenter | None:
     """Геокодинг города через Nominatim → центр, bbox, опционально Wikidata Q-id."""
     cleaned = city.strip()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from unittest.mock import patch
 
 from agents.critic import run_critic
 from agents.section_quality import (
@@ -146,6 +147,64 @@ class TestSectionQuality(unittest.TestCase):
             destination_city="Стамбул",
         )
         self.assertEqual(issues, [])
+
+    def test_critic_tickets_long_route_no_bus(self) -> None:
+        program = {
+            "tickets": (
+                "**Самолёт**: SU https://www.aviasales.ru/search/MOW1008KZN1208 "
+                "**Поезд**: РЖД https://www.tutu.ru/poezda/Moskva/Kazan/?date=10.08.2026 "
+                + "x" * 40
+            ),
+        }
+        with patch(
+            "search.transport_codes.city_pair_distance_km", return_value=820.0
+        ):
+            issues = critic_program_issues(
+                program,
+                "tickets",
+                origin_city="Москва",
+                destination_city="Казань",
+            )
+        self.assertEqual(issues, [])
+
+    def test_critic_tickets_short_route_no_plane_ok(self) -> None:
+        program = {
+            "tickets": (
+                "**Поезд**: РЖД https://www.tutu.ru/poezda/Moskva/Tver/?date=10.08.2026 "
+                "**Автобус**: Tutu https://bus.tutu.ru/raspisanie/gorod_Moskva/gorod_Tver/ "
+                + "x" * 40
+            ),
+        }
+        with (
+            patch("search.transport_codes.city_pair_distance_km", return_value=180.0),
+            patch("search.airport_routing.city_pair_distance_km", return_value=180.0),
+        ):
+            issues = critic_program_issues(
+                program,
+                "tickets",
+                origin_city="Москва",
+                destination_city="Тверь",
+            )
+        self.assertEqual(issues, [])
+
+    def test_critic_tickets_short_route_requires_bus(self) -> None:
+        program = {
+            "tickets": (
+                "**Поезд**: РЖД https://www.tutu.ru/poezda/Moskva/Tver/?date=10.08.2026 "
+                + "x" * 40
+            ),
+        }
+        with (
+            patch("search.transport_codes.city_pair_distance_km", return_value=180.0),
+            patch("search.airport_routing.city_pair_distance_km", return_value=180.0),
+        ):
+            issues = critic_program_issues(
+                program,
+                "tickets",
+                origin_city="Москва",
+                destination_city="Тверь",
+            )
+        self.assertTrue(any("автобус" in issue for issue in issues))
 
 
 if __name__ == "__main__":

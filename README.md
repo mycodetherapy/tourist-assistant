@@ -360,7 +360,7 @@ python3 scripts/render_graph.py
 | **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
 | **Aviasales** | Deep links на поиск авиа с датами |
 | **РЖД / Tutu.ru** | Deep links на жд (`ticket.rzd.ru`, `tutu.ru/poezda/…`) |
-| **Bus.tutu.ru** | Deep links на автобус (в одну сторону) |
+| **Bus.tutu.ru** | Deep links на автобус (`api-bus.tutu.ru` → id и slug в path) |
 | **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
 | **OpenStreetMap** (Overpass + Nominatim) | POI с координатами: музеи, парки, памятники в рамке города |
 | **Wikidata SPARQL** | Дополнение известных достопримечательностей (P625) |
@@ -458,6 +458,9 @@ python3 -m scripts.metrics_report --trip-id 12
 | **Галлюцинации цен** | Билеты: только `offers` из tool; афиша/рестораны — цены из `digest` |
 | **Нет прямых рейсов** | В `summary_for_llm` — стыковки на агрегаторах; ссылки с IATA и датами |
 | **Зарубежный маршрут** (Москва → Стамбул и т.п.) | IATA из `search/city_codes.py`; POI через Nominatim/Overpass **без** суффикса «Россия»; в билетах только «Самолёт»; critic не требует жд/автобус |
+| **Длинный внутренний маршрут** (>650 км по прямой) | Critic требует самолёт + поезд; **автобус** не обязателен (`BUS_MAX_ROUTE_KM` в `search/transport_codes.py`) |
+| **Короткий внутренний маршрут** (<500 км) | Самолёт не ищем (`PLANE_MIN_ROUTE_KM` в `search/airport_routing.py`); critic требует поезд + автобус |
+| **Город без действующего аэропорта** (Йошкар-Ола и др.) | Ближайший хаб из `search/city_codes.py` (IATA + Nominatim); в подписи ссылки — «аэропорт …» |
 | **Critic не прошёл** | До 2 повторов researcher; затем всё равно HITL с замечаниями |
 | **Пользователь не утвердил (n)** | Пересбор или сохранение черновика (`status=review`) |
 | **Повторный запуск без опросника** | `user_profile` + `trip_preferences`; fallback из последней поездки |
@@ -504,9 +507,13 @@ tourist-assistant/
 │   ├── wikidata/           # SPARQL достопримечательностей
 │   ├── yandex/             # landmark_discovery, POI filters, maps_route_url
 │   ├── tickets_search.py   # оркестрация билетов
+│   ├── airport_routing.py  # ближайший аэропорт, порог 500 км для авиа
+│   ├── hub_coords.py       # координаты IATA-хабов (domestic_hub_coords.json)
+│   ├── domestic_hub_coords.json
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
 │   ├── transport_codes.py  # коды Tutu/РЖД для URL
 │   ├── providers/avia.py   # Travelpayouts prices_for_dates
+│   ├── providers/tutu_bus.py # api-bus.tutu.ru → bus.tutu.ru deep links
 │   ├── city_codes.py       # город → IATA (РФ + зарубеж)
 │   ├── context.py          # search_context сессии
 │   └── tool_logging.py     # разбор payload для tool_runs

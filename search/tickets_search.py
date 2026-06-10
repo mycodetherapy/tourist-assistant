@@ -11,7 +11,7 @@ from models.tickets import (
     TransportMode,
 )
 from planning.dates import parse_trip_dates
-from search.city_codes import city_to_iata
+from search.airport_routing import avia_route_endpoints, avia_ticket_offered, PLANE_MIN_ROUTE_KM
 from search.providers.avia import fetch_avia_offers
 from search.ticket_links import build_ticket_offers, format_offers_summary
 from search.ticket_passengers import passengers_for_travel_party
@@ -20,7 +20,7 @@ from search.transport_codes import ground_transport_available
 _TICKETS_INSTRUCTION_BASE = (
     "Используй ТОЛЬКО поля offers и summary_for_llm из этого JSON. "
     "Раздел tickets: три блока — Самолёт, Поезд, Автобус. "
-    "В каждом блоке: label + booking_url из offers. "
+    "В каждом блоке: markdown-ссылка [label](booking_url) сразу после заголовка **Самолёт|**Поезд|**Автобус**. "
     "Не подставляй главные страницы агрегаторов без дат."
 )
 
@@ -96,20 +96,40 @@ def run_tickets_search(
             "Указана только дата вылета — для обратного билета проверьте дату на сайте."
         )
 
-    origin_iata = city_to_iata(params.origin_city)
-    dest_iata = city_to_iata(params.destination_city)
-    if not origin_iata or not dest_iata:
+    origin_ep, dest_ep = avia_route_endpoints(params.origin_city, params.destination_city)
+    origin_iata = origin_ep.iata if origin_ep else None
+    dest_iata = dest_ep.iata if dest_ep else None
+    if not avia_ticket_offered(params.origin_city, params.destination_city):
         warnings.append(
-            "IATA не найден для одного из городов — авиа-API и часть ссылок недоступны."
+            f"Маршрут короче {PLANE_MIN_ROUTE_KM} км — самолёт не предлагаем; "
+            "приоритет поезд и автобус."
+        )
+    elif not origin_ep or not dest_ep:
+        warnings.append(
+            "IATA не найден для одного из городов — авиа-API и ссылки на самолёт недоступны."
+        )
+    elif origin_ep.redirected or dest_ep.redirected:
+        parts: list[str] = []
+        if dest_ep.redirected:
+            parts.append(
+                f"для {params.destination_city} — аэропорт {dest_ep.hub_label} ({dest_ep.iata})"
+            )
+        if origin_ep.redirected:
+            parts.append(
+                f"вылет из аэропорта {origin_ep.hub_label} ({origin_ep.iata}) "
+                f"вместо {params.origin_city}"
+            )
+        warnings.append(
+            "Ближайший действующий аэропорт: " + "; ".join(parts) + "."
         )
 
     avia_api_status = "disabled"
     api_plane: list[TicketOffer] = []
-    if origin_iata and dest_iata and parsed.departure:
+    if origin_ep and dest_ep and parsed.departure:
         api_plane, avia_api_status = fetch_avia_offers(
-            origin_iata, dest_iata, parsed, passengers=passengers
+            origin_ep.iata, dest_ep.iata, parsed, passengers=passengers
         )
-    elif origin_iata and dest_iata:
+    elif origin_ep and dest_ep:
         avia_api_status = "empty"
 
     deep_offers = build_ticket_offers(
@@ -147,7 +167,12 @@ def run_tickets_search(
     )
 
     instruction = _instruction_for(avia_api_status)
-    if not ground_transport_available(params.origin_city, params.destination_city):
+    if not avia_ticket_offered(params.origin_city, params.destination_city):
+        instruction += (
+            f" Маршрут короче {PLANE_MIN_ROUTE_KM} км — в разделе tickets только «Поезд» и «Автобус» "
+            "(если доступны), блок «Самолёт» не нужен."
+        )
+    elif not ground_transport_available(params.origin_city, params.destination_city):
         instruction += (
             " Для зарубежного маршрута жд и автобус недоступны — "
             "в разделе tickets только блок «Самолёт»."

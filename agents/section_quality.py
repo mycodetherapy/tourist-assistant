@@ -16,7 +16,7 @@ from agents.route_postprocess import (
 )
 from models.routes import RouteProgram, TripRouteCase
 from planning.rebuild import resolve_tool_name
-from search.transport_codes import ground_transport_available
+from search.transport_codes import required_ticket_markers
 
 _GARBAGE_PREFIX = re.compile(r"^[\s:{}\[\],]+$")
 _JSON_ARTIFACT = re.compile(r"^[\s]*[:,\[\]{}]+")
@@ -175,10 +175,7 @@ def critic_program_issues(
     if scope in ("full", "tickets"):
         tickets = str(program.get("tickets", ""))
         lower = tickets.lower()
-        required_blocks = ["самол"]
-        if ground_transport_available(origin_city, destination_city):
-            required_blocks.extend(["поезд", "автобус"])
-        for label in required_blocks:
+        for label in required_ticket_markers(origin_city, destination_city):
             if label not in lower:
                 issues.append(f"в билетах нет «{label}…»")
         try:

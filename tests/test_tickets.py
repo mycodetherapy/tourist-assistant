@@ -45,6 +45,42 @@ class TestTicketLinks(unittest.TestCase):
         self.assertEqual(city_to_iata("Стамбул"), "IST")
         self.assertEqual(city_to_iata("Istanbul"), "IST")
 
+    def test_build_offers_moscow_tver_no_plane(self) -> None:
+        parsed = parse_trip_dates("10-12 августа 2026")
+        with patch(
+            "search.airport_routing.city_pair_distance_km", return_value=180.0
+        ):
+            offers = build_ticket_offers("Москва", "Тверь", parsed)
+        modes = {o.mode for o in offers}
+        self.assertNotIn(TransportMode.plane, modes)
+        self.assertIn(TransportMode.train, modes)
+
+    def test_build_offers_moscow_yoshkar_ola_kazan_iata(self) -> None:
+        parsed = parse_trip_dates("10-12 августа 2026")
+        with (
+            patch(
+                "search.airport_routing.city_pair_distance_km", return_value=650.0
+            ),
+            patch(
+                "search.airport_routing.nearest_domestic_iata_hub",
+                return_value=("KZN", "Казань"),
+            ),
+        ):
+            offers = build_ticket_offers("Москва", "Йошкар-Ола", parsed)
+        avia = next(o for o in offers if o.mode == TransportMode.plane)
+        self.assertIn("KZN1208", avia.booking_url.upper())
+        self.assertIn("аэропорт Казань", avia.label)
+
+    def test_run_short_route_skips_plane(self) -> None:
+        with patch(
+            "search.airport_routing.city_pair_distance_km", return_value=180.0
+        ):
+            raw = run_tickets_search("Москва", "Тверь", "10-12 августа 2026")
+        modes = {o.mode for o in raw.offers}
+        self.assertNotIn(TransportMode.plane, modes)
+        self.assertIn("короче 500", (raw.instruction or "").lower())
+        self.assertIn("самолёт не предлагаем", (raw.warning or "").lower())
+
     def test_build_offers_moscow_istanbul(self) -> None:
         parsed = parse_trip_dates("1-4 июля 2026")
         offers = build_ticket_offers("Москва", "Стамбул", parsed)
@@ -57,7 +93,14 @@ class TestTicketLinks(unittest.TestCase):
 
     def test_build_offers_saratov_moscow(self) -> None:
         parsed = parse_trip_dates("18-21 июня 2026")
-        offers = build_ticket_offers("Саратов", "Москва", parsed)
+        with patch(
+            "search.providers.tutu_bus.resolve_tutu_bus_city",
+            side_effect=lambda c: {
+                "Саратов": ("gorod_Saratov", "1433947"),
+                "Москва": ("gorod_Moskva", "1447874"),
+            }.get(c),
+        ):
+            offers = build_ticket_offers("Саратов", "Москва", parsed)
         modes = {o.mode for o in offers}
         self.assertIn(TransportMode.plane, modes)
         self.assertIn(TransportMode.train, modes)
@@ -92,7 +135,14 @@ class TestTicketLinks(unittest.TestCase):
 
     def test_bus_tutu_one_way_url(self) -> None:
         parsed = parse_trip_dates("15 июня 2026")
-        offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="solo")
+        with patch(
+            "search.providers.tutu_bus.resolve_tutu_bus_city",
+            side_effect=lambda c: {
+                "Саратов": ("gorod_Saratov", "1433947"),
+                "Москва": ("gorod_Moskva", "1447874"),
+            }.get(c),
+        ):
+            offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="solo")
         bus = next(o for o in offers if o.provider == "Bus.tutu.ru")
         self.assertTrue(bus.booking_url.startswith("https://bus.tutu.ru/raspisanie/gorod_Saratov/gorod_Moskva/"))
         self.assertIn("date=15.06.2026", bus.booking_url)
@@ -135,12 +185,155 @@ class TestTicketLinks(unittest.TestCase):
 
     def test_travel_party_family_two(self) -> None:
         parsed = parse_trip_dates("18 июня 2026")
-        offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="family_two")
+        with patch(
+            "search.providers.tutu_bus.resolve_tutu_bus_city",
+            side_effect=lambda c: {
+                "Саратов": ("gorod_Saratov", "1433947"),
+                "Москва": ("gorod_Moskva", "1447874"),
+            }.get(c),
+        ):
+            offers = build_ticket_offers("Саратов", "Москва", parsed, travel_party="family_two")
         avia = next(o for o in offers if o.provider == "Aviasales")
         self.assertIn("adults=2", avia.booking_url)
         self.assertIn("children=2", avia.booking_url)
         bus = next(o for o in offers if o.provider == "Bus.tutu.ru")
         self.assertIn("travelers=4", bus.booking_url)
+
+    def test_normalize_inline_api_flights_to_column(self) -> None:
+        from search.ticket_links import normalize_tickets_markdown
+
+        raw = (
+            "**Самолёт:** [Aviasales: Москва → Пермь (2 взр., 2 реб.)](https://www.aviasales.ru/search/x) "
+            "· DP 6859, прямой, от 8810 ₽ · N4 59, прямой, от 8871 ₽"
+        )
+        normalized = normalize_tickets_markdown(raw)
+        self.assertIn("- DP 6859, прямой, от 8810 ₽", normalized)
+        self.assertIn("- N4 59, прямой, от 8871 ₽", normalized)
+        self.assertNotIn(" · DP", normalized)
+
+    def test_summary_api_flights_one_per_line(self) -> None:
+        parsed = parse_trip_dates("3-5 июля 2026")
+        offers = [
+            TicketOffer(
+                mode=TransportMode.plane,
+                source=OfferSource.api,
+                is_direct=True,
+                transfers=0,
+                price_from=8810,
+                booking_url="https://www.aviasales.ru/search/x",
+                label="DP 6859, прямой, от 8810 ₽",
+                provider="Aviasales API",
+            ),
+            TicketOffer(
+                mode=TransportMode.plane,
+                source=OfferSource.api,
+                is_direct=True,
+                transfers=0,
+                price_from=8871,
+                booking_url="https://www.aviasales.ru/search/x",
+                label="N4 59, прямой, от 8871 ₽",
+                provider="Aviasales API",
+            ),
+        ]
+        summary = format_offers_summary("Казань", "Самара", parsed, offers)
+        self.assertIn(
+            "**Самолёт:** [Все рейсы на Aviasales: Казань → Самара]",
+            summary,
+        )
+        self.assertIn("\n\n- DP 6859", summary)
+        self.assertIn("\n- N4 59", summary)
+        self.assertNotIn(" · ", summary)
+
+    def test_summary_api_avia_link_with_family_pax(self) -> None:
+        parsed = parse_trip_dates("3-5 июля 2026")
+        offers = [
+            TicketOffer(
+                mode=TransportMode.plane,
+                source=OfferSource.api,
+                is_direct=True,
+                transfers=0,
+                price_from=14266,
+                booking_url="https://www.aviasales.ru/search/x",
+                label="FV 6399, прямой, от 14266 ₽",
+                provider="Aviasales API",
+            ),
+        ]
+        from search.ticket_passengers import passengers_for_travel_party
+
+        summary = format_offers_summary(
+            "Москва",
+            "Пермь",
+            parsed,
+            offers,
+            passengers=passengers_for_travel_party("family"),
+        )
+        self.assertIn(
+            "**Самолёт:** [Все рейсы на Aviasales: Москва → Пермь (2 взр., 1 реб.)]",
+            summary,
+        )
+
+    def test_normalize_enriches_short_aviasales_link(self) -> None:
+        from search.ticket_links import normalize_tickets_markdown
+
+        raw = (
+            "Маршрут: Москва → Пермь, даты: 03.07.2026 — 05.07.2026.\n"
+            "Пассажиры в ссылках: 2 взр., 2 реб.\n"
+            "**Самолёт:** [Все рейсы на Aviasales](https://www.aviasales.ru/search/x)\n"
+            "- FV 6399, прямой, от 14266 ₽"
+        )
+        normalized = normalize_tickets_markdown(raw)
+        self.assertIn(
+            "[Все рейсы на Aviasales: Москва → Пермь (2 взр., 2 реб.)]",
+            normalized,
+        )
+
+    def test_normalize_enriches_aviasales_from_train_link(self) -> None:
+        from search.ticket_links import normalize_tickets_markdown
+
+        raw = (
+            "**Самолёт:** [Все рейсы на Aviasales](https://www.aviasales.ru/search/x)\n"
+            "- FV 6399, прямой, от 14266 ₽\n"
+            "**Поезд:** [Tutu (жд): Москва → Пермь (2 взр., 2 реб.)]"
+            "(https://www.tutu.ru/poezda/Moskva/Perm/)"
+        )
+        normalized = normalize_tickets_markdown(raw)
+        self.assertIn(
+            "[Все рейсы на Aviasales: Москва → Пермь (2 взр., 2 реб.)]",
+            normalized,
+        )
+
+    def test_normalize_legacy_plain_urls(self) -> None:
+        from search.ticket_links import normalize_tickets_markdown
+
+        raw = (
+            "**Поезд:**\n"
+            "- Tutu (жд): Казань → Самара (2 взр.): "
+            "https://www.tutu.ru/poezda/Kazan/Samara/?travelers=2&date=03.07.2026"
+        )
+        normalized = normalize_tickets_markdown(raw)
+        self.assertIn(
+            "[Tutu (жд): Казань → Самара (2 взр.)]"
+            + "(https://www.tutu.ru/poezda/Kazan/Samara/?travelers=2&date=03.07.2026)",
+            normalized,
+        )
+        self.assertNotIn(": https://www.tutu.ru", normalized)
+
+    def test_summary_markdown_links(self) -> None:
+        parsed = parse_trip_dates("3-5 июля 2026")
+        with patch(
+            "search.providers.tutu_bus.resolve_tutu_bus_city",
+            side_effect=lambda c: {
+                "Казань": ("gorod_Kazan", "1330021"),
+                "Самара": ("gorod_Samara", "1321497"),
+            }.get(c),
+        ):
+            offers = build_ticket_offers("Казань", "Самара", parsed, travel_party="couple")
+            summary = format_offers_summary("Казань", "Самара", parsed, offers)
+        self.assertIn("**Поезд:** [", summary)
+        self.assertIn("](https://www.tutu.ru/poezda/", summary)
+        self.assertIn("**Автобус:** [", summary)
+        self.assertIn("](https://bus.tutu.ru/raspisanie/", summary)
+        self.assertNotRegex(summary, r"\]: https://")
 
     def test_summary_no_duplicate_price(self) -> None:
         parsed = parse_trip_dates("1-4 августа 2026")

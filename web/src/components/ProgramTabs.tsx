@@ -5,6 +5,7 @@ import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
 import { parseRouteProgram, routeCaseAtIndex } from "../api/routeTypes";
 import type { ItemVote, ProgramResponse, VotableSectionKey } from "../api/types";
+import { normalizeTicketsMarkdown } from "../utils/ticketsMarkdown";
 import { ItemVoteButtons } from "./ItemVoteButtons";
 import { RouteCaseDetails } from "./RouteCaseDetails";
 import { RouteMapEmbed } from "./RouteMapEmbed";
@@ -55,12 +56,22 @@ function buildTabs(data: ProgramResponse): TabDef[] {
   ];
 }
 
-function MarkdownBlock({ text, className = "mb-4" }: { text: string; className?: string }) {
+function MarkdownBlock({
+  text,
+  className = "mb-4",
+  compact = false,
+}: {
+  text: string;
+  className?: string;
+  compact?: boolean;
+}) {
   if (!text.trim()) {
     return null;
   }
   return (
-    <div className={`prose max-w-none whitespace-pre-wrap ${className}`}>
+    <div
+      className={`prose max-w-none ${compact ? "prose-tickets" : "whitespace-pre-wrap"} ${className}`}
+    >
       <ReactMarkdown
         components={{
           a: ({ href, children }) => (
@@ -199,7 +210,9 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
             return {
               key,
               label,
-              children: <MarkdownBlock text={data.program.tickets} className="" />,
+              children: (
+                <MarkdownBlock text={normalizeTicketsMarkdown(data.program.tickets)} compact />
+              ),
             };
           }
 
@@ -251,7 +264,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
                               routeCase={routeCase}
                               stopVotes={stopVoteByPoi}
                               votingDisabled={votingDisabled || voteMutation.isPending}
-                              onStopVote={(poiId, itemKey, index, vote) =>
+                              onStopVote={(_poiId, itemKey, index, vote) =>
                                 handleVote("route_stops", index, itemKey, vote)
                               }
                             />

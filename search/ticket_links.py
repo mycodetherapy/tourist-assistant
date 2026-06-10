@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from urllib.parse import urlencode
 
@@ -12,7 +13,10 @@ from models.tickets import (
     TransportMode,
 )
 from search.aviasales_urls import build_aviasales_search_url
-from search.city_codes import city_to_iata
+from search.airport_routing import (
+    AviaEndpoint,
+    avia_route_endpoints,
+)
 from search.ticket_passengers import TicketPassengers, passengers_for_travel_party
 from search.transport_codes import (
     city_to_rzd_code,
@@ -21,6 +25,51 @@ from search.transport_codes import (
 )
 
 DEFAULT_TRAVELERS = "1"
+
+# Старый формат «label: https://…» или «- label: https://…» → markdown-ссылка.
+_PLAIN_URL_LINE = re.compile(
+    r"^(?P<prefix>(?:\*\*[^*]+\*\*|(?:Самолёт|Поезд|Автобус)):\s*)?"
+    r"(?P<bullet>-\s*)?"
+    r"(?P<label>.+):\s+(?P<url>https?://\S+)\s*$"
+)
+
+
+def normalize_tickets_markdown(text: str) -> str:
+    """Приводит билеты к [label](url) и вертикальному списку рейсов."""
+    if not text.strip():
+        return text
+    out: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("·"):
+            out.append(f"- {stripped[1:].strip()}")
+            continue
+        if " · " in line and not stripped.startswith("-"):
+            out.extend(_expand_inline_dot_items(line))
+            continue
+        if "](http" in line and ": https://" not in line:
+            out.append(line)
+            continue
+        m = _PLAIN_URL_LINE.match(stripped)
+        if not m:
+            out.append(line)
+            continue
+        prefix = m.group("prefix") or ""
+        bullet = m.group("bullet") or ""
+        label = m.group("label").strip()
+        url = m.group("url")
+        out.append(f"{prefix}{bullet}[{label}]({url})")
+    return _enrich_aviasales_link_labels("\n".join(out))
+
+
+def _expand_inline_dot_items(line: str) -> list[str]:
+    """Строка «ссылка · рейс · рейс» → заголовок + маркированный список."""
+    parts = [p.strip() for p in line.split(" · ") if p.strip()]
+    if len(parts) <= 1:
+        return [line]
+    rows = [parts[0], ""]
+    rows.extend(f"- {part}" for part in parts[1:])
+    return rows
 
 
 def _travelers_count(passengers: TicketPassengers) -> str:
@@ -47,6 +96,82 @@ def _date_range_label(parsed: ParsedTripDates) -> str:
     return parsed.raw
 
 
+def _route_pax_label(origin: str, dest: str, passengers: TicketPassengers) -> str:
+    pax_hint = f" ({passengers.summary_ru()})" if passengers.seats > 1 else ""
+    return f"{origin} → {dest}{pax_hint}"
+
+
+def _avia_summary_link_label(
+    origin: str,
+    dest: str,
+    passengers: TicketPassengers,
+) -> str:
+    return f"Все рейсы на Aviasales: {_route_pax_label(origin, dest, passengers)}"
+
+
+_ROUTE_INTRO = re.compile(
+    r"Маршрут:\s*(.+?)\s*→\s*(.+?)(?:,\s*даты:|$)",
+    re.MULTILINE,
+)
+_PAX_INTRO = re.compile(r"Пассажиры в ссылках:\s*(.+)$", re.MULTILINE)
+_AVIASALES_MD_LINK = re.compile(
+    r"\[(?P<label>[^\]]*)\]\((?P<url>https?://[^)]*aviasales[^)]*)\)",
+    re.IGNORECASE,
+)
+
+
+def _route_pax_from_transport_links(text: str) -> str | None:
+    """Маршрут и пассажиры из ссылки Tutu/РЖД (если шапки «Маршрут:» нет)."""
+    for m in re.finditer(r"\[([^\]]+)\]\(", text):
+        label = m.group(1).strip()
+        low = label.lower()
+        if "→" not in label or low.startswith(("все рейсы на aviasales", "aviasales")):
+            continue
+        if ":" in label:
+            _, _, tail = label.partition(":")
+            tail = tail.strip()
+            if "→" in tail:
+                return tail
+    return None
+
+
+def _route_pax_from_tickets_intro(text: str) -> str | None:
+    route_m = _ROUTE_INTRO.search(text)
+    if route_m:
+        origin = route_m.group(1).strip()
+        dest = route_m.group(2).strip()
+        pax_m = _PAX_INTRO.search(text)
+        pax_suffix = ""
+        if pax_m:
+            pax = pax_m.group(1).strip()
+            if pax.endswith(".."):
+                pax = pax[:-1]
+            if pax and pax != "1 взр.":
+                pax_suffix = f" ({pax})"
+        return f"{origin} → {dest}{pax_suffix}"
+    return _route_pax_from_transport_links(text)
+
+
+def _enrich_aviasales_link_labels(text: str) -> str:
+    """Дополняет короткую ссылку Aviasales маршрутом из шапки билетов."""
+    route_pax = _route_pax_from_tickets_intro(text)
+    if not route_pax:
+        return text
+    full_label = f"Все рейсы на Aviasales: {route_pax}"
+
+    def repl(m: re.Match[str]) -> str:
+        label = m.group("label").strip()
+        if "→" in label:
+            return m.group(0)
+        if label in {"Все рейсы на Aviasales", "Aviasales"} or label.startswith(
+            "Aviasales:"
+        ):
+            return f"[{full_label}]({m.group('url')})"
+        return m.group(0)
+
+    return _AVIASALES_MD_LINK.sub(repl, text)
+
+
 def _offer(
     *,
     mode: TransportMode,
@@ -70,36 +195,31 @@ def _offer(
 def _avia_aviasales(
     origin: str,
     dest: str,
-    origin_iata: str | None,
-    dest_iata: str | None,
+    origin_ep: AviaEndpoint | None,
+    dest_ep: AviaEndpoint | None,
     dep: date | None,
     ret: date | None,
     passengers: TicketPassengers,
 ) -> TicketOffer | None:
-    if origin_iata and dest_iata and dep:
-        url = build_aviasales_search_url(
-            origin_iata, dest_iata, dep, ret, passengers=passengers
-        )
-    else:
-        q = urlencode(
-            {
-                "origin": origin,
-                "destination": dest,
-                "depart_date": dep.isoformat() if dep else "",
-                "return_date": ret.isoformat() if ret else "",
-                "adults": str(passengers.adults),
-                "children": str(passengers.children),
-                "infants": str(passengers.infants),
-            }
-        )
-        url = f"https://www.aviasales.ru/?{q}"
+    if not (origin_ep and dest_ep and dep):
+        return None
+    url = build_aviasales_search_url(
+        origin_ep.iata, dest_ep.iata, dep, ret, passengers=passengers
+    )
     pax_hint = f" ({passengers.summary_ru()})" if passengers.seats > 1 else ""
+    route = _route_pax_label(origin, dest, passengers)
+    hints: list[str] = []
+    if origin_ep.redirected:
+        hints.append(f"вылет: аэропорт {origin_ep.hub_label}")
+    if dest_ep.redirected:
+        hints.append(f"прилёт: аэропорт {dest_ep.hub_label}")
+    hint_suffix = f" [{'; '.join(hints)}]" if hints else ""
     return _offer(
         mode=TransportMode.plane,
         provider="Aviasales",
-        label=f"Aviasales: {origin} → {dest}{pax_hint}",
+        label=f"Aviasales: {route}{hint_suffix}{pax_hint}",
         url=url,
-        confidence="high" if origin_iata and dep else "low",
+        confidence="high",
     )
 
 
@@ -197,12 +317,11 @@ def build_ticket_offers(
     dep = parsed.departure
     ret = parsed.return_date
     passengers = passengers_for_travel_party(travel_party)
-    origin_iata = city_to_iata(origin_city)
-    dest_iata = city_to_iata(destination_city)
+    origin_ep, dest_ep = avia_route_endpoints(origin_city, destination_city)
     offers: list[TicketOffer] = []
 
     avia = _avia_aviasales(
-        origin_city, destination_city, origin_iata, dest_iata, dep, ret, passengers
+        origin_city, destination_city, origin_ep, dest_ep, dep, ret, passengers
     )
     if avia:
         offers.append(avia)
@@ -229,13 +348,12 @@ def format_offers_summary(
     *,
     passengers: TicketPassengers | None = None,
 ) -> str:
-    """Краткий markdown для LLM из структурированных offers."""
+    """Краткий markdown для LLM и UI: заголовок блока и кликабельная ссылка."""
     pax = passengers or TicketPassengers(adults=1)
     lines = [
         f"Маршрут: {origin_city} → {destination_city}, даты: {_date_range_label(parsed)}.",
-        f"Пассажиры в ссылках: {pax.summary_ru()}.",
+        f"Пассажиры в ссылках: {pax.summary_ru()}",
         "Прямых рейсов может не быть — на Aviasales смотрите варианты со стыковками.",
-        "",
     ]
     by_mode: dict[TransportMode, list[TicketOffer]] = {}
     for offer in offers:
@@ -250,14 +368,21 @@ def format_offers_summary(
         block = by_mode.get(mode, [])
         if not block:
             continue
-        lines.append(f"**{title}**:")
         api_items = [i for i in block if i.source.value == "api"]
         other_items = [i for i in block if i.source.value != "api"]
         if api_items:
-            lines.append(f"- Все рейсы на Aviasales: {api_items[0].booking_url}")
+            avia_link = _avia_summary_link_label(origin_city, destination_city, pax)
+            lines.append(
+                f"**{title}:** [{avia_link}]({api_items[0].booking_url})"
+            )
+            lines.append("")
             for item in api_items:
-                lines.append(f"  · {item.label}")
-        for item in other_items:
-            lines.append(f"- {item.label}: {item.booking_url}")
-        lines.append("")
+                lines.append(f"- {item.label}")
+        elif len(other_items) == 1:
+            item = other_items[0]
+            lines.append(f"**{title}:** [{item.label}]({item.booking_url})")
+        else:
+            lines.append(f"**{title}:**")
+            for item in other_items:
+                lines.append(f"- [{item.label}]({item.booking_url})")
     return "\n".join(lines).strip()

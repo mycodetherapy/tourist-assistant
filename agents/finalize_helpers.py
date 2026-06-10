@@ -13,10 +13,10 @@ from models.schemas import ProgramDraft
 from models.tickets import TicketsSearchOutput
 from planning.rebuild import required_tools_for_scope, resolve_tool_name
 from search.context import get_session_preferences
-from search.ticket_links import format_offers_summary
+from search.ticket_links import format_offers_summary, normalize_tickets_markdown
 from search.ticket_passengers import passengers_for_travel_party
 from search.tickets_search import run_tickets_search
-from search.transport_codes import ground_transport_available
+from search.transport_codes import ground_transport_available, required_ticket_markers
 
 _GARBAGE_TICKETS = re.compile(r"^[\s:{}\[\]]+$")
 _FINALIZE_MAX_TOOL_CHARS = 12_000
@@ -41,16 +41,13 @@ def _is_garbage_tickets(
     low = t.lower()
     if "http" not in low:
         return True
-    required = ["самол"]
-    if has_ground:
-        required.extend(["поезд", "автобус"])
-    if not any(label in low for label in required):
+    if not any(label in low for label in required_ticket_markers(origin_city, destination_city)):
         return True
     return False
 
 
 def extract_tickets_summary(messages: list[Any]) -> Optional[str]:
-    """Берёт готовый markdown билетов из последнего search_roundtrip_tickets."""
+    """Билеты из последнего search_roundtrip_tickets (offers → markdown-ссылки)."""
     for msg in reversed(messages):
         if not isinstance(msg, ToolMessage) or msg.name != "search_roundtrip_tickets":
             continue
@@ -59,19 +56,6 @@ def extract_tickets_summary(messages: list[Any]) -> Optional[str]:
             data = json.loads(raw)
         except json.JSONDecodeError:
             continue
-        origin_city = ""
-        destination_city = ""
-        params = data.get("params")
-        if isinstance(params, dict):
-            origin_city = str(params.get("origin_city", ""))
-            destination_city = str(params.get("destination_city", ""))
-        summary = str(data.get("summary_for_llm", "")).strip()
-        if summary and not _is_garbage_tickets(
-            summary,
-            origin_city=origin_city,
-            destination_city=destination_city,
-        ):
-            return summary
         try:
             output = TicketsSearchOutput.model_validate(data)
         except Exception:
@@ -82,12 +66,14 @@ def extract_tickets_summary(messages: list[Any]) -> Optional[str]:
             prefs = get_session_preferences()
             party = prefs.travel_party if prefs else "couple"
             passengers = passengers_for_travel_party(party)
-            built = format_offers_summary(
-                origin_city,
-                destination_city,
-                output.parsed_dates,
-                output.offers,
-                passengers=passengers,
+            built = normalize_tickets_markdown(
+                format_offers_summary(
+                    origin_city,
+                    destination_city,
+                    output.parsed_dates,
+                    output.offers,
+                    passengers=passengers,
+                )
             )
             if not _is_garbage_tickets(
                 built,
@@ -95,6 +81,15 @@ def extract_tickets_summary(messages: list[Any]) -> Optional[str]:
                 destination_city=destination_city,
             ):
                 return built
+        summary = str(data.get("summary_for_llm", "")).strip()
+        if summary:
+            normalized = normalize_tickets_markdown(summary)
+            if not _is_garbage_tickets(
+                normalized,
+                origin_city=origin_city,
+                destination_city=destination_city,
+            ):
+                return normalized
     return None
 
 
@@ -118,7 +113,7 @@ def resolve_tickets_section(
         output = run_tickets_search(
             origin_city, destination_city, dates, travel_party=party
         )
-        summary = (output.summary_for_llm or "").strip()
+        summary = normalize_tickets_markdown((output.summary_for_llm or "").strip())
         if summary and not _is_garbage_tickets(
             summary,
             origin_city=origin_city,
@@ -127,7 +122,7 @@ def resolve_tickets_section(
             return summary
 
     if base_program:
-        base_t = str(base_program.get("tickets", "")).strip()
+        base_t = normalize_tickets_markdown(str(base_program.get("tickets", "")).strip())
         if base_t and not _is_garbage_tickets(
             base_t,
             origin_city=origin_city,

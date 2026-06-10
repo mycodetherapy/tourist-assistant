@@ -44,6 +44,10 @@ def _map_section(view: ProgramView, key: str) -> ProgramSectionResponse:
 
 
 def _program_response(view: ProgramView) -> ProgramResponse:
+    from search.ticket_links import normalize_tickets_markdown
+
+    tickets_md = normalize_tickets_markdown(view.program.tickets)
+    program = view.program.model_copy(update={"tickets": tickets_md})
     sections = StructuredProgramResponse(
         tickets=_map_section(view, "tickets"),
         routes=_map_section(view, "routes"),
@@ -57,7 +61,7 @@ def _program_response(view: ProgramView) -> ProgramResponse:
         version_id=view.version_id,
         scope=view.scope,
         approved=view.approved,
-        program=view.program,
+        program=program,
         sections=sections,
     )
 

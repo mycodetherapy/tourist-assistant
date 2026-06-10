@@ -276,3 +276,30 @@ def city_to_iata(city: str) -> str | None:
         if name in key or key in name:
             return code
     return None
+
+
+def _title_city_name(normalized: str) -> str:
+    def cap(part: str) -> str:
+        if "-" in part:
+            return "-".join(p.capitalize() for p in part.split("-"))
+        return part.capitalize()
+
+    return " ".join(cap(p) for p in normalized.split())
+
+
+def domestic_iata_hubs() -> tuple[tuple[str, str, str], ...]:
+    """
+    Российские города из _CITY_IATA: (ключ для геокодинга, IATA, подпись).
+    По одному представителю на IATA — для поиска ближайшего аэропорта.
+    """
+    by_iata: dict[str, str] = {}
+    for key, iata in _CITY_IATA.items():
+        if key in _FOREIGN_CITY_KEYS:
+            continue
+        prev = by_iata.get(iata)
+        if prev is None or len(key) > len(prev):
+            by_iata[iata] = key
+    return tuple(
+        (name, iata, _title_city_name(name))
+        for iata, name in sorted(by_iata.items(), key=lambda row: row[1])
+    )
