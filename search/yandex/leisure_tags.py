@@ -146,5 +146,7 @@ def leisure_pool_limit(pace: str) -> int:
 
 
 def leisure_search_pool_limit() -> int:
-    """Размер пула при поиске OSM/Wikidata — всегда максимум, не зависит от темпа."""
-    return 35
+    """Целевой размер пула POI (Tier 0 + Tier 1), не зависит от темпа маршрута."""
+    from search.wikidata.places import DEFAULT_WIKIDATA_POOL_TARGET
+
+    return DEFAULT_WIKIDATA_POOL_TARGET

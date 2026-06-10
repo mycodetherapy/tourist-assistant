@@ -68,7 +68,7 @@ class FetchWikidataLeisureTests(unittest.TestCase):
             "Ярославль",
             _yaroslavl_center(),
             wikidata_id="Q2423",
-            max_items=4,
+            pool_target=4,
         )
         ids = [p.poi_id for p in points]
         self.assertIn("Q1", ids)
@@ -108,7 +108,6 @@ class FetchWikidataLeisureTests(unittest.TestCase):
         points = fetch_wikidata_leisure(
             "Самара",
             center,
-            max_items=10,
             pool_target=3,
         )
         self.assertGreaterEqual(len(points), 2)
@@ -130,7 +129,7 @@ class FetchWikidataLeisureTests(unittest.TestCase):
                 bbox=(49.95, 53.05, 50.35, 53.35),
                 wikidata_id="Q894",
             ),
-            max_items=5,
+            pool_target=5,
         )
         self.assertEqual(len(points), 1)
         self.assertEqual(points[0].tag, "embankments")
@@ -151,9 +150,58 @@ class FetchWikidataLeisureTests(unittest.TestCase):
         self.assertEqual(get.call_count, 2)
 
     @patch("search.wikidata.places._run_sparql")
+    def test_all_tier0_then_tier1_up_to_pool_target(self, run_sparql) -> None:
+        rows = [
+            _row(f"Q{i}", f"Музей {i} (Ярославль)", 39.85 + i * 0.001, 57.625, 10 - i)
+            for i in range(3)
+        ]
+        rows.extend(
+            [
+                _row("Q10", "Ансамбль площади (Ярославль)", 39.86, 57.626, 8),
+                _row("Q11", "Здание думы (Ярославль)", 39.861, 57.627, 7),
+                _row("Q12", "Доходный дом (Ярославль)", 39.862, 57.628, 20),
+            ]
+        )
+        run_sparql.return_value = rows
+        points = fetch_wikidata_leisure(
+            "Ярославль",
+            _yaroslavl_center(),
+            wikidata_id="Q2423",
+            pool_target=5,
+        )
+        ids = [p.poi_id for p in points]
+        self.assertEqual(len(ids), 5)
+        self.assertTrue(all(qid in ids for qid in ("Q0", "Q1", "Q2")))
+        self.assertIn("Q10", ids)
+        self.assertNotIn("Q12", ids)
+
+    @patch("search.wikidata.places._run_sparql")
+    def test_tier0_above_pool_target_keeps_all_tier0(self, run_sparql) -> None:
+        names = [
+            "Церковь Покрова (Ярославль)",
+            "Благовещенский собор (Ярославль)",
+            "Никольский собор (Ярославль)",
+            "Музей истории (Ярославль)",
+            "Театр драмы (Ярославль)",
+            "Памятник Минину (Ярославль)",
+            "Парк Тысячелетия (Ярославль)",
+        ]
+        run_sparql.return_value = [
+            _row(f"Q{i}", names[i], 39.85 + i * 0.01, 57.625, 5)
+            for i in range(7)
+        ]
+        points = fetch_wikidata_leisure(
+            "Ярославль",
+            _yaroslavl_center(),
+            pool_target=5,
+        )
+        self.assertEqual(len(points), 7)
+        self.assertEqual({p.poi_id for p in points}, {f"Q{i}" for i in range(7)})
+
+    @patch("search.wikidata.places._run_sparql")
     def test_sparql_query_orders_by_sitelinks(self, run_sparql) -> None:
         run_sparql.return_value = []
-        fetch_wikidata_leisure("Ярославль", _yaroslavl_center(), max_items=5)
+        fetch_wikidata_leisure("Ярославль", _yaroslavl_center(), pool_target=5)
         main_query = run_sparql.call_args_list[0][0][0]
         self.assertIn("ORDER BY DESC(?sitelinks)", main_query)
         emb_query = run_sparql.call_args_list[1][0][0]

@@ -28,7 +28,7 @@ class TestYandexLeisureTags(unittest.TestCase):
         self.assertEqual(leisure_pool_limit("packed"), 20)
 
     def test_search_pool_limit_fixed(self) -> None:
-        self.assertEqual(leisure_search_pool_limit(), 35)
+        self.assertEqual(leisure_search_pool_limit(), 50)
 
     def test_search_text_contains_city(self) -> None:
         text = search_text_for_tag("museums", "Казань")

@@ -60,7 +60,6 @@ def search_leisure_points(
             city,
             center,
             wikidata_id=center.wikidata_id,
-            max_items=max(limit * 2, 30),
             pool_target=limit,
         )
     if fetch_osm:
@@ -76,7 +75,7 @@ def search_leisure_points(
         [osm_points, wikidata_points, embankment_points],
         center=geo_center,
         city=city,
-        max_items=max(limit * 5, 80),
+        max_items=max(limit * 2, 80),
         pool_target=limit,
     )
 
@@ -107,7 +106,7 @@ def search_leisure_points(
         boosted_poi_ids=boosted_ids,
         match_scores=match_scores,
         city=city,
-        limit=limit,
+        limit=max(limit, len(pool)),
     )
 
     if not ranked:

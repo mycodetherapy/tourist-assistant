@@ -50,6 +50,7 @@ class TestPoiFilters(unittest.TestCase):
         self.assertTrue(is_landmark_poi_name("Торговые ряды"))
         self.assertTrue(is_landmark_poi_name("Богоявленско-Анастасин монастырь"))
         self.assertTrue(is_landmark_poi_name("Волжская набережная"))
+        self.assertTrue(is_landmark_poi_name("Мечеть аль-Марджани", city_hint="Казань"))
 
     def test_accepts_pedestrian_streets_by_tag(self) -> None:
         from models.routes import PoiPoint

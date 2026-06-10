@@ -63,6 +63,9 @@ _BACKFILL_NEGATIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Целевой размер пула: все Tier 0 + Tier 1 по score, но не больше cap.
+DEFAULT_WIKIDATA_POOL_TARGET = 50
+
 
 def _throttle() -> None:
     global _LAST_CALL
@@ -256,14 +259,14 @@ def _fill_candidates(
     *,
     center: CityCenter,
     city: str,
-    max_items: int,
+    max_items: int | None,
     relax_name_conflict: bool,
 ) -> None:
     seen_ids = {p.poi_id for p in collected}
     seen_coords = {coord_key(p.coordinates) for p in collected}
     seen_names = {route_name_key(p.name) for p in collected}
     for poi in candidates:
-        if len(collected) >= max_items:
+        if max_items is not None and len(collected) >= max_items:
             break
         if poi.poi_id in seen_ids:
             continue
@@ -284,15 +287,16 @@ def fetch_wikidata_leisure(
     center: CityCenter,
     *,
     wikidata_id: str | None = None,
-    max_items: int = 40,
-    pool_target: int | None = None,
+    pool_target: int = DEFAULT_WIKIDATA_POOL_TARGET,
 ) -> list[PoiPoint]:
-    """Wikidata POI: strict → soft; при недоборе до pool_target — мягкая дедупликация."""
+    """
+    Wikidata POI: все Tier 0, затем Tier 1 по убыванию soft_score до pool_target.
+    Если Tier 0 уже >= pool_target — Tier 1 не добавляем.
+    """
     qid = (wikidata_id or center.wikidata_id or "").strip()
     if not qid:
         return []
 
-    target = pool_target if pool_target is not None else max_items
     rows = _fetch_city_rows(qid)
     strict: list[PoiPoint] = []
     soft_scored: list[tuple[float, PoiPoint]] = []
@@ -335,7 +339,7 @@ def fetch_wikidata_leisure(
         strict_candidates,
         center=center,
         city=city,
-        max_items=max_items,
+        max_items=None,
         relax_name_conflict=False,
     )
     _fill_candidates(
@@ -343,18 +347,22 @@ def fetch_wikidata_leisure(
         soft_candidates,
         center=center,
         city=city,
-        max_items=max_items,
+        max_items=pool_target,
         relax_name_conflict=False,
     )
 
-    if len(collected) < target:
-        deferred = [p for p in strict_candidates + soft_candidates if p.poi_id not in {c.poi_id for c in collected}]
+    if len(collected) < pool_target:
+        deferred = [
+            p
+            for p in strict_candidates + soft_candidates
+            if p.poi_id not in {c.poi_id for c in collected}
+        ]
         _fill_candidates(
             collected,
             deferred,
             center=center,
             city=city,
-            max_items=max_items,
+            max_items=pool_target,
             relax_name_conflict=True,
         )
 

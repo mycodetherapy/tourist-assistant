@@ -158,7 +158,7 @@ docker compose run --rm app python -m eval --suite smoke
 
 **Частичный пересбор** (режим «Продолжить»): `full`, `tickets`, `routes`, `lifehacks`. Scope `events`/`dining` в API — алиасы на `routes`.
 
-- **`full`** — новый поиск билетов и POI (`search_route_materials` до ~35 точек); пул сохраняется в SQLite (`section_artifacts`, секция `route_materials`).
+- **`full`** — новый поиск билетов и POI (`search_route_materials` до ~50 точек: все Tier 0 + Tier 1 по score); пул сохраняется в SQLite (`section_artifacts`, секция `route_materials`).
 - **`routes`** / **`events`** / **`dining`** — **без нового поиска**: A/B/C пересобираются из сохранённого пула по `poi_id`. Ссылки на карты (`maps_route_url`) заново собираются пост-процессором из координат пула. Для старых поездок без кэша пул восстанавливается из предыдущих маршрутов (координаты из `maps_route_url`). Если пула нет — critic попросит выполнить **`full`**.
 - **`lifehacks`** — без веб-поиска (как раньше).
 
@@ -319,7 +319,7 @@ python3 scripts/render_graph.py
 | Инструмент | Что ищет |
 |------------|----------|
 | `search_roundtrip_tickets` | Deep links + опционально API авиа (`TRAVELPAYOUTS_API_KEY`); JSON `offers[]`, `schema_version=1` |
-| `search_route_materials` | Полный пул POI (до 35): Wikidata (strict → soft backfill, набережные по SPARQL) + discovery; Overpass опционально (`POI_USE_OVERPASS=true`) |
+| `search_route_materials` | Полный пул POI (до ~50): Wikidata — все Tier 0, затем Tier 1 по score; набережные по SPARQL; discovery; Overpass опционально (`POI_USE_OVERPASS=true`) |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
@@ -366,7 +366,7 @@ python3 scripts/render_graph.py
 | **Wikidata SPARQL** | Дополнение известных достопримечательностей (P625) |
 | **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок (без Search API) |
 
-Билеты: `search/ticket_links.py` + `search/providers/avia.py`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
+Билеты: `search/ticket_links.py` + `search/providers/avia.py`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. Пул POI: Wikidata Tier 0 целиком + Tier 1 до ~50 (`search/wikidata/places.py`). LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
 
 ### Почему нужен именно агент, а не workflow?
 
