@@ -228,36 +228,3 @@ def format_events_digest(results: list[dict[str, str | None]]) -> str:
         else:
             lines.append(f"{index}. {title}" + (f" — {snippet}" if snippet else ""))
     return "\n".join(lines)
-
-
-def clean_events_display(text: str, *, max_chars: int = 4500) -> str:
-    """Постобработка готового раздела «Мероприятия» перед показом пользователю."""
-    if not text:
-        return text
-    out_lines: list[str] = []
-    seen_urls: set[str] = set()
-    for line in text.splitlines():
-        raw = line.rstrip()
-        if not raw.strip():
-            if out_lines and out_lines[-1] != "":
-                out_lines.append("")
-            continue
-        if _JUNK_LINE.search(raw):
-            continue
-        if "{{" in raw or "}}" in raw:
-            continue
-        url_match = re.search(r"https?://\S+", raw)
-        if url_match:
-            url = url_match.group(0).rstrip(").,]")
-            if url in seen_urls:
-                continue
-            seen_urls.add(url)
-        if len(raw) > 500 and not raw.startswith("http"):
-            raw = raw[:500].rsplit(" ", 1)[0] + "…"
-        out_lines.append(linkify_event_line(raw))
-    blob = "\n".join(out_lines).strip()
-    while "\n\n\n" in blob:
-        blob = blob.replace("\n\n\n", "\n\n")
-    if len(blob) > max_chars:
-        blob = blob[:max_chars].rsplit("\n", 1)[0] + "\n…"
-    return blob

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from contextvars import ContextVar, Token
 from time import perf_counter
@@ -61,9 +60,6 @@ class GraphRunMetrics:
         if tools:
             payload["tools"] = tools
         return payload
-
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
 
 
 _metrics_ctx: ContextVar[GraphRunMetrics | None] = ContextVar("graph_run_metrics", default=None)

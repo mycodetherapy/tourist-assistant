@@ -394,11 +394,5 @@ def run_landmark_discovery(
     return names, trace
 
 
-def discover_landmark_names(city: str, *, max_names: int = _MAX_CANDIDATES) -> list[str]:
-    """Веб-поиск → текстовый список мест для Geocoder."""
-    names, _trace = run_landmark_discovery(city, max_names=max_names)
-    return names
-
-
 def infer_tag_for_name(name: str) -> LeisureTag:
     return infer_leisure_tag(name)

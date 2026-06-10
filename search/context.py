@@ -19,16 +19,6 @@ def set_session(preferences: TripPreferences, search_context: str) -> None:
     _search_context = search_context.strip()
 
 
-def set_search_context(context: str) -> None:
-    """Только строка контекста (продолжение поездки без нового опросника)."""
-    global _search_context
-    _search_context = context.strip()
-
-
-def get_search_context() -> str:
-    return _search_context
-
-
 def get_session_preferences() -> TripPreferences | None:
     return _session_preferences
 

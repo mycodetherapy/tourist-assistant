@@ -5,7 +5,6 @@ from __future__ import annotations
 import unittest
 
 from search.digest_format import (
-    clean_events_display,
     format_event_entry,
     format_events_digest,
     is_aggregator_events_url,
@@ -72,12 +71,6 @@ class TestDigestFormat(unittest.TestCase):
         self.assertNotIn("{{", digest)
         self.assertIn("](https://museumkomi.ru?cat=3)", digest)
         self.assertLessEqual(len(digest.splitlines()), 12)
-
-    def test_clean_events_display_strips_ui(self) -> None:
-        raw = "1. Музей\n{{ formatNumber() }}\nhttps://museumkomi.ru\nРазмер шрифта: +"
-        out = clean_events_display(raw)
-        self.assertNotIn("formatNumber", out)
-        self.assertIn("museumkomi.ru", out)
 
 
 if __name__ == "__main__":

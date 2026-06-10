@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import re
-from typing import Any, Optional
-
-from langchain_core.messages import ToolMessage
+from typing import Any
 
 from agents.route_postprocess import (
     CRITIC_ROUTE_PAIR_LIMITS,
@@ -15,7 +12,6 @@ from agents.route_postprocess import (
     overlap_limits_for_pool,
 )
 from models.routes import RouteProgram, TripRouteCase
-from planning.rebuild import resolve_tool_name
 from search.transport_codes import required_ticket_markers
 
 _GARBAGE_PREFIX = re.compile(r"^[\s:{}\[\],]+$")
@@ -190,33 +186,3 @@ def critic_program_issues(
         except ImportError:
             pass
     return issues
-
-
-def extract_tool_digest(
-    messages: list[Any],
-    tool_name: str,
-    *,
-    digest_key: str = "digest",
-) -> Optional[str]:
-    for msg in reversed(messages):
-        if not isinstance(msg, ToolMessage):
-            continue
-        name = msg.name or ""
-        if resolve_tool_name(name) != resolve_tool_name(tool_name):
-            continue
-        raw = msg.content if isinstance(msg.content, str) else str(msg.content)
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        if data.get("error"):
-            continue
-        digest = str(
-            data.get(digest_key)
-            or data.get("materials_digest")
-            or data.get("digest")
-            or ""
-        ).strip()
-        if digest:
-            return digest
-    return None

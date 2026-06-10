@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field, model_validator
 from models.routes import RouteProgram
 from models.tickets import TicketsSearchInput  # контракт билетов — models/tickets.py
 
-PROGRAM_SECTION_KEYS = ("tickets", "routes", "lifehacks")
 _LEGACY_PROGRAM_KEYS = ("transport",)
 
 
@@ -19,12 +18,6 @@ class RouteMaterialsInput(BaseModel):
 
     city: str = Field(..., description="Город пребывания")
     dates: str = Field(..., description="Даты поездки")
-
-
-# Обратная совместимость
-CultureEventsInput = RouteMaterialsInput
-DiningInput = RouteMaterialsInput
-DiningTransportInput = RouteMaterialsInput
 
 
 class PlannerContext(BaseModel):

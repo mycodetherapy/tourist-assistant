@@ -21,7 +21,6 @@ from db import (
     get_user_profile,
     list_item_feedback,
     list_item_feedback_by_index,
-    list_planned_trips,
     list_trips,
     log_agent_run,
     mark_latest_itinerary_approved,
@@ -44,7 +43,6 @@ from onboarding import TripPreferences, build_search_context, normalize_trip_pre
 from planning import human_message_for_scope
 from program.item_key import make_item_key, make_route_stop_key
 from program.parse_items import (
-    SECTION_KEYS,
     VOTABLE_SECTIONS,
     ParsedProgram,
     parse_program_sections,
@@ -442,9 +440,6 @@ class TripService:
 
     def list_all_trips(self, limit: int = 20) -> list[TripSummary]:
         return list_trips(limit=limit)
-
-    def list_planned(self, limit: int = 20):
-        return list_planned_trips(limit=limit)
 
     def get_profile(self) -> dict[str, Any] | None:
         return get_user_profile()

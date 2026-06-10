@@ -22,7 +22,6 @@ LeisureTag = Literal[
 ]
 
 RouteCaseId = str
-DEFAULT_ROUTE_CASE_IDS = ("A", "B", "C")
 NEW_ROUTE_BATCH_IDS = ("N-A", "N-B", "N-C")
 
 
@@ -86,8 +85,3 @@ class RouteProgram(BaseModel):
     schema_version: Literal[1] = 1
     materials_summary: str = ""
     cases: list[TripRouteCase] = Field(default_factory=list)
-
-
-class RouteProgramDocument(BaseModel):
-    routes: RouteProgram
-    routes_text: str = ""

@@ -37,9 +37,5 @@ def parse_route_stops(program: dict[str, Any]) -> ParsedSection:
     return ParsedSection(intro="", items=tuple(items))
 
 
-def route_stop_item_key(poi_id: str) -> str:
-    return make_route_stop_key(poi_id)
-
-
 def route_stop_keys_for_program(program: dict[str, Any]) -> set[str]:
     return {make_route_stop_key(pid) for pid in collect_route_stop_poi_ids(program)}

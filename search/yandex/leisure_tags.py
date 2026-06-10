@@ -148,11 +148,3 @@ def leisure_pool_limit(pace: str) -> int:
 def leisure_search_pool_limit() -> int:
     """Размер пула при поиске OSM/Wikidata — всегда максимум, не зависит от темпа."""
     return 35
-
-
-def dining_per_anchor_limit(pace: str) -> int:
-    if pace == "relaxed":
-        return 3
-    if pace == "packed":
-        return 5
-    return 4

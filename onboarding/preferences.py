@@ -127,26 +127,3 @@ def build_search_context(preferences: TripPreferences) -> str:
         f"группа: {_PARTY_RU[prefs.travel_party]}; "
         "насыщенный темп; метро + пешком"
     )
-
-
-def budget_query_suffix(budget: str) -> str:
-    """Legacy: раньше для запросов билетов и ресторанов."""
-    if budget == "economy":
-        return "недорого бюджет"
-    if budget == "unlimited":
-        return "премиум"
-    return ""
-
-
-def interests_query_suffix(interests: list[str]) -> str:
-    """Legacy: ключевые слова для афиши."""
-    if not interests:
-        return ""
-    return " ".join(interests[:5])
-
-
-def restaurant_rating_suffix(rating: float) -> str:
-    """Legacy: суффикс для поиска ресторанов."""
-    if rating >= 4.5:
-        return f"рейтинг от {rating}"
-    return "лучшие отзывы"

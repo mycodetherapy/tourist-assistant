@@ -2,30 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any
 
 import requests
 
 from config import settings
-
-
-def tourist_area(city: str) -> str:
-    """Туристический район для подбора мероприятий и ресторанов в пешей доступности."""
-    normalized = city.lower().strip()
-    areas: dict[str, str] = {
-        "санкт-петербург": "центр, Невский проспект, Дворцовая, Петропавловская крепость",
-        "москва": "центр, Китай-город, Красная площадь, Зарядье",
-        "казань": "Кремль, улица Баумана, старый город",
-        "сочи": "центр Сочи, Морской вокзал, набережная",
-        "екатеринбург": "исторический центр, Плотинка, Вайнера",
-        "нижний новгород": "верхний город, Большая Покровская, Кремль",
-    }
-    for key, area in areas.items():
-        if key in normalized or normalized in key:
-            return area
-    return "исторический центр, главные достопримечательности"
 
 
 def _city_aliases(city: str) -> list[str]:
@@ -261,85 +243,3 @@ def web_search_multi(
         "raw_results_count": raw_count,
         "filter_fallback": used_fallback,
     }
-
-
-def run_search_tool(
-    params: dict[str, Any],
-    queries: list[str],
-    services: list[str],
-    kind: str,
-) -> str:
-    """Общая обёртка: веб-поиск + фильтр + digest для LLM."""
-    cities = [
-        params.get("city"),
-        params.get("origin_city"),
-        params.get("destination_city"),
-    ]
-    try:
-        data = web_search_multi(queries, kind=kind, cities=cities)
-        results = data.get("results", [])
-        digest_limit = settings.DIGEST_LIMITS.get(kind, 15)
-        if kind == "events":
-            from search.digest_format import rank_events_results
-
-            results = rank_events_results(results)
-            digest_limit = min(digest_limit, 8)
-        digest = format_search_digest(results[:digest_limit], kind=kind)
-
-        kind_hints = {
-            "tickets": (
-                "Билеты туда-обратно: самолёт (Aviasales), поезд (РЖД, Tutu), "
-                "автобус (Bus.ru и аналоги). Дай ссылки на каждый вид транспорта."
-            ),
-            "events": (
-                "5–8 конкретных музеев/выставок (официальные страницы), не городские ленты "
-                "afisha.ru/events. Кратко: название, даты, одна ссылка. Группируй по району."
-            ),
-            "restaurants": (
-                "Рестораны и кафе со ссылками (минимум 6–8 заведений). "
-                "Указывай район/улицу рядом с музеями из программы."
-            ),
-            "dining": "Рестораны и кафе со ссылками.",
-        }
-
-        payload = {
-            "services": services,
-            "params": params,
-            "category": kind,
-            "live_data": True,
-            "results_count": len(results),
-            "raw_results_count": data.get("raw_results_count", 0),
-            "search_provider": data.get("provider"),
-            "digest": digest,
-            "search": data,
-            "instruction": (
-                f"{kind_hints.get(kind, '')} "
-                "Используй ТОЛЬКО факты из digest (названия, цены, часы, ссылки). "
-                "Не выдумывай цены — если цены нет в описании, напиши «уточните на сайте» "
-                "и дай ссылку из digest."
-            ),
-        }
-        if not results:
-            payload["warning"] = (
-                "После фильтрации результатов нет. Сообщи об этом и дай ссылки сервисов."
-            )
-        elif data.get("filter_fallback"):
-            payload["warning"] = (
-                "Результаты могут быть менее точными (фильтр ослаблен). "
-                "Перепроверьте ссылки."
-            )
-        print(
-            f"  → поиск [{kind}]: {len(results)} ссылок "
-            f"({data.get('provider')}, всего до фильтра: {data.get('raw_results_count', 0)})"
-        )
-        return json.dumps(payload, ensure_ascii=False, indent=2)
-    except Exception as exc:
-        return json.dumps(
-            {
-                "live_data": False,
-                "error": str(exc),
-                "params": params,
-                "hint": "Проверьте интернет, pip install ddgs, или задайте TAVILY_API_KEY",
-            },
-            ensure_ascii=False,
-        )
