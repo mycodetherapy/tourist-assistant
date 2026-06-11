@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Literal
 
+from agents.llm_context import LlmConfig, run_with_llm_config
 from db import update_trip_status
 from models.state import AgentState
 from services.errors import format_runtime_error
@@ -58,7 +59,7 @@ class RunManager:
                 for record in self._runs.values()
             )
 
-    def start_run(self, state: AgentState) -> str:
+    def start_run(self, state: AgentState, *, llm_config: LlmConfig) -> str:
         """Ставит прогон в очередь и возвращает run_id для polling."""
         run_id = str(uuid.uuid4())
         trip_id = int(state["trip_id"])
@@ -70,22 +71,23 @@ class RunManager:
         update_trip_status(trip_id, "building")
         thread = threading.Thread(
             target=self._execute,
-            args=(run_id, state),
+            args=(run_id, state, llm_config),
             daemon=True,
         )
         thread.start()
         return run_id
 
-    def _execute(self, run_id: str, state: AgentState) -> None:
+    def _execute(self, run_id: str, state: AgentState, llm_config: LlmConfig) -> None:
         with self._lock:
             record = self._runs[run_id]
             record.status = "running"
 
         try:
-            result: GraphRunResult = self._service.run_graph(
-                state,
-                review_mode="deferred",
-            )
+            with run_with_llm_config(llm_config):
+                result: GraphRunResult = self._service.run_graph(
+                    state,
+                    review_mode="deferred",
+                )
             with self._lock:
                 record = self._runs[run_id]
                 record.status = "completed"

@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Button, Form, Grid, Input, Select, Steps, notification } from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getErrorMessage } from "../api/client";
+import { getErrorMessage, isLlmKeyRequiredError } from "../api/client";
 import type { TripPreferences } from "../api/types";
 import { createTrip } from "../api/trips";
 import { LaunchSummary } from "../components/LaunchSummary";
@@ -40,6 +40,15 @@ export function NewTripPage() {
       navigate(url);
     },
     onError: (error) => {
+      if (isLlmKeyRequiredError(error)) {
+        notification.warning({
+          title: "Нужен ключ OpenRouter",
+          description:
+            "Добавьте API-ключ в настройках, затем нажмите «Собрать программу» на странице поездки.",
+        });
+        navigate("/settings");
+        return;
+      }
       notification.error({ title: "Ошибка", description: getErrorMessage(error) });
     },
   });

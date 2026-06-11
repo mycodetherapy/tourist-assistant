@@ -130,6 +130,30 @@ export interface ProfileResponse {
   preferences: TripPreferences | null;
 }
 
+export interface UserInfo {
+  id: number;
+  email: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: UserInfo;
+}
+
+export interface SettingsResponse {
+  llm_key_configured: boolean;
+  llm_key_preview: string | null;
+  llm_base_url: string;
+  llm_model: string;
+}
+
+export interface UpdateSettingsPayload {
+  llm_api_key?: string;
+  llm_base_url?: string;
+  llm_model?: string;
+}
+
 export interface HotelZone {
   zone_id: string;
   label: string;

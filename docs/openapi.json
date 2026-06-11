@@ -2,10 +2,171 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Туристический ассистент API",
-    "description": "REST API веб-интерфейса: поездки в SQLite, асинхронная сборка программы LangGraph, human-in-the-loop (утверждение / пересбор).",
-    "version": "1.0.0"
+    "description": "REST API веб-интерфейса: multi-user SaaS, поездки в SQLite, асинхронная сборка программы LangGraph, BYOK OpenRouter.",
+    "version": "2.0.0"
   },
   "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register",
+        "operationId": "register_api_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "operationId": "me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "description": "JWT stateless — клиент удаляет токен.",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/auth/google": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google Login",
+        "operationId": "google_login_api_auth_google_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/google/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google Callback",
+        "operationId": "google_callback_api_auth_google_callback_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/trips": {
       "get": {
         "tags": [
@@ -28,7 +189,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -67,7 +233,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/trips/{trip_id}": {
@@ -77,6 +248,11 @@
         ],
         "summary": "Delete Trip",
         "operationId": "delete_trip_api_trips__trip_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -110,6 +286,11 @@
         ],
         "summary": "Get Trip",
         "operationId": "get_trip_api_trips__trip_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -152,6 +333,11 @@
         ],
         "summary": "Get Program",
         "operationId": "get_program_api_trips__trip_id__program_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -195,6 +381,11 @@
         "summary": "Get Hotel Zones",
         "description": "Зоны поиска отелей Booking.com вдоль выбранного маршрута.",
         "operationId": "get_hotel_zones_api_trips__trip_id__hotel_zones_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -253,6 +444,11 @@
         ],
         "summary": "Set Program Feedback",
         "operationId": "set_program_feedback_api_trips__trip_id__program_feedback_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -306,6 +502,11 @@
         "summary": "Log Affiliate Click",
         "description": "Локальный учёт клика по affiliate-ссылке в блоке билетов.",
         "operationId": "log_affiliate_click_api_trips__trip_id__affiliate_clicks_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -351,6 +552,11 @@
         ],
         "summary": "Get Preferences",
         "operationId": "get_preferences_api_trips__trip_id__preferences_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -401,6 +607,11 @@
         ],
         "summary": "Start Run",
         "operationId": "start_run_api_trips__trip_id__runs_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -453,6 +664,11 @@
         ],
         "summary": "Submit Review",
         "operationId": "submit_review_api_trips__trip_id__review_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -505,6 +721,11 @@
         ],
         "summary": "Get Run Status",
         "operationId": "get_run_status_api_runs__run_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "run_id",
@@ -558,7 +779,101 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/profile/settings": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Get Settings",
+        "operationId": "get_settings_api_profile_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Update Settings",
+        "operationId": "update_settings_api_profile_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/profile/settings/llm-key": {
+      "delete": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Delete Llm Key",
+        "operationId": "delete_llm_key_api_profile_settings_llm_key_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/affiliate/metrics": {
@@ -954,6 +1269,28 @@
         ],
         "title": "AffiliateMetricsSummary"
       },
+      "AuthResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "user"
+        ],
+        "title": "AuthResponse"
+      },
       "CreateTripRequest": {
         "properties": {
           "city": {
@@ -1252,6 +1589,28 @@
         ],
         "title": "ItemFeedbackRequest"
       },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
       "ProfileResponse": {
         "properties": {
           "preferences": {
@@ -1375,6 +1734,28 @@
           "intro"
         ],
         "title": "ProgramSectionResponse"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "RegisterRequest"
       },
       "ReviewRequest": {
         "properties": {
@@ -1541,6 +1922,40 @@
           "status"
         ],
         "title": "RunStatusResponse"
+      },
+      "SettingsResponse": {
+        "properties": {
+          "llm_key_configured": {
+            "type": "boolean",
+            "title": "Llm Key Configured"
+          },
+          "llm_key_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Key Preview"
+          },
+          "llm_base_url": {
+            "type": "string",
+            "title": "Llm Base Url"
+          },
+          "llm_model": {
+            "type": "string",
+            "title": "Llm Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "llm_key_configured",
+          "llm_base_url",
+          "llm_model"
+        ],
+        "title": "SettingsResponse"
       },
       "StartRunRequest": {
         "properties": {
@@ -1816,6 +2231,66 @@
         ],
         "title": "TripSummaryResponse"
       },
+      "UpdateSettingsRequest": {
+        "properties": {
+          "llm_api_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Api Key"
+          },
+          "llm_base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Base Url"
+          },
+          "llm_model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Model"
+          }
+        },
+        "type": "object",
+        "title": "UpdateSettingsRequest"
+      },
+      "UserResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email"
+        ],
+        "title": "UserResponse"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -1849,9 +2324,19 @@
         ],
         "title": "ValidationError"
       }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
     }
   },
   "tags": [
+    {
+      "name": "auth",
+      "description": "Регистрация, вход, Google OAuth."
+    },
     {
       "name": "trips",
       "description": "Поездки: создание, программа, предпочтения, пересбор, HITL."
@@ -1862,7 +2347,7 @@
     },
     {
       "name": "profile",
-      "description": "Сохранённый профиль предпочтений пользователя."
+      "description": "Профиль предпочтений и BYOK OpenRouter."
     },
     {
       "name": "affiliate",

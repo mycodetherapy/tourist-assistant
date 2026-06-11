@@ -29,13 +29,14 @@ python3 main.py
 
 ### Веб-интерфейс (FastAPI + React)
 
-Требования: Python 3.10+, Node.js 20+, те же ключи в `.env`.
+Требования: Python 3.10+, Node.js 20+. В `.env` для API: `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). Ключ OpenRouter каждый пользователь задаёт в **Настройках** (BYOK); для CLI по-прежнему `LLM_API_KEY` в `.env`.
 
 **Терминал 1 — API:**
 
 ```bash
 source .venv/bin/activate
 pip install -r requirements.txt
+# JWT_SECRET и SETTINGS_ENCRYPTION_KEY в .env обязательны
 uvicorn api.main:app --reload --port 8000
 ```
 
@@ -47,7 +48,7 @@ npm install
 npm run dev
 ```
 
-Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`.
+Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`. Сначала **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — ключ [OpenRouter](https://openrouter.ai/keys).
 
 **Проверка с телефона (PWA):**
 
@@ -76,7 +77,9 @@ npm run dev
 
 | Экран | Действие |
 |-------|----------|
-| **Список поездок** | Все сохранённые поездки из SQLite |
+| **Вход / регистрация** | Email+пароль или Google; JWT в `localStorage` |
+| **Настройки** | BYOK: OpenRouter API key (шифруется в SQLite) |
+| **Список поездок** | Только поездки текущего пользователя |
 | **Новая поездка** | Wizard: поездка → запуск → фоновая сборка (polling 1–2 мин) |
 | **Карточка поездки** | Вкладки: билеты, маршруты (A/B/C) с **встроенной картой** Яндекс.Карт + ссылка в описании, лайфхаки; 👍/👎; утверждение / черновик / пересбор / удаление |
 
@@ -219,7 +222,13 @@ python3 -m eval --suite smoke
 
 | Переменная | Обязательно | Описание |
 |------------|-------------|----------|
-| `LLM_API_KEY` | Да* | Ключ [OpenRouter](https://openrouter.ai/keys) (*не нужен для `unittest` и `eval --suite smoke` без `--with-llm`) |
+| `LLM_API_KEY` | Да* | CLI: ключ [OpenRouter](https://openrouter.ai/keys). Веб-API: BYOK в профиле пользователя (*не нужен для `unittest` и `eval --suite smoke` без `--with-llm`) |
+| `JWT_SECRET` | Да** | Секрет подписи JWT для `uvicorn api.main:app` |
+| `SETTINGS_ENCRYPTION_KEY` | Да** | Fernet-ключ шифрования BYOK в БД (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
+| `JWT_ACCESS_TTL_MINUTES` | Нет | Срок жизни access token (по умолчанию 60) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет | Google OAuth (опционально) |
+| `GOOGLE_REDIRECT_URI` | Нет | Callback OAuth, по умолчанию `http://localhost:8000/api/auth/google/callback` |
+| `CORS_ORIGINS` | Нет | Доп. origins через запятую для прод-домена |
 | `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openrouter.ai/api/v1` |
 | `LLM_MODEL` | Нет | Slug модели на OpenRouter. По умолчанию `openai/gpt-4.1-mini` (см. [Модели LLM](#модели-llm)) |
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure`. Для альтернатив через VPN — `OpenAI` |
@@ -465,8 +474,8 @@ python3 -m scripts.metrics_report --trip-id 12
 - ⏳ **Allowlist доменов**: есть смысловой фильтр `SEARCH_FILTERS`, но нет жёсткой allowlist доменов.
 - ⏳ **PII**: в SQLite сохраняются запрос и предпочтения; нет маскирования/политики хранения.
 - ✅ **Ошибки внешних систем**: tool error попадает в `ToolMessage`, граф не падает, `live_data=false` в логах.
-- ⏳ **Rate limiting**: есть таймаут поиска (`SEARCH_TIMEOUT`), но нет общего лимита попыток/бюджета.
-- ➖ **Multi-user auth**: не применимо (локальный CLI).
+- ⏳ **Rate limiting**: health-эндпоинты через `slowapi`; лимиты на auth/trips — донастроить на nginx.
+- ✅ **Multi-user auth**: JWT, изоляция поездок по `user_id`, BYOK OpenRouter (Fernet at rest).
 
 ### Сложные и нестандартные ситуации
 
@@ -507,6 +516,7 @@ python3 -m scripts.metrics_report --trip-id 12
 tourist-assistant/
 ├── main.py                 # Точка входа CLI: python3 main.py
 ├── api/                    # FastAPI REST для веб-UI
+│   └── auth/               # register, login, Google OAuth, BYOK crypto
 ├── docs/openapi.json       # OpenAPI 3 (scripts/export_openapi.py)
 ├── services/               # TripService, RunManager — общий слой CLI + API
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query

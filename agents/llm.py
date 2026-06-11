@@ -7,6 +7,7 @@ from functools import lru_cache
 
 from langchain_openai import ChatOpenAI
 
+from agents.llm_context import LlmConfig, get_current_llm_config
 from config.settings import (
     LLM_MODEL,
     LLM_TEMPERATURE,
@@ -18,10 +19,22 @@ from models.schemas import ProgramDraft
 from search.tools import TOOLS
 
 
-@lru_cache(maxsize=1)
-def _get_llm_cached() -> ChatOpenAI:
-    # Единая модель: LLM_API_KEY + LLM_BASE_URL + LLM_MODEL (OpenRouter по умолчанию).
-    model = os.getenv("LLM_MODEL", LLM_MODEL)
+def _config_from_env() -> LlmConfig:
+    return LlmConfig(
+        api_key=get_llm_api_key(),
+        base_url=get_llm_base_url(),
+        model=os.getenv("LLM_MODEL", LLM_MODEL),
+    )
+
+
+def _resolve_config() -> LlmConfig:
+    try:
+        return get_current_llm_config()
+    except RuntimeError:
+        return _config_from_env()
+
+
+def _build_llm(config: LlmConfig) -> ChatOpenAI:
     extra: dict[str, object] = {
         "default_headers": {
             "HTTP-Referer": "https://github.com/tourist-assistant",
@@ -32,16 +45,22 @@ def _get_llm_cached() -> ChatOpenAI:
     if extra_body:
         extra["extra_body"] = extra_body
     return ChatOpenAI(
-        model=model,
+        model=config.model,
         temperature=LLM_TEMPERATURE,
-        api_key=get_llm_api_key(),
-        base_url=get_llm_base_url(),
+        api_key=config.api_key,
+        base_url=config.base_url,
         **extra,
     )
 
 
+@lru_cache(maxsize=8)
+def _get_llm_cached(api_key: str, base_url: str, model: str) -> ChatOpenAI:
+    return _build_llm(LlmConfig(api_key=api_key, base_url=base_url, model=model))
+
+
 def get_llm() -> ChatOpenAI:
-    return _get_llm_cached()
+    config = _resolve_config()
+    return _get_llm_cached(config.api_key, config.base_url, config.model)
 
 
 def get_llm_with_tools():
@@ -49,7 +68,6 @@ def get_llm_with_tools():
 
 
 def get_llm_final():
-    # Билеты не в схеме LLM — иначе json_schema ломается на больших tool JSON.
     return (
         get_llm()
         .bind(max_tokens=12_288)
@@ -57,7 +75,12 @@ def get_llm_final():
     )
 
 
+def clear_llm_cache() -> None:
+    _get_llm_cached.cache_clear()
+
+
 __all__ = [
+    "clear_llm_cache",
     "get_llm",
     "get_llm_final",
     "get_llm_with_tools",

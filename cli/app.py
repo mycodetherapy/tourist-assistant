@@ -99,7 +99,9 @@ def _delete_trip_flow(service: TripService) -> None:
         print("Удаление отменено.")
         return
     try:
-        service.delete_trip_by_id(chosen)
+        from db.constants import CLI_LOCAL_USER_ID
+
+        service.delete_trip_by_id(chosen, user_id=CLI_LOCAL_USER_ID)
     except ValueError as exc:
         print(f"Ошибка: {exc}")
         raise SystemExit(1) from exc
@@ -107,7 +109,9 @@ def _delete_trip_flow(service: TripService) -> None:
 
 
 def _choose_trip_from_list(*, prompt: str = "ID поездки для продолжения") -> int | None:
-    trips = list_trips()
+    from db.constants import CLI_LOCAL_USER_ID
+
+    trips = list_trips(user_id=CLI_LOCAL_USER_ID)
     if not trips:
         print("Сохранённых поездок нет. Создайте новую.")
         return None
@@ -309,12 +313,15 @@ def main() -> None:
                 has_profile=profile_data is not None,
                 profile_data=profile_data,
             )
+            from db.constants import CLI_LOCAL_USER_ID
+
             trip_id = service.create_new_trip(
                 city=city_raw,
                 dates=dates_raw,
                 origin_city=origin_raw,
                 user_query=user_message_raw,
                 preferences=prefs,
+                user_id=CLI_LOCAL_USER_ID,
             )
             print(f"Поездка сохранена в БД: id={trip_id}")
             trip = get_trip(trip_id)

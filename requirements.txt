@@ -55,3 +55,9 @@ xxhash==3.7.0
 zstandard==0.25.0
 fastapi==0.115.12
 uvicorn[standard]==0.34.0
+PyJWT==2.10.1
+bcrypt==4.3.0
+cryptography==44.0.2
+authlib==1.5.1
+itsdangerous==2.2.0
+slowapi==0.1.9

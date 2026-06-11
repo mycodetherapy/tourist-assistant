@@ -1,7 +1,25 @@
--- SQLite-схема: поездки, предпочтения, версии программы, лог tools, артефакты поиска.
+-- SQLite-схема: пользователи, поездки, предпочтения, версии программы.
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT,
+    google_sub TEXT UNIQUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    llm_api_key_enc TEXT,
+    llm_base_url TEXT,
+    llm_model TEXT,
+    updated_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS trips (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     city TEXT NOT NULL,
     dates TEXT NOT NULL,
     origin_city TEXT NOT NULL,
@@ -16,9 +34,9 @@ CREATE TABLE IF NOT EXISTS trip_preferences (
     preferences_json TEXT NOT NULL
 );
 
--- Профиль локального пользователя (CLI): последние ответы опросника
+-- Профиль предпочтений опросника (per-user)
 CREATE TABLE IF NOT EXISTS user_profile (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     preferences_json TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -85,6 +103,7 @@ CREATE TABLE IF NOT EXISTS program_item_feedback (
     UNIQUE(trip_id, section, item_key)
 );
 
+-- idx_trips_user создаётся в _migrate_saas_auth (колонка user_id может отсутствовать в legacy-БД)
 CREATE INDEX IF NOT EXISTS idx_trips_updated ON trips(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tool_runs_trip ON tool_runs(trip_id);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_trip ON agent_runs(trip_id);

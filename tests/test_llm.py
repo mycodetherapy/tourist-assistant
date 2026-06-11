@@ -6,7 +6,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from agents.llm import _get_llm_cached
+from agents.llm import clear_llm_cache, get_llm
 from config.settings import DEFAULT_LLM_BASE_URL, LLM_MODEL, is_placeholder_secret
 
 
@@ -25,16 +25,16 @@ class TestLlmConfig(unittest.TestCase):
         clear=False,
     )
     def test_get_llm_uses_env(self) -> None:
-        _get_llm_cached.cache_clear()
-        llm = _get_llm_cached()
+        clear_llm_cache()
+        llm = get_llm()
         self.assertEqual(llm.model_name, "gpt-test")
         self.assertEqual(str(llm.openai_api_base), "https://example.com/v1")
         self.assertEqual(llm.openai_api_key.get_secret_value(), "sk-test-key")
 
     @patch.dict(os.environ, {"LLM_API_KEY": "sk-test-key"}, clear=True)
     def test_get_llm_defaults(self) -> None:
-        _get_llm_cached.cache_clear()
-        llm = _get_llm_cached()
+        clear_llm_cache()
+        llm = get_llm()
         self.assertEqual(llm.model_name, LLM_MODEL)
         self.assertEqual(str(llm.openai_api_base), DEFAULT_LLM_BASE_URL)
 

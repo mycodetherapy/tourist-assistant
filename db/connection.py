@@ -71,6 +71,87 @@ def _migrate_agent_runs_timings(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE agent_runs ADD COLUMN node_timings_json TEXT")
 
 
+def _migrate_saas_auth(conn: sqlite3.Connection) -> None:
+    """Миграция: users, user_settings, user_id в trips, per-user user_profile."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            password_hash TEXT,
+            google_sub TEXT UNIQUE,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            llm_api_key_enc TEXT,
+            llm_base_url TEXT,
+            llm_model TEXT,
+            updated_at TEXT NOT NULL
+        );
+        """
+    )
+    from db.constants import CLI_LOCAL_EMAIL, CLI_LOCAL_USER_ID
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    bootstrap = conn.execute("SELECT id FROM users WHERE id = ?", (CLI_LOCAL_USER_ID,)).fetchone()
+    if bootstrap is None:
+        conn.execute(
+            """
+            INSERT INTO users (id, email, password_hash, google_sub, created_at, updated_at)
+            VALUES (?, ?, NULL, NULL, ?, ?)
+            """,
+            (CLI_LOCAL_USER_ID, CLI_LOCAL_EMAIL, now, now),
+        )
+
+    trip_cols = {r[1] for r in conn.execute("PRAGMA table_info(trips)").fetchall()}
+    if "user_id" not in trip_cols:
+        conn.execute(
+            "ALTER TABLE trips ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE"
+        )
+        conn.execute(
+            "UPDATE trips SET user_id = ? WHERE user_id IS NULL",
+            (CLI_LOCAL_USER_ID,),
+        )
+
+    profile_row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_profile'"
+    ).fetchone()
+    if profile_row is not None:
+        profile_cols = {
+            r[1] for r in conn.execute("PRAGMA table_info(user_profile)").fetchall()
+        }
+        if "id" in profile_cols and "user_id" not in profile_cols:
+            conn.execute("ALTER TABLE user_profile RENAME TO user_profile_legacy")
+            conn.executescript(
+                """
+                CREATE TABLE user_profile (
+                    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                    preferences_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            legacy = conn.execute(
+                "SELECT preferences_json, updated_at FROM user_profile_legacy WHERE id = 1"
+            ).fetchone()
+            if legacy is not None:
+                conn.execute(
+                    """
+                    INSERT INTO user_profile (user_id, preferences_json, updated_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    (CLI_LOCAL_USER_ID, legacy[0], legacy[1]),
+                )
+            conn.execute("DROP TABLE user_profile_legacy")
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_trips_user ON trips(user_id)"
+    )
+
+
 def _migrate_affiliate_clicks(conn: sqlite3.Connection) -> None:
     row = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='affiliate_clicks'"
@@ -99,6 +180,7 @@ def init_db() -> None:
     schema_sql = _SCHEMA_PATH.read_text(encoding="utf-8")
     with connect() as conn:
         conn.executescript(schema_sql)
+        _migrate_saas_auth(conn)
         _migrate_program_item_feedback(conn)
         _migrate_agent_runs_timings(conn)
         _migrate_affiliate_clicks(conn)

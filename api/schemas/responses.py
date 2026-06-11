@@ -89,6 +89,13 @@ class ProfileResponse(BaseModel):
     preferences: TripPreferences | None
 
 
+class SettingsResponse(BaseModel):
+    llm_key_configured: bool
+    llm_key_preview: str | None = None
+    llm_base_url: str
+    llm_model: str
+
+
 class AffiliateMetricsPeriod(BaseModel):
     date_from: str | None = Field(None, alias="from")
     date_to: str | None = Field(None, alias="to")

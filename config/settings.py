@@ -290,3 +290,39 @@ def ensure_env() -> None:
             "Вставьте ключ с https://openrouter.ai/keys.\n"
             "Если ключ был раньше — восстановите из бэкапа или сгенерируйте новый."
         )
+
+
+def ensure_api_env() -> None:
+    """Проверяет env для SaaS API (JWT, шифрование BYOK)."""
+    missing: list[str] = []
+    if not os.getenv("JWT_SECRET", "").strip():
+        missing.append("JWT_SECRET")
+    enc_key = os.getenv("SETTINGS_ENCRYPTION_KEY", "").strip()
+    if not enc_key:
+        missing.append("SETTINGS_ENCRYPTION_KEY")
+    if missing:
+        raise SystemExit(
+            "Ошибка: для API не заданы переменные: "
+            + ", ".join(missing)
+            + ".\nСм. .env.example"
+        )
+    from api.auth.crypto import validate_fernet_key
+
+    try:
+        validate_fernet_key(enc_key)
+    except ValueError as exc:
+        raise SystemExit(f"Ошибка: {exc}") from exc
+
+
+def cors_origins() -> list[str]:
+    """Разрешённые CORS origins (через запятую в CORS_ORIGINS)."""
+    raw = os.getenv("CORS_ORIGINS", "").strip()
+    defaults = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+    ]
+    if not raw:
+        return defaults
+    extra = [part.strip() for part in raw.split(",") if part.strip()]
+    return list(dict.fromkeys(defaults + extra))

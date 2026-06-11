@@ -4,7 +4,7 @@ import { Alert, Button, Card, Empty, Popconfirm, Space, notification } from "ant
 import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { getErrorMessage } from "../api/client";
+import { getErrorMessage, isLlmKeyRequiredError } from "../api/client";
 import type { RebuildScope, ReviewAction } from "../api/types";
 import { deleteTrip, startRun, submitReview } from "../api/trips";
 import { BuildingOverlay } from "../components/BuildingOverlay";
@@ -62,7 +62,7 @@ export function TripDetailPage() {
   });
 
   const rebuildMutation = useMutation({
-    mutationFn: () => startRun(tripId, rebuildScope),
+    mutationFn: (scope: RebuildScope) => startRun(tripId, scope),
     onSuccess: (data) => {
       if (data.run_id) {
         setActiveRunId(data.run_id);
@@ -71,6 +71,14 @@ export function TripDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["trips", tripId] });
     },
     onError: (error) => {
+      if (isLlmKeyRequiredError(error)) {
+        notification.warning({
+          message: "Нужен ключ OpenRouter",
+          description: "Добавьте API-ключ в настройках, затем запустите сборку снова.",
+        });
+        navigate("/settings");
+        return;
+      }
       notification.error({ message: "Ошибка", description: getErrorMessage(error) });
     },
   });
@@ -137,6 +145,13 @@ export function TripDetailPage() {
   const trip = tripQuery.data;
   const showReview = trip.status === "review" && !isBuilding;
   const canRebuild = (trip.status === "review" || trip.status === "approved") && !isBuilding;
+  const hasProgram = !!programQuery.data;
+  const programSettled = !programQuery.isLoading;
+  const canStartBuild =
+    programSettled &&
+    !hasProgram &&
+    !isBuilding &&
+    (trip.status === "draft" || trip.status === "failed");
 
   return (
     <div className="space-y-6">
@@ -167,6 +182,27 @@ export function TripDetailPage() {
 
       <BuildingOverlay visible={isBuilding} runStatus={runQuery.data?.status} />
 
+      {canStartBuild && (
+        <Card title="Сборка программы">
+          <Alert
+            type="info"
+            showIcon
+            className="mb-4"
+            message="Программа ещё не собрана"
+            description="Нажмите кнопку ниже — агент подберёт билеты, маршруты и лайфхаки (1–2 минуты)."
+          />
+          <Button
+            type="primary"
+            block
+            className="sm:!w-auto"
+            loading={rebuildMutation.isPending}
+            onClick={() => rebuildMutation.mutate("full")}
+          >
+            Собрать программу
+          </Button>
+        </Card>
+      )}
+
       {showReview && (
         <Card title="Утверждение программы">
           <ReviewActions
@@ -186,7 +222,7 @@ export function TripDetailPage() {
               block
               className="sm:!w-auto"
               loading={rebuildMutation.isPending}
-              onClick={() => rebuildMutation.mutate()}
+              onClick={() => rebuildMutation.mutate(rebuildScope)}
             >
               Пересобрать раздел
             </Button>
@@ -209,7 +245,7 @@ export function TripDetailPage() {
         </Card>
       )}
 
-      {!programQuery.data && !programQuery.isLoading && !isBuilding && (
+      {!hasProgram && programSettled && !isBuilding && !canStartBuild && (
         <Empty description="Программа ещё не сформирована" />
       )}
     </div>

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from api.deps import get_run_manager, get_trip_service
+from api.auth.service import AuthError, require_user_llm_config
+from api.deps import get_current_user, get_run_manager, get_trip_service
 from api.schemas.requests import (
     AffiliateClickRequest,
     CreateTripRequest,
@@ -24,12 +25,19 @@ from api.schemas.responses import (
     TripDetailResponse,
     TripSummaryResponse,
 )
-from services.trip_service import ProgramView
+from db.users import User
 from onboarding.preferences import TripPreferences, normalize_trip_preferences
 from services.run_manager import RunManager
-from services.trip_service import TripService
+from services.trip_service import ProgramView, TripService
 
 router = APIRouter(prefix="/trips", tags=["trips"])
+
+
+def _llm_key_http_error(exc: AuthError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={"code": "llm_key_required", "message": str(exc)},
+    )
 
 
 def _map_section(view: ProgramView, key: str) -> ProgramSectionResponse:
@@ -76,10 +84,11 @@ def _program_response(view: ProgramView) -> ProgramResponse:
 
 @router.get("", response_model=list[TripSummaryResponse])
 def list_trips(
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
     run_manager: RunManager = Depends(get_run_manager),
 ) -> list[TripSummaryResponse]:
-    for summary in service.list_all_trips():
+    for summary in service.list_all_trips(user.id):
         if summary.status == "building":
             service.recover_stale_building(
                 summary.id,
@@ -94,27 +103,36 @@ def list_trips(
             status=t.status,
             updated_at=t.updated_at,
         )
-        for t in service.list_all_trips()
+        for t in service.list_all_trips(user.id)
     ]
 
 
 @router.post("", response_model=CreateTripResponse, status_code=201)
 def create_trip(
     body: CreateTripRequest,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
     run_manager: RunManager = Depends(get_run_manager),
 ) -> CreateTripResponse:
     preferences = normalize_trip_preferences(body.preferences)
+    llm_config = None
+    if body.start_run:
+        try:
+            llm_config = require_user_llm_config(user.id)
+        except AuthError as exc:
+            raise _llm_key_http_error(exc) from exc
     trip_id = service.create_new_trip(
         city=body.city,
         dates=body.dates,
         origin_city=body.origin_city,
         user_query=body.user_query,
         preferences=preferences,
+        user_id=user.id,
     )
     run_id: str | None = None
     if body.start_run:
-        details = service.get_trip_details(trip_id)
+        assert llm_config is not None
+        details = service.get_trip_details(trip_id, user_id=user.id)
         assert details is not None
         trip = details.trip
         state = service.build_initial_state(
@@ -128,19 +146,21 @@ def create_trip(
             user_message=trip.get("user_query") or body.user_query,
             review_mode="deferred",
         )
-        run_id = run_manager.start_run(state)
+        run_id = run_manager.start_run(state, llm_config=llm_config)
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)
 
 
 @router.delete("/{trip_id}", status_code=204, response_class=Response)
 def delete_trip(
     trip_id: int,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
     run_manager: RunManager = Depends(get_run_manager),
 ) -> Response:
     try:
         service.delete_trip_by_id(
             trip_id,
+            user_id=user.id,
             has_active_run=run_manager.has_active_run_for_trip(trip_id),
         )
     except ValueError as exc:
@@ -155,6 +175,7 @@ def delete_trip(
 @router.get("/{trip_id}", response_model=TripDetailResponse)
 def get_trip(
     trip_id: int,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
     run_manager: RunManager = Depends(get_run_manager),
 ) -> TripDetailResponse:
@@ -162,7 +183,7 @@ def get_trip(
         trip_id,
         has_active_run=run_manager.has_active_run_for_trip(trip_id),
     )
-    details = service.get_trip_details(trip_id)
+    details = service.get_trip_details(trip_id, user_id=user.id)
     if details is None:
         raise HTTPException(status_code=404, detail="Поездка не найдена")
     trip = details.trip
@@ -181,9 +202,12 @@ def get_trip(
 @router.get("/{trip_id}/program", response_model=ProgramResponse)
 def get_program(
     trip_id: int,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
 ) -> ProgramResponse:
-    view = service.get_program_view(trip_id)
+    if service.get_trip_details(trip_id, user_id=user.id) is None:
+        raise HTTPException(status_code=404, detail="Поездка не найдена")
+    view = service.get_program_view(trip_id, user_id=user.id)
     if view is None:
         raise HTTPException(status_code=404, detail="Программа не найдена")
     return _program_response(view)
@@ -193,13 +217,14 @@ def get_program(
 def get_hotel_zones(
     trip_id: int,
     case_id: str | None = None,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
 ) -> HotelZonesResponse:
     """Зоны поиска отелей Booking.com вдоль выбранного маршрута."""
-    details = service.get_trip_details(trip_id)
+    details = service.get_trip_details(trip_id, user_id=user.id)
     if details is None:
         raise HTTPException(status_code=404, detail="Поездка не найдена")
-    view = service.get_program_view(trip_id)
+    view = service.get_program_view(trip_id, user_id=user.id)
     if view is None:
         raise HTTPException(status_code=404, detail="Программа не найдена")
 
@@ -278,8 +303,11 @@ def get_hotel_zones(
 def set_program_feedback(
     trip_id: int,
     body: ItemFeedbackRequest,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
 ) -> ProgramResponse:
+    if service.get_trip_details(trip_id, user_id=user.id) is None:
+        raise HTTPException(status_code=404, detail="Поездка не найдена")
     try:
         service.set_item_feedback(
             trip_id,
@@ -291,7 +319,7 @@ def set_program_feedback(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    view = service.get_program_view(trip_id)
+    view = service.get_program_view(trip_id, user_id=user.id)
     if view is None:
         raise HTTPException(status_code=404, detail="Программа не найдена")
     return _program_response(view)
@@ -301,10 +329,11 @@ def set_program_feedback(
 def log_affiliate_click(
     trip_id: int,
     body: AffiliateClickRequest,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
 ) -> Response:
     """Локальный учёт клика по affiliate-ссылке в блоке билетов."""
-    if service.get_trip_details(trip_id) is None:
+    if service.get_trip_details(trip_id, user_id=user.id) is None:
         raise HTTPException(status_code=404, detail="Поездка не найдена")
     from db.affiliate_repository import log_affiliate_click as persist_click
     from search.affiliate.programs import detect_provider
@@ -329,9 +358,10 @@ def log_affiliate_click(
 @router.get("/{trip_id}/preferences", response_model=TripPreferences | None)
 def get_preferences(
     trip_id: int,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
 ) -> TripPreferences | None:
-    details = service.get_trip_details(trip_id)
+    details = service.get_trip_details(trip_id, user_id=user.id)
     if details is None:
         raise HTTPException(status_code=404, detail="Поездка не найдена")
     if details.preferences is None:
@@ -343,15 +373,21 @@ def get_preferences(
 def start_run(
     trip_id: int,
     body: StartRunRequest,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
     run_manager: RunManager = Depends(get_run_manager),
 ) -> CreateTripResponse:
+    if service.get_trip_details(trip_id, user_id=user.id) is None:
+        raise HTTPException(status_code=404, detail="Поездка не найдена")
     try:
+        llm_config = require_user_llm_config(user.id)
         state = service.prepare_continue_trip(trip_id, body.scope)
+    except AuthError as exc:
+        raise _llm_key_http_error(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     state["review_mode"] = "deferred"
-    run_id = run_manager.start_run(state)
+    run_id = run_manager.start_run(state, llm_config=llm_config)
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)
 
 
@@ -359,20 +395,26 @@ def start_run(
 def submit_review(
     trip_id: int,
     body: ReviewRequest,
+    user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
     run_manager: RunManager = Depends(get_run_manager),
 ) -> ReviewResponse:
+    if service.get_trip_details(trip_id, user_id=user.id) is None:
+        raise HTTPException(status_code=404, detail="Поездка не найдена")
     run_id: str | None = None
     try:
         if body.action == "rebuild":
+            llm_config = require_user_llm_config(user.id)
             state = service.prepare_rebuild_state(trip_id)
-            run_id = run_manager.start_run(state)
+            run_id = run_manager.start_run(state, llm_config=llm_config)
         else:
             service.submit_review(trip_id, body.action)
+    except AuthError as exc:
+        raise _llm_key_http_error(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    details = service.get_trip_details(trip_id)
+    details = service.get_trip_details(trip_id, user_id=user.id)
     status = details.trip["status"] if details else "unknown"
     if body.action == "rebuild":
         status = "building"

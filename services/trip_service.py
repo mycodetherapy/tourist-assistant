@@ -9,6 +9,7 @@ from typing import Any, Callable, Literal
 
 from langchain_core.messages import HumanMessage
 
+from db.constants import CLI_LOCAL_USER_ID
 from db import (
     TripSummary,
     create_trip,
@@ -131,6 +132,7 @@ class TripService:
         origin_city: str,
         user_query: str,
         preferences: TripPreferences,
+        user_id: int,
     ) -> int:
         """Создаёт поездку, сохраняет предпочтения и профиль пользователя."""
         city_v = sanitize_and_validate(city, "city")
@@ -140,8 +142,8 @@ class TripService:
         preferences = normalize_trip_preferences(preferences)
         prefs_dict = preferences.model_dump()
         self.apply_preferences(preferences)
-        save_user_profile(prefs_dict)
-        trip_id = create_trip(city_v, dates_v, origin_v, query_v)
+        save_user_profile(prefs_dict, user_id=user_id)
+        trip_id = create_trip(city_v, dates_v, origin_v, query_v, user_id=user_id)
         save_preferences(trip_id, prefs_dict)
         return trip_id
 
@@ -418,18 +420,24 @@ class TripService:
                 recovered += 1
         return recovered
 
-    def delete_trip_by_id(self, trip_id: int, *, has_active_run: bool = False) -> None:
+    def delete_trip_by_id(
+        self,
+        trip_id: int,
+        *,
+        user_id: int,
+        has_active_run: bool = False,
+    ) -> None:
         """Удаляет поездку из БД. Запрещено во время активного фонового прогона."""
-        if get_trip(trip_id) is None:
+        if get_trip(trip_id, user_id=user_id) is None:
             raise ValueError(f"Поездка #{trip_id} не найдена")
         if has_active_run:
             raise ValueError("Нельзя удалить поездку во время сборки программы")
-        if not delete_trip(trip_id):
+        if not delete_trip(trip_id, user_id=user_id):
             raise ValueError(f"Поездка #{trip_id} не найдена")
 
-    def get_trip_details(self, trip_id: int) -> TripDetails | None:
+    def get_trip_details(self, trip_id: int, *, user_id: int) -> TripDetails | None:
         """Метаданные, предпочтения и последняя программа."""
-        trip = get_trip(trip_id)
+        trip = get_trip(trip_id, user_id=user_id)
         if trip is None:
             return None
         return TripDetails(
@@ -438,11 +446,11 @@ class TripService:
             latest_itinerary=get_latest_itinerary(trip_id),
         )
 
-    def list_all_trips(self, limit: int = 20) -> list[TripSummary]:
-        return list_trips(limit=limit)
+    def list_all_trips(self, user_id: int, limit: int = 20) -> list[TripSummary]:
+        return list_trips(limit=limit, user_id=user_id)
 
-    def get_profile(self) -> dict[str, Any] | None:
-        return get_user_profile()
+    def get_profile(self, user_id: int) -> dict[str, Any] | None:
+        return get_user_profile(user_id)
 
     def parse_program(self, data: dict[str, Any]) -> FinalProgram:
         return FinalProgram.model_validate(normalize_stored_program(data))
@@ -524,9 +532,14 @@ class TripService:
             sections=sections,
         )
 
-    def get_program_view(self, trip_id: int) -> ProgramView | None:
+    def get_program_view(
+        self,
+        trip_id: int,
+        *,
+        user_id: int = CLI_LOCAL_USER_ID,
+    ) -> ProgramView | None:
         """Программа с разбивкой на пункты и сохранёнными оценками."""
-        details = self.get_trip_details(trip_id)
+        details = self.get_trip_details(trip_id, user_id=user_id)
         if details is None or details.latest_itinerary is None:
             return None
         latest = details.latest_itinerary

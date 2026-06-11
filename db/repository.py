@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from db.connection import connect
+from db.constants import CLI_LOCAL_USER_ID
 
 
 def _utc_now() -> str:
@@ -46,6 +47,7 @@ def create_trip(
     origin_city: str,
     user_query: str,
     *,
+    user_id: int = CLI_LOCAL_USER_ID,
     status: str = "draft",
 ) -> int:
     """Создаёт запись поездки и возвращает trip_id."""
@@ -53,19 +55,27 @@ def create_trip(
     with connect() as conn:
         cursor = conn.execute(
             """
-            INSERT INTO trips (city, dates, origin_city, user_query, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO trips (
+                user_id, city, dates, origin_city, user_query, status, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (city, dates, origin_city, user_query, status, now, now),
+            (user_id, city, dates, origin_city, user_query, status, now, now),
         )
         conn.commit()
         return int(cursor.lastrowid)
 
 
-def delete_trip(trip_id: int) -> bool:
+def delete_trip(trip_id: int, *, user_id: int | None = None) -> bool:
     """Удаляет поездку и связанные записи (CASCADE). Возвращает True, если запись была."""
     with connect() as conn:
-        cursor = conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
+        if user_id is not None:
+            cursor = conn.execute(
+                "DELETE FROM trips WHERE id = ? AND user_id = ?",
+                (trip_id, user_id),
+            )
+        else:
+            cursor = conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -107,17 +117,18 @@ def get_preferences(trip_id: int) -> dict[str, Any] | None:
     return json.loads(row["preferences_json"])
 
 
-def _get_profile_from_table() -> dict[str, Any] | None:
+def _get_profile_from_table(user_id: int) -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute(
-            "SELECT preferences_json FROM user_profile WHERE id = 1",
+            "SELECT preferences_json FROM user_profile WHERE user_id = ?",
+            (user_id,),
         ).fetchone()
     if row is None:
         return None
     return json.loads(row["preferences_json"])
 
 
-def get_latest_trip_preferences() -> dict[str, Any] | None:
+def get_latest_trip_preferences(user_id: int = CLI_LOCAL_USER_ID) -> dict[str, Any] | None:
     """
     Предпочтения последней поездки — fallback, если user_profile ещё пуст
     (например, прогон оборвался до save_user_profile).
@@ -128,51 +139,57 @@ def get_latest_trip_preferences() -> dict[str, Any] | None:
             SELECT tp.preferences_json
             FROM trip_preferences tp
             INNER JOIN trips t ON t.id = tp.trip_id
+            WHERE t.user_id = ?
             ORDER BY t.updated_at DESC
             LIMIT 1
             """,
+            (user_id,),
         ).fetchone()
     if row is None:
         return None
     return json.loads(row["preferences_json"])
 
 
-def has_user_profile() -> bool:
+def has_user_profile(user_id: int = CLI_LOCAL_USER_ID) -> bool:
     """True, если опросник уже проходили (профиль или любая поездка с prefs)."""
-    return get_user_profile() is not None
+    return get_user_profile(user_id) is not None
 
 
-def get_user_profile() -> dict[str, Any] | None:
+def get_user_profile(user_id: int = CLI_LOCAL_USER_ID) -> dict[str, Any] | None:
     """Предпочтения: сначала user_profile, иначе последняя поездка с опросником."""
-    profile = _get_profile_from_table()
+    profile = _get_profile_from_table(user_id)
     if profile is not None:
         return profile
-    return get_latest_trip_preferences()
+    return get_latest_trip_preferences(user_id)
 
 
-def ensure_user_profile_from_trips() -> None:
+def ensure_user_profile_from_trips(user_id: int = CLI_LOCAL_USER_ID) -> None:
     """Копирует prefs последней поездки в user_profile, если профиль пуст."""
-    if _get_profile_from_table() is not None:
+    if _get_profile_from_table(user_id) is not None:
         return
-    latest = get_latest_trip_preferences()
+    latest = get_latest_trip_preferences(user_id)
     if latest is not None:
-        save_user_profile(latest)
+        save_user_profile(latest, user_id=user_id)
 
 
-def save_user_profile(preferences: dict[str, Any]) -> None:
-    """Обновляет глобальный профиль предпочтений (id=1)."""
+def save_user_profile(
+    preferences: dict[str, Any],
+    *,
+    user_id: int = CLI_LOCAL_USER_ID,
+) -> None:
+    """Обновляет профиль предпочтений пользователя."""
     payload = json.dumps(preferences, ensure_ascii=False)
     now = _utc_now()
     with connect() as conn:
         conn.execute(
             """
-            INSERT INTO user_profile (id, preferences_json, updated_at)
-            VALUES (1, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
+            INSERT INTO user_profile (user_id, preferences_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
                 preferences_json = excluded.preferences_json,
                 updated_at = excluded.updated_at
             """,
-            (payload, now),
+            (user_id, payload, now),
         )
         conn.commit()
 
@@ -218,18 +235,30 @@ def list_planned_trips(limit: int = 20) -> list[PlannedTripSummary]:
     ]
 
 
-def list_trips(limit: int = 20) -> list[TripSummary]:
-    """Список поездок, новые сверху."""
+def list_trips(limit: int = 20, *, user_id: int | None = None) -> list[TripSummary]:
+    """Список поездок, новые сверху. user_id=None — все (восстановление статусов)."""
     with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT id, city, dates, origin_city, status, updated_at
-            FROM trips
-            ORDER BY updated_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        if user_id is not None:
+            rows = conn.execute(
+                """
+                SELECT id, city, dates, origin_city, status, updated_at
+                FROM trips
+                WHERE user_id = ?
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (user_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, city, dates, origin_city, status, updated_at
+                FROM trips
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
     return [
         TripSummary(
             id=int(r["id"]),
@@ -243,19 +272,34 @@ def list_trips(limit: int = 20) -> list[TripSummary]:
     ]
 
 
-def get_trip(trip_id: int) -> dict[str, Any] | None:
-    """Возвращает поля поездки или None."""
+def get_trip(trip_id: int, *, user_id: int | None = None) -> dict[str, Any] | None:
+    """Возвращает поля поездки или None. user_id — проверка владельца."""
     with connect() as conn:
-        row = conn.execute(
-            """
-            SELECT id, city, dates, origin_city, user_query, status, created_at, updated_at
-            FROM trips WHERE id = ?
-            """,
-            (trip_id,),
-        ).fetchone()
+        if user_id is not None:
+            row = conn.execute(
+                """
+                SELECT id, user_id, city, dates, origin_city, user_query, status,
+                       created_at, updated_at
+                FROM trips WHERE id = ? AND user_id = ?
+                """,
+                (trip_id, user_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT id, user_id, city, dates, origin_city, user_query, status,
+                       created_at, updated_at
+                FROM trips WHERE id = ?
+                """,
+                (trip_id,),
+            ).fetchone()
     if row is None:
         return None
     return dict(row)
+
+
+def trip_belongs_to_user(trip_id: int, user_id: int) -> bool:
+    return get_trip(trip_id, user_id=user_id) is not None
 
 
 def next_version_number(trip_id: int) -> int:
