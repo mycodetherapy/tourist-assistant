@@ -187,6 +187,65 @@
         }
       }
     },
+    "/api/trips/{trip_id}/hotel-zones": {
+      "get": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Get Hotel Zones",
+        "description": "Зоны поиска отелей Booking.com вдоль выбранного маршрута.",
+        "operationId": "get_hotel_zones_api_trips__trip_id__hotel_zones_get",
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          },
+          {
+            "name": "case_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HotelZonesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/trips/{trip_id}/program/feedback": {
       "put": {
         "tags": [
@@ -1023,6 +1082,106 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HotelZoneResponse": {
+        "properties": {
+          "zone_id": {
+            "type": "string",
+            "title": "Zone Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "center_lat": {
+            "type": "number",
+            "title": "Center Lat"
+          },
+          "center_lon": {
+            "type": "number",
+            "title": "Center Lon"
+          },
+          "booking_url": {
+            "type": "string",
+            "title": "Booking Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "zone_id",
+          "label",
+          "case_id",
+          "center_lat",
+          "center_lon",
+          "booking_url"
+        ],
+        "title": "HotelZoneResponse"
+      },
+      "HotelZonesResponse": {
+        "properties": {
+          "trip_id": {
+            "type": "integer",
+            "title": "Trip Id"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "checkin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkin"
+          },
+          "checkout": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkout"
+          },
+          "guests_adults": {
+            "type": "integer",
+            "title": "Guests Adults"
+          },
+          "zones": {
+            "items": {
+              "$ref": "#/components/schemas/HotelZoneResponse"
+            },
+            "type": "array",
+            "title": "Zones"
+          },
+          "widget_configured": {
+            "type": "boolean",
+            "title": "Widget Configured",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "trip_id",
+          "case_id",
+          "city",
+          "guests_adults"
+        ],
+        "title": "HotelZonesResponse"
       },
       "ItemFeedbackRequest": {
         "properties": {

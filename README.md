@@ -66,6 +66,8 @@ npm run dev
 
 Статическая схема в репозитории: `docs/openapi.json` (обновление: `python3 scripts/export_openapi.py`).
 
+**Вкладка «Отели»:** зоны поиска на Booking.com вдоль маршрута A/B/C (bbox из `maps_route_url`), ленивая загрузка `GET /api/trips/{id}/hotel-zones`. По умолчанию — маршрут с лучшим голосом на вкладке «Маршруты». Affiliate: `AFFILIATE_BOOKING=true`, `TRAVELPAYOUTS_MARKER`, `TRAVELPAYOUTS_TRS`. Опционально виджет Travelpayouts: `VITE_TP_BOOKING_WIDGET_HTML` в `web/.env` (см. `web/.env.example`).
+
 Один раз установить автообновление схемы перед коммитом:
 
 ```bash
@@ -226,7 +228,9 @@ python3 -m eval --suite smoke
 | `TRAVELPAYOUTS_MARKER` | Нет | Affiliate ID Travelpayouts (`marker=` в ссылках Aviasales) |
 | `TRAVELPAYOUTS_TRS` | Нет | ID проекта TP для Partner Links API (Tutu bus и др.) |
 | `AFFILIATE_ENABLED` | Нет | `true` — обёртка исходящих ссылок билетов в affiliate |
+| `AFFILIATE_BOOKING` | Нет | `true` — Partner Links API для зон отелей на Booking.com |
 | `AFFILIATE_ADMIN_TOKEN` | Нет | Bearer для `GET /api/affiliate/metrics` и `POST /api/affiliate/sync` |
+| `VITE_TP_BOOKING_WIDGET_HTML` | Нет | (`web/.env`) embed-код виджета Booking.com из Travelpayouts |
 | `POI_USE_WIKIDATA` | Нет | `true` (по умолчанию) — дополнять пул из Wikidata SPARQL |
 | `POI_USE_DISCOVERY` | Нет | `true` (по умолчанию) — веб-поиск названий и fuzzy-match к OSM-пулу |
 | `POI_USE_OVERPASS` | Нет | `false` по умолчанию (Overpass из РФ отвечает слишком долго); `true` — включить OSM Overpass |
@@ -377,11 +381,12 @@ python3 scripts/render_graph.py
 | **Bus.tutu.ru** | Deep links на автобус (`api-bus.tutu.ru` → id и slug в path) |
 | **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
 | **Travelpayouts affiliate** | `marker` в ссылках билетов; sync статистики: `python3 scripts/sync_affiliate_stats.py`; метрики: `/api/affiliate/metrics` |
+| **Booking.com** | Вкладка «Отели»: map-search deep links вдоль маршрута (`search/booking_zones.py`); опционально виджет TP |
 | **OpenStreetMap** (Overpass + Nominatim) | POI с координатами: музеи, парки, памятники в рамке города |
 | **Wikidata SPARQL** | Дополнение известных достопримечательностей (P625) |
 | **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок (без Search API) |
 
-Билеты: `search/ticket_links.py` + `search/providers/avia.py` + `search/affiliate/` (обёртка `marker`, локальные клики). Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. Пул POI: Wikidata Tier 0 целиком + Tier 1 до ~50 (`search/wikidata/places.py`). LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
+Билеты: `search/ticket_links.py` + `search/providers/avia.py` + `search/affiliate/` (обёртка `marker`, локальные клики). Отели: `search/booking_zones.py` + `GET /trips/{id}/hotel-zones`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. Пул POI: Wikidata Tier 0 целиком + Tier 1 до ~50 (`search/wikidata/places.py`). LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
 
 ### Почему нужен именно агент, а не workflow?
 
@@ -526,6 +531,7 @@ tourist-assistant/
 │   ├── hub_coords.py       # координаты IATA-хабов (domestic_hub_coords.json)
 │   ├── domestic_hub_coords.json
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
+│   ├── booking_zones.py    # зоны отелей Booking.com вдоль maps_route_url
 │   ├── affiliate/          # marker, Partner Links API, метрики exposure
 │   ├── transport_codes.py  # коды Tutu/РЖД для URL
 │   ├── providers/avia.py   # Travelpayouts prices_for_dates

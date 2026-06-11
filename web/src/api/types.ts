@@ -129,3 +129,23 @@ export interface ReviewResponse {
 export interface ProfileResponse {
   preferences: TripPreferences | null;
 }
+
+export interface HotelZone {
+  zone_id: string;
+  label: string;
+  case_id: string;
+  center_lat: number;
+  center_lon: number;
+  booking_url: string;
+}
+
+export interface HotelZonesResponse {
+  trip_id: number;
+  case_id: string;
+  city: string;
+  checkin: string | null;
+  checkout: string | null;
+  guests_adults: number;
+  zones: HotelZone[];
+  widget_configured: boolean;
+}

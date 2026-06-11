@@ -41,6 +41,23 @@ function sortKey(item: TripRouteCase): number {
   return 100 + (CASE_ORDER[item.case_id] ?? 50);
 }
 
+/** Порядок как в SQLite / API (для голосов и hotel-zones). */
+export function rawRouteCases(routes: unknown): TripRouteCase[] {
+  if (!routes || typeof routes !== "object") {
+    return [];
+  }
+  const cases = (routes as RouteProgram).cases;
+  if (!Array.isArray(cases)) {
+    return [];
+  }
+  return cases.filter(
+    (item): item is TripRouteCase =>
+      Boolean(item) &&
+      typeof item === "object" &&
+      typeof (item as TripRouteCase).case_id === "string",
+  );
+}
+
 export function parseRouteProgram(routes: unknown): TripRouteCase[] {
   if (!routes || typeof routes !== "object") {
     return [];

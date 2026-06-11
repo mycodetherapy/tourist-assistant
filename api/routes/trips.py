@@ -14,6 +14,8 @@ from api.schemas.requests import (
 )
 from api.schemas.responses import (
     CreateTripResponse,
+    HotelZoneResponse,
+    HotelZonesResponse,
     ProgramItemResponse,
     ProgramResponse,
     ProgramSectionResponse,
@@ -187,6 +189,91 @@ def get_program(
     return _program_response(view)
 
 
+@router.get("/{trip_id}/hotel-zones", response_model=HotelZonesResponse)
+def get_hotel_zones(
+    trip_id: int,
+    case_id: str | None = None,
+    service: TripService = Depends(get_trip_service),
+) -> HotelZonesResponse:
+    """Зоны поиска отелей Booking.com вдоль выбранного маршрута."""
+    details = service.get_trip_details(trip_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail="Поездка не найдена")
+    view = service.get_program_view(trip_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail="Программа не найдена")
+
+    routes = view.program.routes_model()
+    if routes is None or not routes.cases:
+        raise HTTPException(status_code=404, detail="Маршруты не найдены")
+
+    from search.booking_zones import (
+        compute_hotel_zones,
+        find_route_case,
+        pick_case_id_by_vote,
+        resolve_stay_dates,
+    )
+    from search.ticket_passengers import passengers_for_travel_party
+
+    route_section = view.sections.get("routes")
+    route_votes: list[tuple[str, int | None]] = []
+    for idx, case in enumerate(routes.cases):
+        vote = None
+        if route_section and idx < len(route_section.items):
+            vote = route_section.items[idx].vote
+        route_votes.append((str(case.case_id), vote))
+
+    try:
+        selected_case_id = pick_case_id_by_vote(
+            routes,
+            route_votes,
+            override=case_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    case = find_route_case(routes, selected_case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Маршрут не найден")
+
+    prefs = details.preferences or {}
+    party = str(prefs.get("travel_party") or "couple")
+    passengers = passengers_for_travel_party(party)
+    trip = details.trip
+    city = str(trip["city"])
+    dates_raw = str(trip["dates"])
+    checkin, checkout = resolve_stay_dates(dates_raw)
+
+    zones = compute_hotel_zones(
+        case,
+        city=city,
+        dates_raw=dates_raw,
+        passengers=passengers,
+        trip_id=trip_id,
+    )
+
+    return HotelZonesResponse(
+        trip_id=trip_id,
+        case_id=selected_case_id,
+        city=city,
+        checkin=checkin.isoformat() if checkin else None,
+        checkout=checkout.isoformat() if checkout else None,
+        guests_adults=passengers.adults,
+        zones=[
+            HotelZoneResponse(
+                zone_id=z.zone_id,
+                label=z.label,
+                case_id=z.case_id,
+                center_lat=z.center_lat,
+                center_lon=z.center_lon,
+                booking_url=z.booking_url,
+            )
+            for z in zones
+        ],
+        widget_configured=False,
+    )
+
+
 @router.put("/{trip_id}/program/feedback", response_model=ProgramResponse)
 def set_program_feedback(
     trip_id: int,
@@ -224,8 +311,9 @@ def log_affiliate_click(
     from search.affiliate.sub_id import build_sub_id
 
     provider = detect_provider(body.target_url)
+    channel = "hotels" if provider is not None and provider.key == "booking" else "tickets"
     sub_id = (
-        build_sub_id(trip_id, "tickets", provider)
+        build_sub_id(trip_id, channel, provider)
         if provider is not None
         else None
     )

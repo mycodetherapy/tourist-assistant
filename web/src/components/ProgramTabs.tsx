@@ -1,11 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Alert, Grid, Tabs, notification } from "antd";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
-import { parseRouteProgram, routeCaseAtIndex } from "../api/routeTypes";
+import { parseRouteProgram, rawRouteCases, routeCaseAtIndex } from "../api/routeTypes";
 import type { ItemVote, ProgramResponse, VotableSectionKey } from "../api/types";
 import { normalizeTicketsMarkdown } from "../utils/ticketsMarkdown";
+import { HotelsTab } from "./HotelsTab";
 import { ItemVoteButtons } from "./ItemVoteButtons";
 import { RouteCaseDetails } from "./RouteCaseDetails";
 import { RouteMapEmbed } from "./RouteMapEmbed";
@@ -18,7 +20,7 @@ interface ProgramTabsProps {
   votingDisabled?: boolean;
 }
 
-type TabKey = "tickets" | VotableSectionKey;
+type TabKey = "tickets" | "hotels" | VotableSectionKey;
 
 interface TabDef {
   key: TabKey;
@@ -54,6 +56,7 @@ function buildTabs(data: ProgramResponse): TabDef[] {
   return [
     { key: "tickets", label: "Билеты", votable: false },
     { key: "routes", label: routesLabel, votable: true },
+    { key: "hotels", label: "Отели", votable: false },
     { key: "lifehacks", label: "Лайфхаки", votable: true },
   ];
 }
@@ -114,8 +117,10 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
   const screens = useBreakpoint();
   const isMobile = screens.md === false;
   const tabs = buildTabs(data);
+  const [activeTab, setActiveTab] = useState<string>(tabs[0]?.key ?? "tickets");
   const legacy = isLegacyProgram(data);
   const routeCases = parseRouteProgram(data.program.routes);
+  const routeCasesRaw = rawRouteCases(data.program.routes);
   const stopVoteByPoi = new Map(
     (data.sections.route_stops?.items ?? [])
       .filter((item) => item.poi_id)
@@ -231,7 +236,25 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
       <Tabs
         className="program-tabs"
         size="small"
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        destroyInactiveTabPane
         items={tabs.map(({ key, label, votable }) => {
+          if (key === "hotels") {
+            return {
+              key,
+              label,
+              children: (
+                <HotelsTab
+                  tripId={tripId}
+                  routeCasesForVotes={routeCasesRaw}
+                  routeCasesDisplay={routeCases}
+                  routeItems={data.sections.routes.items}
+                />
+              ),
+            };
+          }
+
           if (!votable) {
             return {
               key,

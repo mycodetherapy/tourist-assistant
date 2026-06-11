@@ -2,6 +2,7 @@ import { apiClient } from "./client";
 import type {
   CreateTripPayload,
   CreateTripResponse,
+  HotelZonesResponse,
   ItemFeedbackPayload,
   ProfileResponse,
   ProgramResponse,
@@ -31,6 +32,16 @@ export async function fetchProgram(id: number): Promise<ProgramResponse> {
 
 export async function logAffiliateClick(tripId: number, targetUrl: string): Promise<void> {
   await apiClient.post(`/trips/${tripId}/affiliate-clicks`, { target_url: targetUrl });
+}
+
+export async function fetchHotelZones(
+  tripId: number,
+  caseId?: string,
+): Promise<HotelZonesResponse> {
+  const { data } = await apiClient.get<HotelZonesResponse>(`/trips/${tripId}/hotel-zones`, {
+    params: caseId ? { case_id: caseId } : undefined,
+  });
+  return data;
 }
 
 export async function submitItemFeedback(

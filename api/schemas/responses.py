@@ -124,3 +124,23 @@ class AffiliateMetricsResponse(BaseModel):
     summary: AffiliateMetricsSummary
     by_date: list[AffiliateMetricsByDate]
     by_trip: list[AffiliateMetricsByTrip]
+
+
+class HotelZoneResponse(BaseModel):
+    zone_id: str
+    label: str
+    case_id: str
+    center_lat: float
+    center_lon: float
+    booking_url: str
+
+
+class HotelZonesResponse(BaseModel):
+    trip_id: int
+    case_id: str
+    city: str
+    checkin: str | None = None
+    checkout: str | None = None
+    guests_adults: int
+    zones: list[HotelZoneResponse] = Field(default_factory=list)
+    widget_configured: bool = False
