@@ -48,7 +48,7 @@ npm install
 npm run dev
 ```
 
-Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`. Сначала **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — ключ [OpenRouter](https://openrouter.ai/keys).
+Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`. На главной (`/`) — лендинг с описанием сервиса; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — ключ [OpenRouter](https://openrouter.ai/keys). Список поездок — `/trips`.
 
 **Проверка с телефона (PWA):**
 

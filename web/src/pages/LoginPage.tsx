@@ -13,7 +13,7 @@ export function LoginPage() {
   const onFinish = async (values: { email: string; password: string }) => {
     try {
       await login(values.email, values.password);
-      navigate("/", { replace: true });
+      navigate("/trips", { replace: true });
     } catch (error) {
       notification.error({ title: "Ошибка входа", description: getErrorMessage(error) });
     }

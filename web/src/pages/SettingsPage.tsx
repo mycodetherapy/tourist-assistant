@@ -105,7 +105,7 @@ export function SettingsPage() {
                 Удалить ключ
               </Button>
             ) : null}
-            <Link to="/">
+            <Link to="/trips">
               <Button type="link">К поездкам</Button>
             </Link>
           </div>

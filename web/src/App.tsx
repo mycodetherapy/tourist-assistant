@@ -10,13 +10,14 @@ import { NewTripPage } from "./pages/NewTripPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TripDetailPage } from "./pages/TripDetailPage";
+import { HomeRoute } from "./pages/HomeRoute";
 import { TripListPage } from "./pages/TripListPage";
 
 const { Header, Content } = Layout;
 const { useBreakpoint } = Grid;
 
 const NAV_ITEMS = [
-  { key: "list", label: "Поездки", to: "/" },
+  { key: "list", label: "Поездки", to: "/trips" },
   { key: "new", label: "Новая поездка", to: "/trips/new" },
   { key: "settings", label: "Настройки", to: "/settings" },
 ] as const;
@@ -29,16 +30,18 @@ export default function App() {
   const isMobile = !screens.md;
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const isLandingPage = location.pathname === "/";
   const isAuthPage =
     location.pathname === "/login" ||
     location.pathname === "/register" ||
     location.pathname === "/auth/callback";
+  const hideAppHeader = isLandingPage || isAuthPage;
 
   const selectedKey = location.pathname.startsWith("/settings")
     ? "settings"
     : location.pathname.startsWith("/trips/new")
       ? "new"
-      : location.pathname.startsWith("/trips/")
+      : location.pathname.startsWith("/trips/") && location.pathname !== "/trips"
         ? "trip"
         : "list";
 
@@ -53,7 +56,7 @@ export default function App() {
 
   return (
     <Layout className="min-h-screen flex flex-1 flex-col bg-[#f5f5f5]">
-      {!isAuthPage ? (
+      {!hideAppHeader ? (
         <Header className="app-header flex shrink-0 items-center gap-2 px-3 sm:gap-6 sm:px-6">
           {isMobile ? (
             <Button
@@ -65,7 +68,7 @@ export default function App() {
             />
           ) : null}
           <Link
-            to="/"
+            to="/trips"
             className="flex min-w-0 flex-1 items-center gap-2 text-white text-base font-medium sm:flex-none sm:text-lg"
           >
             <CompassOutlined className="shrink-0" />
@@ -100,7 +103,7 @@ export default function App() {
                 cancelText="Отмена"
                 onConfirm={() => {
                   logout();
-                  navigate("/login", { replace: true });
+                  navigate("/", { replace: true });
                 }}
               >
                 <Button
@@ -123,13 +126,20 @@ export default function App() {
           </Drawer>
         </Header>
       ) : null}
-      <Content className="app-content mx-auto flex flex-1 w-full max-w-5xl flex-col px-3 py-4 sm:px-4 sm:py-6">
+      <Content
+        className={
+          hideAppHeader
+            ? "flex flex-1 flex-col p-0 m-0 max-w-none mx-0 w-full"
+            : "app-content mx-auto flex flex-1 w-full max-w-5xl flex-col px-3 py-4 sm:px-4 sm:py-6"
+        }
+      >
         <Routes>
+          <Route path="/" element={<HomeRoute />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route
-            path="/"
+            path="/trips"
             element={
               <ProtectedRoute>
                 <TripListPage />

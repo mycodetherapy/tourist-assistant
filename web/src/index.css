@@ -176,3 +176,9 @@ body {
     text-align: center;
   }
 }
+
+.landing-hero-glow {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 0%, rgb(14 165 233 / 0.18), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 90% 10%, rgb(99 102 241 / 0.12), transparent 50%);
+}

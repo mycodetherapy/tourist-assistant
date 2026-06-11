@@ -54,7 +54,7 @@ export function TripDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trips"] });
       notification.success({ message: "Поездка удалена" });
-      navigate("/");
+      navigate("/trips");
     },
     onError: (error) => {
       notification.error({ message: "Ошибка", description: getErrorMessage(error) });
