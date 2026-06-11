@@ -15,11 +15,11 @@ export function RouteMapEmbed({ mapsRouteUrl, caseId, title }: RouteMapEmbedProp
   const iframeTitle = title?.trim() || (caseId ? `Маршрут ${caseId}` : "Маршрут на карте");
 
   return (
-    <div className="mb-2 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+    <div className="route-map-embed mb-2 overflow-visible border border-gray-200 bg-gray-50 sm:overflow-hidden sm:rounded-lg">
       <iframe
         src={widgetUrl}
         title={iframeTitle}
-        className="h-[min(360px,50vh)] w-full border-0"
+        className="route-map-iframe w-full border-0"
         loading="lazy"
         allowFullScreen
         referrerPolicy="no-referrer-when-downgrade"

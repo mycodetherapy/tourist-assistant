@@ -49,6 +49,16 @@ npm run dev
 
 Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`.
 
+**Проверка с телефона (PWA):**
+
+1. Mac и телефон в одной Wi‑Fi; запустите API и `npm run dev` (как выше).
+2. В выводе Vite найдите строку **Network** (`http://192.168.x.x:5173`) или узнайте IP: `ipconfig getifaddr en0`.
+3. Откройте этот адрес в Safari/Chrome на телефоне.
+4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
+5. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой».
+
+Без открытия портов: `cloudflared tunnel --url http://localhost:5173`. Через Docker: `docker compose up api web` → `http://<IP-Mac>:5173`.
+
 **Swagger (при запущенном API):**
 
 - Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)

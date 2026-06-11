@@ -56,12 +56,12 @@ export function RouteCaseDetails({
             return (
               <li
                 key={`${stop.order}-${poiId || stop.narrative}`}
-                className="flex items-center gap-1"
+                className="flex flex-wrap items-start gap-x-1 gap-y-0.5"
               >
                 <span className="shrink-0 text-gray-400" aria-hidden>
                   •
                 </span>
-                <span>{stop.narrative}</span>
+                <span className="min-w-0 flex-1">{stop.narrative}</span>
                 {canVote ? (
                   <ItemVoteButtons
                     horizontal

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Alert, Tabs, notification } from "antd";
+import { Alert, Grid, Tabs, notification } from "antd";
 import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
@@ -9,6 +9,8 @@ import { normalizeTicketsMarkdown } from "../utils/ticketsMarkdown";
 import { ItemVoteButtons } from "./ItemVoteButtons";
 import { RouteCaseDetails } from "./RouteCaseDetails";
 import { RouteMapEmbed } from "./RouteMapEmbed";
+
+const { useBreakpoint } = Grid;
 
 interface ProgramTabsProps {
   tripId: number;
@@ -89,6 +91,8 @@ function MarkdownBlock({
 
 export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) {
   const queryClient = useQueryClient();
+  const screens = useBreakpoint();
+  const isMobile = screens.md === false;
   const tabs = buildTabs(data);
   const legacy = isLegacyProgram(data);
   const routeCases = parseRouteProgram(data.program.routes);
@@ -205,6 +209,8 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
         />
       )}
       <Tabs
+        className="program-tabs"
+        size="small"
         items={tabs.map(({ key, label, votable }) => {
           if (!votable) {
             return {
@@ -246,40 +252,69 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
                         sectionKey === "routes" &&
                         routeCase &&
                         Boolean(routeCase.maps_route_url || routeCase.stops.length);
-                      return (
-                      <li
-                        key={`${sectionKey}-${item.item_key}`}
-                        className="flex items-start gap-2 rounded-lg border border-gray-100 bg-white px-2.5 py-2"
-                      >
-                        <div className="min-w-0 flex-1">
-                          {routeCase?.maps_route_url ? (
-                            <RouteMapEmbed
-                              mapsRouteUrl={routeCase.maps_route_url}
-                              caseId={routeCase.case_id}
-                              title={routeCase.title}
-                            />
-                          ) : null}
-                          {useRouteCard ? (
-                            <RouteCaseDetails
-                              routeCase={routeCase}
-                              stopVotes={stopVoteByPoi}
-                              votingDisabled={votingDisabled || voteMutation.isPending}
-                              onStopVote={(_poiId, itemKey, index, vote) =>
-                                handleVote("route_stops", index, itemKey, vote)
-                              }
-                            />
-                          ) : (
-                            <MarkdownBlock text={item.text} className="mb-0" />
-                          )}
-                        </div>
+                      const hasMap = Boolean(routeCase?.maps_route_url);
+                      const detailsBlock = useRouteCard ? (
+                        <RouteCaseDetails
+                          routeCase={routeCase}
+                          stopVotes={stopVoteByPoi}
+                          votingDisabled={votingDisabled || voteMutation.isPending}
+                          onStopVote={(_poiId, itemKey, index, vote) =>
+                            handleVote("route_stops", index, itemKey, vote)
+                          }
+                        />
+                      ) : (
+                        <MarkdownBlock text={item.text} className="mb-0" />
+                      );
+                      const voteButtons = (
                         <ItemVoteButtons
                           vote={item.vote}
+                          horizontal={isMobile}
+                          className={isMobile ? "self-end" : undefined}
                           disabled={votingDisabled || voteMutation.isPending}
                           onVote={(vote) =>
                             handleVote(sectionKey, item.index, item.item_key, vote)
                           }
                         />
-                      </li>
+                      );
+
+                      if (isMobile && hasMap) {
+                        return (
+                          <li
+                            key={`${sectionKey}-${item.item_key}`}
+                            className="route-item--with-map flex flex-col overflow-visible rounded-lg border border-gray-100 bg-white"
+                          >
+                            <RouteMapEmbed
+                              mapsRouteUrl={routeCase!.maps_route_url}
+                              caseId={routeCase!.case_id}
+                              title={routeCase!.title}
+                            />
+                            <div className="route-item-body flex flex-col gap-2">
+                              <div className="min-w-0 flex-1">{detailsBlock}</div>
+                              {voteButtons}
+                            </div>
+                          </li>
+                        );
+                      }
+
+                      return (
+                        <li
+                          key={`${sectionKey}-${item.item_key}`}
+                          className={`flex items-start gap-2 rounded-lg border border-gray-100 bg-white px-2.5 py-2 ${
+                            isMobile ? "flex-col" : ""
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            {routeCase?.maps_route_url ? (
+                              <RouteMapEmbed
+                                mapsRouteUrl={routeCase.maps_route_url}
+                                caseId={routeCase.case_id}
+                                title={routeCase.title}
+                              />
+                            ) : null}
+                            {detailsBlock}
+                          </div>
+                          {voteButtons}
+                        </li>
                       );
                     })}
                   </ul>

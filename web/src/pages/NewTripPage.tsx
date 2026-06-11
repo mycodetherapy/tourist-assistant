@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { Button, Form, Input, Select, Steps, notification } from "antd";
+import { Button, Form, Grid, Input, Select, Steps, notification } from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getErrorMessage } from "../api/client";
@@ -18,8 +18,12 @@ interface TripFormValues {
   travel_party: TripPreferences["travel_party"];
 }
 
+const { useBreakpoint } = Grid;
+
 export function NewTripPage() {
   const navigate = useNavigate();
+  const screens = useBreakpoint();
+  const isMobile = !screens.sm;
   const [step, setStep] = useState(0);
   const [form] = Form.useForm<TripFormValues>();
   const [draft, setDraft] = useState<{
@@ -81,10 +85,11 @@ export function NewTripPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-6">Новая поездка</h1>
+      <h1 className="mb-4 text-xl font-semibold sm:mb-6 sm:text-2xl">Новая поездка</h1>
       <Steps
         current={step}
-        className="mb-8"
+        direction={isMobile ? "vertical" : "horizontal"}
+        className="mb-6 sm:mb-8"
         items={[{ title: "Поездка" }, { title: "Запуск" }]}
       />
 
@@ -137,15 +142,25 @@ export function NewTripPage() {
         />
       )}
 
-      <div className="mt-6 flex gap-3">
-        {step > 0 && <Button onClick={() => setStep(0)}>Назад</Button>}
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:gap-3">
+        {step > 0 && (
+          <Button block className="sm:!w-auto" onClick={() => setStep(0)}>
+            Назад
+          </Button>
+        )}
         {step === 0 && (
-          <Button type="primary" onClick={handleNext}>
+          <Button type="primary" block className="sm:!w-auto" onClick={handleNext}>
             Далее
           </Button>
         )}
         {step === 1 && (
-          <Button type="primary" loading={createMutation.isPending} onClick={handleSubmit}>
+          <Button
+            type="primary"
+            block
+            className="sm:!w-auto"
+            loading={createMutation.isPending}
+            onClick={handleSubmit}
+          >
             Собрать программу
           </Button>
         )}

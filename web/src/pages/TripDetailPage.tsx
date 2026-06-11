@@ -140,7 +140,7 @@ export function TripDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-stretch sm:justify-end">
         <Popconfirm
           title={`Удалить поездку #${trip.id}?`}
           description={`${trip.city}, ${trip.dates}`}
@@ -152,6 +152,8 @@ export function TripDetailPage() {
         >
           <Button
             danger
+            block
+            className="sm:!w-auto"
             icon={<DeleteOutlined />}
             loading={deleteMutation.isPending}
             disabled={isBuilding}
@@ -178,9 +180,11 @@ export function TripDetailPage() {
 
       {canRebuild && (
         <Card title="Частичный пересбор">
-          <Space>
+          <Space wrap className="w-full [&_.ant-space-item]:w-full sm:[&_.ant-space-item]:w-auto">
             <RebuildScopeSelect value={rebuildScope} onChange={setRebuildScope} />
             <Button
+              block
+              className="sm:!w-auto"
               loading={rebuildMutation.isPending}
               onClick={() => rebuildMutation.mutate()}
             >
@@ -194,6 +198,7 @@ export function TripDetailPage() {
 
       {programQuery.data && !isBuilding && (
         <Card
+          className="program-card"
           title={`Программа v${programQuery.data.version} (${programQuery.data.scope})`}
         >
           <ProgramTabs

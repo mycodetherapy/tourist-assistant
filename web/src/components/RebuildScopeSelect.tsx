@@ -1,5 +1,7 @@
-import { Select } from "antd";
+import { Grid, Select } from "antd";
 import type { RebuildScope } from "../api/types";
+
+const { useBreakpoint } = Grid;
 
 const SCOPES: { value: RebuildScope; label: string }[] = [
   { value: "full", label: "Всю программу" },
@@ -14,13 +16,26 @@ interface RebuildScopeSelectProps {
 }
 
 export function RebuildScopeSelect({ value, onChange }: RebuildScopeSelectProps) {
+  const screens = useBreakpoint();
+  const isMobile = screens.md === false;
   const normalized = value === "events" || value === "dining" ? "routes" : value;
   return (
     <Select
       value={normalized}
       onChange={onChange}
       options={SCOPES}
-      className="min-w-[220px]"
+      className="rebuild-scope-select w-full sm:min-w-[220px] sm:w-56"
+      styles={
+        isMobile
+          ? {
+              content: {
+                display: "flex",
+                justifyContent: "center",
+                textAlign: "center",
+              },
+            }
+          : undefined
+      }
     />
   );
 }

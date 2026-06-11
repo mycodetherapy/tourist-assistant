@@ -4,6 +4,7 @@ interface ItemVoteButtonsProps {
   vote: ItemVote | null;
   disabled?: boolean;
   horizontal?: boolean;
+  className?: string;
   onVote: (vote: ItemVote | null) => void;
 }
 
@@ -11,11 +12,12 @@ export function ItemVoteButtons({
   vote,
   disabled,
   horizontal = false,
+  className = "",
   onVote,
 }: ItemVoteButtonsProps) {
   return (
     <div
-      className={`flex shrink-0 ${horizontal ? "flex-row items-center gap-0.5" : "flex-col gap-1 pt-0.5"}`}
+      className={`flex shrink-0 ${horizontal ? "flex-row items-center gap-0.5" : "flex-col gap-1 pt-0.5"} ${className}`}
     >
       <button
         type="button"

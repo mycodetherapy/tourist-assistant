@@ -14,14 +14,14 @@ export function ReviewActions({
   onRebuild,
 }: ReviewActionsProps) {
   return (
-    <Space wrap>
-      <Button type="primary" loading={loading} onClick={onApprove}>
+    <Space wrap className="w-full [&_.ant-space-item]:w-full sm:[&_.ant-space-item]:w-auto">
+      <Button type="primary" block className="sm:!w-auto" loading={loading} onClick={onApprove}>
         Утвердить программу
       </Button>
-      <Button loading={loading} onClick={onRebuild}>
+      <Button block className="sm:!w-auto" loading={loading} onClick={onRebuild}>
         Пересобрать
       </Button>
-      <Button loading={loading} onClick={onSaveDraft}>
+      <Button block className="sm:!w-auto" loading={loading} onClick={onSaveDraft}>
         Сохранить черновик
       </Button>
     </Space>

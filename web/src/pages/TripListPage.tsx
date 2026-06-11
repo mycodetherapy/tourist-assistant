@@ -32,10 +32,10 @@ export function TripListPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold m-0">Поездки</h1>
-        <Link to="/trips/new">
-          <Button type="primary" icon={<PlusOutlined />}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 sm:mb-6">
+        <h1 className="m-0 text-xl font-semibold sm:text-2xl">Поездки</h1>
+        <Link to="/trips/new" className="w-full sm:w-auto">
+          <Button type="primary" icon={<PlusOutlined />} block className="sm:!w-auto">
             Новая поездка
           </Button>
         </Link>
