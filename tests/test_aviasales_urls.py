@@ -21,6 +21,15 @@ class TestAviasalesUrls(unittest.TestCase):
         self.assertIn("destination_airports=1", url)
         self.assertNotIn("?t=DP", url)
 
+    def test_affiliate_marker(self) -> None:
+        url = build_aviasales_search_url(
+            "MOW",
+            "LED",
+            date(2026, 7, 15),
+            affiliate_marker="123456",
+        )
+        self.assertIn("marker=123456", url)
+
 
 if __name__ == "__main__":
     unittest.main()

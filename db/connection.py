@@ -71,6 +71,29 @@ def _migrate_agent_runs_timings(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE agent_runs ADD COLUMN node_timings_json TEXT")
 
 
+def _migrate_affiliate_clicks(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='affiliate_clicks'"
+    ).fetchone()
+    if row is not None:
+        return
+    conn.executescript(
+        """
+        CREATE TABLE affiliate_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+            channel TEXT NOT NULL DEFAULT 'tickets',
+            provider TEXT,
+            target_url TEXT NOT NULL,
+            sub_id TEXT,
+            clicked_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_trip ON affiliate_clicks(trip_id);
+        CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_clicked ON affiliate_clicks(clicked_at DESC);
+        """
+    )
+
+
 def init_db() -> None:
     """Создаёт таблицы по schema.sql, если их ещё нет."""
     schema_sql = _SCHEMA_PATH.read_text(encoding="utf-8")
@@ -78,4 +101,5 @@ def init_db() -> None:
         conn.executescript(schema_sql)
         _migrate_program_item_feedback(conn)
         _migrate_agent_runs_timings(conn)
+        _migrate_affiliate_clicks(conn)
         conn.commit()

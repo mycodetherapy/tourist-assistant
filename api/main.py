@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.deps import get_run_manager, get_trip_service
-from api.routes import profile, runs, trips
+from api.routes import affiliate, profile, runs, trips
 from config.settings import ensure_env
 from db import ensure_user_profile_from_trips, init_db
 
@@ -38,6 +38,10 @@ _OPENAPI_TAGS = [
     {
         "name": "profile",
         "description": "Сохранённый профиль предпочтений пользователя.",
+    },
+    {
+        "name": "affiliate",
+        "description": "Affiliate-метрики и синхронизация Travelpayouts (admin token).",
     },
     {
         "name": "health",
@@ -74,6 +78,7 @@ app.add_middleware(
 app.include_router(trips.router, prefix="/api")
 app.include_router(runs.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
+app.include_router(affiliate.router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])

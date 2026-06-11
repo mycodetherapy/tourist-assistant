@@ -543,6 +543,16 @@ class TripService:
             transport=str(prefs.get("transport_preference") or "mixed"),
             pace=str(prefs.get("pace") or "moderate"),
         )
+        from search.affiliate.config import affiliate_enabled
+        from search.affiliate.wrap import wrap_tickets_markdown
+
+        if affiliate_enabled() and program_data.get("tickets"):
+            program_data = dict(program_data)
+            program_data["tickets"] = wrap_tickets_markdown(
+                str(program_data["tickets"]),
+                trip_id,
+                log_exposure=False,
+            )
         return self.build_program_view(
             trip_id,
             program_data,

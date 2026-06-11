@@ -62,14 +62,28 @@ function MarkdownBlock({
   text,
   className = "mb-4",
   compact = false,
+  tripId,
+  trackAffiliateClicks = false,
 }: {
   text: string;
   className?: string;
   compact?: boolean;
+  tripId?: number;
+  trackAffiliateClicks?: boolean;
 }) {
   if (!text.trim()) {
     return null;
   }
+
+  const handleTicketLinkClick = (href: string | undefined) => {
+    if (!trackAffiliateClicks || !tripId || !href) {
+      return;
+    }
+    void import("../api/trips").then(({ logAffiliateClick }) =>
+      logAffiliateClick(tripId, href).catch(() => undefined),
+    );
+  };
+
   return (
     <div
       className={`prose max-w-none ${compact ? "prose-tickets" : "whitespace-pre-wrap"} ${className}`}
@@ -77,7 +91,13 @@ function MarkdownBlock({
       <ReactMarkdown
         components={{
           a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-600 underline"
+              onClick={() => handleTicketLinkClick(href)}
+            >
               {children}
             </a>
           ),
@@ -217,7 +237,18 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
               key,
               label,
               children: (
-                <MarkdownBlock text={normalizeTicketsMarkdown(data.program.tickets)} compact />
+                <>
+                  <p className="mb-3 text-xs text-gray-500">
+                    Ссылки на агрегаторы билетов партнёрские: при покупке сервис может получить
+                    вознаграждение.
+                  </p>
+                  <MarkdownBlock
+                    text={normalizeTicketsMarkdown(data.program.tickets)}
+                    compact
+                    tripId={tripId}
+                    trackAffiliateClicks
+                  />
+                </>
               ),
             };
           }

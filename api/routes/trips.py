@@ -5,7 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from api.deps import get_run_manager, get_trip_service
-from api.schemas.requests import CreateTripRequest, ItemFeedbackRequest, ReviewRequest, StartRunRequest
+from api.schemas.requests import (
+    AffiliateClickRequest,
+    CreateTripRequest,
+    ItemFeedbackRequest,
+    ReviewRequest,
+    StartRunRequest,
+)
 from api.schemas.responses import (
     CreateTripResponse,
     ProgramItemResponse,
@@ -202,6 +208,34 @@ def set_program_feedback(
     if view is None:
         raise HTTPException(status_code=404, detail="Программа не найдена")
     return _program_response(view)
+
+
+@router.post("/{trip_id}/affiliate-clicks", status_code=204, response_class=Response)
+def log_affiliate_click(
+    trip_id: int,
+    body: AffiliateClickRequest,
+    service: TripService = Depends(get_trip_service),
+) -> Response:
+    """Локальный учёт клика по affiliate-ссылке в блоке билетов."""
+    if service.get_trip_details(trip_id) is None:
+        raise HTTPException(status_code=404, detail="Поездка не найдена")
+    from db.affiliate_repository import log_affiliate_click as persist_click
+    from search.affiliate.programs import detect_provider
+    from search.affiliate.sub_id import build_sub_id
+
+    provider = detect_provider(body.target_url)
+    sub_id = (
+        build_sub_id(trip_id, "tickets", provider)
+        if provider is not None
+        else None
+    )
+    persist_click(
+        trip_id,
+        target_url=body.target_url,
+        provider=provider.key if provider else body.provider,
+        sub_id=sub_id,
+    )
+    return Response(status_code=204)
 
 
 @router.get("/{trip_id}/preferences", response_model=TripPreferences | None)

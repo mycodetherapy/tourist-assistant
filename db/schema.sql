@@ -89,3 +89,46 @@ CREATE INDEX IF NOT EXISTS idx_trips_updated ON trips(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tool_runs_trip ON tool_runs(trip_id);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_trip ON agent_runs(trip_id);
 CREATE INDEX IF NOT EXISTS idx_program_feedback_trip ON program_item_feedback(trip_id);
+
+-- Affiliate: показы monetized-ссылок (локальная метрика exposure).
+CREATE TABLE IF NOT EXISTS affiliate_exposure (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    itinerary_version_id INTEGER REFERENCES itinerary_versions(id) ON DELETE SET NULL,
+    channel TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    provider_label TEXT NOT NULL,
+    sub_id TEXT NOT NULL,
+    links_count INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+
+-- Affiliate: дневная статистика из Travelpayouts (sync).
+CREATE TABLE IF NOT EXISTS affiliate_stats_daily (
+    stat_date TEXT NOT NULL,
+    campaign_id INTEGER NOT NULL DEFAULT 0,
+    campaign_name TEXT,
+    sub_id TEXT NOT NULL DEFAULT '',
+    clicks INTEGER NOT NULL DEFAULT 0,
+    bookings INTEGER NOT NULL DEFAULT 0,
+    revenue_rub REAL NOT NULL DEFAULT 0,
+    synced_at TEXT NOT NULL,
+    PRIMARY KEY (stat_date, campaign_id, sub_id)
+);
+
+-- Affiliate: локальные клики по исходящим ссылкам (до появления в TP API).
+CREATE TABLE IF NOT EXISTS affiliate_clicks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL DEFAULT 'tickets',
+    provider TEXT,
+    target_url TEXT NOT NULL,
+    sub_id TEXT,
+    clicked_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_affiliate_exposure_trip ON affiliate_exposure(trip_id);
+CREATE INDEX IF NOT EXISTS idx_affiliate_exposure_created ON affiliate_exposure(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_affiliate_stats_date ON affiliate_stats_daily(stat_date DESC);
+CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_trip ON affiliate_clicks(trip_id);
+CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_clicked ON affiliate_clicks(clicked_at DESC);

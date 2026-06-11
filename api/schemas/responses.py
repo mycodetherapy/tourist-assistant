@@ -87,3 +87,40 @@ class ReviewResponse(BaseModel):
 
 class ProfileResponse(BaseModel):
     preferences: TripPreferences | None
+
+
+class AffiliateMetricsPeriod(BaseModel):
+    date_from: str | None = Field(None, alias="from")
+    date_to: str | None = Field(None, alias="to")
+
+    model_config = {"populate_by_name": True}
+
+
+class AffiliateMetricsSummary(BaseModel):
+    trips_with_affiliate_links: int
+    local_clicks: int
+    clicks: int
+    bookings: int
+    revenue_rub: float
+
+
+class AffiliateMetricsByDate(BaseModel):
+    date: str
+    local_clicks: int = 0
+    clicks: int
+    bookings: int
+    revenue_rub: float
+
+
+class AffiliateMetricsByTrip(BaseModel):
+    trip_id: int
+    sub_id: str
+    bookings: int
+    revenue_rub: float
+
+
+class AffiliateMetricsResponse(BaseModel):
+    period: AffiliateMetricsPeriod
+    summary: AffiliateMetricsSummary
+    by_date: list[AffiliateMetricsByDate]
+    by_trip: list[AffiliateMetricsByTrip]

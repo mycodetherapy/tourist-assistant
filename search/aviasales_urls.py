@@ -17,6 +17,7 @@ def build_aviasales_search_url(
     return_date: date | None = None,
     *,
     passengers: TicketPassengers | None = None,
+    affiliate_marker: str | None = None,
 ) -> str:
     """
     Страница со всеми рейсами, например:
@@ -39,5 +40,8 @@ def build_aviasales_search_url(
         params["children"] = str(pax.children)
     if pax.infants:
         params["infants"] = str(pax.infants)
+    marker = (affiliate_marker or "").strip()
+    if marker:
+        params["marker"] = marker
     query = urlencode(params)
     return f"{AVIASALES_SITE}/search/{path}?{query}"

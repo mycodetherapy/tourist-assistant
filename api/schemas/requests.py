@@ -31,6 +31,11 @@ class ReviewRequest(BaseModel):
     action: ReviewAction
 
 
+class AffiliateClickRequest(BaseModel):
+    target_url: str = Field(..., min_length=8, max_length=2000)
+    provider: str | None = Field(default=None, max_length=64)
+
+
 class ItemFeedbackRequest(BaseModel):
     version_id: int | None = None
     section: VotableSectionKey

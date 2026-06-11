@@ -29,6 +29,10 @@ export async function fetchProgram(id: number): Promise<ProgramResponse> {
   return data;
 }
 
+export async function logAffiliateClick(tripId: number, targetUrl: string): Promise<void> {
+  await apiClient.post(`/trips/${tripId}/affiliate-clicks`, { target_url: targetUrl });
+}
+
 export async function submitItemFeedback(
   tripId: number,
   payload: ItemFeedbackPayload,

@@ -360,6 +360,13 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
             transport=transport,
             pace=pace,
         )
+    if trip_id is not None and rebuild_scope in ("full", "tickets"):
+        from search.affiliate.wrap import wrap_tickets_markdown
+
+        program_dump["tickets"] = wrap_tickets_markdown(
+            str(program_dump.get("tickets", "")),
+            int(trip_id),
+        )
     program = FinalProgram.model_validate(program_dump)
 
     print_final_program(program)

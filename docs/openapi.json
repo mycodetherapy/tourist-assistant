@@ -239,6 +239,52 @@
         }
       }
     },
+    "/api/trips/{trip_id}/affiliate-clicks": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Log Affiliate Click",
+        "description": "Локальный учёт клика по affiliate-ссылке в блоке билетов.",
+        "operationId": "log_affiliate_click_api_trips__trip_id__affiliate_clicks_post",
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AffiliateClickRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/trips/{trip_id}/preferences": {
       "get": {
         "tags": [
@@ -456,6 +502,165 @@
         }
       }
     },
+    "/api/affiliate/metrics": {
+      "get": {
+        "tags": [
+          "affiliate"
+        ],
+        "summary": "Affiliate Metrics",
+        "description": "Сводка affiliate: exposure локально, доход из синка Travelpayouts.",
+        "operationId": "affiliate_metrics_api_affiliate_metrics_get",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "YYYY-MM-DD",
+              "title": "Date From"
+            },
+            "description": "YYYY-MM-DD"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "YYYY-MM-DD",
+              "title": "Date To"
+            },
+            "description": "YYYY-MM-DD"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliateMetricsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/affiliate/sync": {
+      "post": {
+        "tags": [
+          "affiliate"
+        ],
+        "summary": "Affiliate Sync",
+        "description": "Подтянуть статистику бронирований из Travelpayouts за N дней.",
+        "operationId": "affiliate_sync_api_affiliate_sync_post",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 365,
+              "minimum": 1,
+              "default": 30,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": "Response Affiliate Sync Api Affiliate Sync Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -509,6 +714,187 @@
   },
   "components": {
     "schemas": {
+      "AffiliateClickRequest": {
+        "properties": {
+          "target_url": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 8,
+            "title": "Target Url"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_url"
+        ],
+        "title": "AffiliateClickRequest"
+      },
+      "AffiliateMetricsByDate": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "local_clicks": {
+            "type": "integer",
+            "title": "Local Clicks",
+            "default": 0
+          },
+          "clicks": {
+            "type": "integer",
+            "title": "Clicks"
+          },
+          "bookings": {
+            "type": "integer",
+            "title": "Bookings"
+          },
+          "revenue_rub": {
+            "type": "number",
+            "title": "Revenue Rub"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "clicks",
+          "bookings",
+          "revenue_rub"
+        ],
+        "title": "AffiliateMetricsByDate"
+      },
+      "AffiliateMetricsByTrip": {
+        "properties": {
+          "trip_id": {
+            "type": "integer",
+            "title": "Trip Id"
+          },
+          "sub_id": {
+            "type": "string",
+            "title": "Sub Id"
+          },
+          "bookings": {
+            "type": "integer",
+            "title": "Bookings"
+          },
+          "revenue_rub": {
+            "type": "number",
+            "title": "Revenue Rub"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trip_id",
+          "sub_id",
+          "bookings",
+          "revenue_rub"
+        ],
+        "title": "AffiliateMetricsByTrip"
+      },
+      "AffiliateMetricsPeriod": {
+        "properties": {
+          "from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "type": "object",
+        "title": "AffiliateMetricsPeriod"
+      },
+      "AffiliateMetricsResponse": {
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/AffiliateMetricsPeriod"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AffiliateMetricsSummary"
+          },
+          "by_date": {
+            "items": {
+              "$ref": "#/components/schemas/AffiliateMetricsByDate"
+            },
+            "type": "array",
+            "title": "By Date"
+          },
+          "by_trip": {
+            "items": {
+              "$ref": "#/components/schemas/AffiliateMetricsByTrip"
+            },
+            "type": "array",
+            "title": "By Trip"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "summary",
+          "by_date",
+          "by_trip"
+        ],
+        "title": "AffiliateMetricsResponse"
+      },
+      "AffiliateMetricsSummary": {
+        "properties": {
+          "trips_with_affiliate_links": {
+            "type": "integer",
+            "title": "Trips With Affiliate Links"
+          },
+          "local_clicks": {
+            "type": "integer",
+            "title": "Local Clicks"
+          },
+          "clicks": {
+            "type": "integer",
+            "title": "Clicks"
+          },
+          "bookings": {
+            "type": "integer",
+            "title": "Bookings"
+          },
+          "revenue_rub": {
+            "type": "number",
+            "title": "Revenue Rub"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trips_with_affiliate_links",
+          "local_clicks",
+          "clicks",
+          "bookings",
+          "revenue_rub"
+        ],
+        "title": "AffiliateMetricsSummary"
+      },
       "CreateTripRequest": {
         "properties": {
           "city": {
@@ -1318,6 +1704,10 @@
     {
       "name": "profile",
       "description": "Сохранённый профиль предпочтений пользователя."
+    },
+    {
+      "name": "affiliate",
+      "description": "Affiliate-метрики и синхронизация Travelpayouts (admin token)."
     },
     {
       "name": "health",

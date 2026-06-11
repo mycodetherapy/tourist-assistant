@@ -223,6 +223,10 @@ python3 -m eval --suite smoke
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure`. Для альтернатив через VPN — `OpenAI` |
 | `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`, регион `ru-ru`) |
 | `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
+| `TRAVELPAYOUTS_MARKER` | Нет | Affiliate ID Travelpayouts (`marker=` в ссылках Aviasales) |
+| `TRAVELPAYOUTS_TRS` | Нет | ID проекта TP для Partner Links API (Tutu bus и др.) |
+| `AFFILIATE_ENABLED` | Нет | `true` — обёртка исходящих ссылок билетов в affiliate |
+| `AFFILIATE_ADMIN_TOKEN` | Нет | Bearer для `GET /api/affiliate/metrics` и `POST /api/affiliate/sync` |
 | `POI_USE_WIKIDATA` | Нет | `true` (по умолчанию) — дополнять пул из Wikidata SPARQL |
 | `POI_USE_DISCOVERY` | Нет | `true` (по умолчанию) — веб-поиск названий и fuzzy-match к OSM-пулу |
 | `POI_USE_OVERPASS` | Нет | `false` по умолчанию (Overpass из РФ отвечает слишком долго); `true` — включить OSM Overpass |
@@ -372,11 +376,12 @@ python3 scripts/render_graph.py
 | **РЖД / Tutu.ru** | Deep links на жд (`ticket.rzd.ru`, `tutu.ru/poezda/…`) |
 | **Bus.tutu.ru** | Deep links на автобус (`api-bus.tutu.ru` → id и slug в path) |
 | **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
+| **Travelpayouts affiliate** | `marker` в ссылках билетов; sync статистики: `python3 scripts/sync_affiliate_stats.py`; метрики: `/api/affiliate/metrics` |
 | **OpenStreetMap** (Overpass + Nominatim) | POI с координатами: музеи, парки, памятники в рамке города |
 | **Wikidata SPARQL** | Дополнение известных достопримечательностей (P625) |
 | **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок (без Search API) |
 
-Билеты: `search/ticket_links.py` + `search/providers/avia.py`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. Пул POI: Wikidata Tier 0 целиком + Tier 1 до ~50 (`search/wikidata/places.py`). LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
+Билеты: `search/ticket_links.py` + `search/providers/avia.py` + `search/affiliate/` (обёртка `marker`, локальные клики). Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. Пул POI: Wikidata Tier 0 целиком + Tier 1 до ~50 (`search/wikidata/places.py`). LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
 
 ### Почему нужен именно агент, а не workflow?
 
@@ -521,6 +526,7 @@ tourist-assistant/
 │   ├── hub_coords.py       # координаты IATA-хабов (domestic_hub_coords.json)
 │   ├── domestic_hub_coords.json
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
+│   ├── affiliate/          # marker, Partner Links API, метрики exposure
 │   ├── transport_codes.py  # коды Tutu/РЖД для URL
 │   ├── providers/avia.py   # Travelpayouts prices_for_dates
 │   ├── providers/tutu_bus.py # api-bus.tutu.ru → bus.tutu.ru deep links
