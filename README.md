@@ -2,6 +2,18 @@
 
 Агент составляет **культурную программу поездки** по городу и датам: билеты туда-обратно (самолёт, поезд, автобус), **три альтернативных маршрута** на всю поездку (варианты A/B/C) с досугом из **Wikidata** (координаты для Яндекс.Карт), и лайфхаки. **Билеты** — структурированные **deep links** (`search_roundtrip_tickets`, JSON `schema_version=1`). **Маршруты** — общий пул POI (`search_route_materials`) + structured `routes` и markdown `routes_text`; ссылки на маршрут в картах собирает код (`maps_route_url`). Перед планированием — **опросник** (состав группы; темп и транспорт фиксированы в коде); поездки, предпочтения и версии программы хранятся в **SQLite**. Старые программы с разделами `events`/`dining` по-прежнему отображаются в вебе и CLI.
 
+## Статус и планы
+
+Приложение находится **в стадии активной разработки**. Текущая версия — **минимальная рабочая (MVP)**: агент собирает билеты, три маршрута и лайфхаки, веб и CLI позволяют сохранять поездки, оценивать пункты и пересобирать разделы. Интерфейс, качество маршрутов и интеграции будут дорабатываться.
+
+**Ближайшие планы:**
+
+| Направление | Что планируется |
+|-------------|-----------------|
+| **Отели** | Отдельная вкладка с отелями вдоль маршрута; переход к бронированию (affiliate / партнёрские ссылки) |
+| **Маршруты** | Улучшить построение пешеходных маршрутов на основе выгрузок [Geofabrik](https://download.geofabrik.de/) (OSM: дорожная сеть, пешеходные зоны, точнее км и связность остановок) |
+| **SaaS** | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (вместо локальной SQLite на одного пользователя) |
+
 ## Быстрый старт
 
 ### Требования
@@ -78,14 +90,7 @@ npm run dev
 | **Новая поездка** | Wizard: поездка → запуск → фоновая сборка (polling 1–2 мин) |
 | **Карточка поездки** | Вкладки: билеты, маршруты (A/B/C) с **встроенной картой** Яндекс.Карт + ссылка в описании, лайфхаки; 👍/👎; утверждение / черновик / пересбор / удаление |
 
-**Docker (веб + API):**
-
-```bash
-docker compose build api web
-docker compose up api web
-```
-
-UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health). CLI по-прежнему: `docker compose run --rm app`.
+Docker (веб + API и CLI): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
 **Оценки пунктов (👍/👎):** для **вариантов маршрута и лайфхаков** (билеты — без голосования). В legacy-программах — также мероприятия и питание. Веб: клик → `PUT /api/trips/{id}/program/feedback`; CLI: пункт меню «Оценить пункты» или опционально перед утверждением. Хранение: `program_item_feedback` в `data/trips.db`, ключ по тексту пункта. При пересборе раздела оценки **сбрасываются** у изменённых пунктов; у неизменённых — сохраняются. **Partial rebuild маршрутов (`routes`):** лайкнутые варианты остаются сверху списка без изменений; LLM генерирует **3 новых** (N-A/N-B/N-C). **Полная пересборка (`full`):** лайк маршрута — мягкий ориентир (длина, мотивы), LLM подбирает новые poi_id. Повторный клик по 👍/👎 **снимает оценку** (нейтрально). Оценки маршрута — по тексту варианта; **оценки остановок** — по `poi_id` (👍 учитываются при подборе новых мест, 👎 исключают точку и похожие по типу/названию). Оценки остановок **сохраняются до пересборки** (снимок в начале графа), после сохранения новой программы сбрасываются. Лимит: **10** лайков маршрутов и **40** лайков остановок на поездку. После `docker compose build api web` перезапустите оба контейнера.
 
@@ -102,7 +107,7 @@ cd tourist-assistant
 ./scripts/ensure_env_file.sh
 # или: test -f .env || cp .env.example .env
 
-# Заполните .env в редакторе (LLM_API_KEY, TAVILY_API_KEY, …)
+# Заполните .env в редакторе (LLM_API_KEY и др.)
 
 # Права только для вашего пользователя (рекомендуется):
 chmod 600 .env
@@ -115,7 +120,16 @@ docker compose run --rm app
 
 **LangFuse на хосте:** в `.env` задайте `LANGFUSE_HOST_DOCKER=http://host.docker.internal:3000` — compose подставит его в контейнер `app` (есть `extra_hosts: host-gateway`). Локально без Docker: `LANGFUSE_HOST=http://localhost:3000`.
 
-#### Повторный запуск (`.env` уже есть)
+#### Веб + API
+
+```bash
+docker compose build api web
+docker compose up api web
+```
+
+UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health).
+
+#### Повторный запуск CLI (`.env` уже есть)
 
 ```bash
 docker compose build    # после изменений в коде
@@ -130,19 +144,12 @@ docker compose run --rm app
 docker compose run --rm app python -c "import os; print('LLM_API_KEY', 'set' if os.getenv('LLM_API_KEY') else 'unset')"
 ```
 
-#### Тесты / eval без полного агента
-
-```bash
-docker compose run --rm app python -m unittest discover -s tests -v
-docker compose run --rm app python -m eval --suite smoke
-```
-
 Пример ввода в режиме «Новая поездка»:
 
 - Город: `Санкт-Петербург`
 - Даты: `1-4 августа 2026`
 - Вылет: `Москва` (Enter — по умолчанию)
-- Запрос: `Составь культурную программу, рестораны от 4.7`
+- Запрос: `Составь культурную программу поездки` (фиксирован, как в веб)
 
 ### Меню CLI
 
@@ -151,7 +158,7 @@ docker compose run --rm app python -m eval --suite smoke
 | **Новая поездка** | Город, даты, вылет, состав группы → веб-поиск → программа → **👍/👎 (опционально)** → **утверждение Y/n** |
 | **Продолжить** | Выбор поездки по `id` → что пересобрать (всё или раздел) → снова граф, оценки и HITL |
 | **Показать подробности** | Выбор поездки из списка (с сохранённой программой) → программа и предпочтения из БД **без** поиска и LLM |
-| **Оценить пункты** | Выбор поездки → интерактивные 👍/👎 у мероприятий / питания / лайфхаков (та же БД, что в вебе) |
+| **Оценить пункты** | Выбор поездки → 👍/👎 у маршрутов и лайфхаков (в legacy-программах — также мероприятия и питание; та же БД, что в вебе) |
 | **Удалить поездку** | Выбор поездки по `id` → меню подтверждения (`1` — удалить) → CASCADE в SQLite |
 
 **Опросник (веб — одна форма)**
@@ -172,7 +179,7 @@ docker compose run --rm app python -m eval --suite smoke
 - **`routes`** / **`events`** / **`dining`** — **без нового поиска**: A/B/C пересобираются из сохранённого пула по `poi_id`. Ссылки на карты (`maps_route_url`) заново собираются пост-процессором из координат пула. Для старых поездок без кэша пул восстанавливается из предыдущих маршрутов (координаты из `maps_route_url`). Если пула нет — critic попросит выполнить **`full`**.
 - **`lifehacks`** — без веб-поиска (как раньше).
 
-После сборки программы: разделы **Билеты**, **Мероприятия**, **Питание**, **Лайфхаки** (обычно 1–2 минуты).
+После сборки программы: **Билеты**, **Маршруты** (A/B/C), **Лайфхаки** (обычно 1–2 минуты).
 
 ### Тесты и eval (без полного прогона агента)
 
@@ -200,53 +207,32 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 python3 scripts/refresh_tickets_fixtures.py --suite smoke
 ```
 
-### Benchmark (10+ кейсов)
-
-Минимальный benchmark для диплома лежит в `eval/dataset/smoke.yaml` (**10 кейсов**). Каждый кейс содержит:
-
-- **input**: `city`, `dates`, `origin_city`, `user_query`
-- **expected output**: ожидаемые tools, секции и детерминированные маркеры (ссылки/подписи)
-
-Запуск и success rate:
-
-```bash
-python3 -m eval --suite smoke
-```
-
 ### Переменные окружения
+
+Шаблон: [`.env.example`](.env.example) (совпадает с типовым локальным `.env`).
 
 | Переменная | Обязательно | Описание |
 |------------|-------------|----------|
 | `LLM_API_KEY` | Да* | Ключ [OpenRouter](https://openrouter.ai/keys) (*не нужен для `unittest` и `eval --suite smoke` без `--with-llm`) |
 | `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openrouter.ai/api/v1` |
 | `LLM_MODEL` | Нет | Slug модели на OpenRouter. По умолчанию `openai/gpt-4.1-mini` (см. [Модели LLM](#модели-llm)) |
-| `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure`. Для альтернатив через VPN — `OpenAI` |
-| `TAVILY_API_KEY` | Нет | Точнее веб-поиск; без ключа — DuckDuckGo (`ddgs`, регион `ru-ru`) |
+| `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
 | `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
 | `TRAVELPAYOUTS_MARKER` | Нет | Affiliate ID Travelpayouts (`marker=` в ссылках Aviasales) |
-| `TRAVELPAYOUTS_TRS` | Нет | ID проекта TP для Partner Links API (Tutu bus и др.) |
 | `AFFILIATE_ENABLED` | Нет | `true` — обёртка исходящих ссылок билетов в affiliate |
 | `AFFILIATE_ADMIN_TOKEN` | Нет | Bearer для `GET /api/affiliate/metrics` и `POST /api/affiliate/sync` |
-| `POI_USE_WIKIDATA` | Нет | `true` (по умолчанию) — дополнять пул из Wikidata SPARQL |
-| `POI_USE_DISCOVERY` | Нет | `true` (по умолчанию) — веб-поиск названий и fuzzy-match к OSM-пулу |
-| `POI_USE_OVERPASS` | Нет | `false` по умолчанию (Overpass из РФ отвечает слишком долго); `true` — включить OSM Overpass |
-| `OVERPASS_URL` | Нет | Один URL Overpass; если не задан — цепочка зеркал: `overpass.kumi.systems` → `overpass.private.coffee` → `overpass-api.de` (рекомендация OSM-сообщества для РФ) |
-| `OVERPASS_URLS` | Нет | Список зеркал через запятую (альтернатива `OVERPASS_URL`) |
-| `OVERPASS_TIMEOUT` | Нет | Таймаут Overpass QL `[timeout:…]` в секундах (по умолчанию `60`) |
-| `NOMINATIM_URL` | Нет | Центр/bbox города, по умолчанию `https://nominatim.openstreetmap.org` |
-| `NOMINATIM_USER_AGENT` | Нет | User-Agent для Nominatim (обязателен по ToS OSM) |
-| `YANDEX_MAPS_API_KEY` | Нет | Legacy: API Геокодера **не используется для POI**. Проверка пула: `python3 scripts/test_yandex_maps.py Самара` |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
 | `LANGCHAIN_PROJECT` | Нет | Имя проекта (по умолчанию `tourist-assistant`) |
+| `LANGSMITH_ENDPOINT` | Нет | Кастомный endpoint LangSmith (опционально) |
 | `LANGFUSE_ENABLED` | Нет | `true` — включить трейсы в LangFuse (self-hosted) |
 | `LANGFUSE_HOST` | Нет | LangFuse для локального `python3 main.py`, например `http://localhost:3000` |
-| `LANGFUSE_HOST_DOCKER` | Нет | LangFuse для `docker compose run app`, например `http://host.docker.internal:3000` |
+| `LANGFUSE_HOST_DOCKER` | Нет | LangFuse для Docker, например `http://host.docker.internal:3000` |
 | `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
-Шаблон: [`.env.example`](.env.example).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `TRAVELPAYOUTS_TRS`, `AFFILIATE_AVIASALES`, `AFFILIATE_TUTU_BUS`, `AFFILIATE_TUTU_TRAIN`, `AFFILIATE_BOOKING`; `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (legacy, POI не использует).
 
 ### Модели LLM
 
@@ -401,6 +387,37 @@ python3 scripts/render_graph.py
 - RAG усложнит систему (эмбеддинги, актуализация, качество корпуса), но не решит проблему «актуальность» — всё равно нужен web.
 Если расширять проект дальше, RAG был бы уместен для локальной базы: FAQ по визам/транспорту, чек‑листы, правила пересадок, «best practices» по городу и т.п.
 
+### Сложные и нестандартные ситуации
+
+| Ситуация | Обработка |
+|----------|-----------|
+| **Пустой или нерелевантный поиск** | Фильтр по `SEARCH_FILTERS` + fallback top-8; предупреждение в payload tool |
+| **Ошибка поиска / сети** | `ToolMessage` с ошибкой; граф не падает, `tool_runs` с `live_data=false` |
+| **Prompt-injection во вводе** | `input_validation.sanitize_and_validate` |
+| **Галлюцинации цен** | Билеты: только `offers` из tool; маршруты — только `poi_id` из пула materials |
+| **Нет прямых рейсов** | В `summary_for_llm` — стыковки на агрегаторах; ссылки с IATA и датами |
+| **Зарубежный маршрут** (Москва → Стамбул и т.п.) | IATA из `search/city_codes.py`; POI через Nominatim/Overpass **без** суффикса «Россия»; в билетах только «Самолёт»; critic не требует жд/автобус |
+| **Длинный внутренний маршрут** (>650 км по прямой) | Critic требует самолёт + поезд; **автобус** не обязателен (`BUS_MAX_ROUTE_KM` в `search/transport_codes.py`) |
+| **Короткий внутренний маршрут** (<500 км) | Самолёт не ищем (`PLANE_MIN_ROUTE_KM` в `search/airport_routing.py`); critic требует поезд + автобус |
+| **Город без действующего аэропорта** (Йошкар-Ола и др.) | Ближайший хаб из `search/city_codes.py` (IATA + Nominatim); в подписи ссылки — «аэропорт …» |
+| **Critic не прошёл** | До 2 повторов researcher; затем всё равно HITL с замечаниями |
+| **Пользователь не утвердил (n)** | Пересбор или сохранение черновика (`status=review`) |
+| **Повторный запуск без опросника** | `user_profile` + `trip_preferences`; fallback из последней поездки |
+| **Конфликт категорий** (музей в «Билетах») | Постфильтрация `SEARCH_FILTERS` в `search/web.py` |
+| **Даты в далёком будущем** | В поиске может не быть цен — в ответе ссылки «уточните на сайте» |
+| **Демо-точки вместо POI** | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
+| **Одинаковые маршруты A/B/C** | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → пересбор researcher |
+| **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
+| **Кольцевой маршрут** | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км |
+
+### Как понять, что агент работает хорошо?
+
+| Критерий | Приемлемый результат |
+|----------|----------------------|
+| **Полнота программы** | Билеты, 3 варианта маршрута A/B/C, лайфхаки; в билетах блоки из `offers` (3 для РФ, для зарубежа — самолёт) |
+| **Опора на поиск** | Маршруты A/B/C: сложность по **протяжённости** (A ~2–3.5 км, B ~4–5.5, C ~6–8.5), до 8 плотных leisure-точек; без повторов названий; `maps_route_url` по координатам (иногда кольцевой); POI только из Wikidata/discovery-пула |
+| **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят; в «Продолжить» видна поездка с версией программы |
+
 ---
 
 ## Observability (LangFuse + LangSmith)
@@ -434,9 +451,9 @@ LangSmith можно включить одновременно с LangFuse:
 
 ---
 
-## Метрики (для README диплома)
+## Метрики
 
-- **Success rate**: `python3 -m eval --suite smoke` (10 кейсов)
+- **Success rate**: `python3 -m eval --suite smoke` (10 кейсов в `eval/dataset/smoke.yaml`)
 - **Latency p95 / cost per run**: после нескольких запусков CLI:
 
 ```bash
@@ -447,52 +464,6 @@ python3 -m scripts.metrics_report --trip-id 12
 В `agent_runs` сохраняются `duration_ms`, tokens/cost и **`node_timings`** (JSON: узлы `researcher` / `executor` / `writer` / `critic` / `human_review` + tools).
 
 Примечание: стоимость/токены пишутся через `get_openai_callback()` и могут быть пустыми для не-OpenAI провайдеров.
-
----
-
-## Security checklist
-
-Отметки: ✅ done / ➖ n/a / ⏳ open
-
-- ✅ **Secrets**: ключи только через env (`.env` в `.gitignore`), шаблон — `.env.example`.
-- ✅ **Prompt-injection (user input)**: `sanitize_and_validate` + паттерны `INJECTION_PATTERNS`.
-- ✅ **Tool safety**: tools не выполняют произвольный код и не пишут файлы; выход — строковый payload.
-- ⏳ **Allowlist доменов**: есть смысловой фильтр `SEARCH_FILTERS`, но нет жёсткой allowlist доменов.
-- ⏳ **PII**: в SQLite сохраняются запрос и предпочтения; нет маскирования/политики хранения.
-- ✅ **Ошибки внешних систем**: tool error попадает в `ToolMessage`, граф не падает, `live_data=false` в логах.
-- ⏳ **Rate limiting**: есть таймаут поиска (`SEARCH_TIMEOUT`), но нет общего лимита попыток/бюджета.
-- ➖ **Multi-user auth**: не применимо (локальный CLI).
-
-### Сложные и нестандартные ситуации
-
-| Ситуация | Обработка |
-|----------|-----------|
-| **Пустой или нерелевантный поиск** | Фильтр по `SEARCH_FILTERS` + fallback top-8; предупреждение в payload tool |
-| **Ошибка поиска / сети** | `ToolMessage` с ошибкой; граф не падает, `tool_runs` с `live_data=false` |
-| **Prompt-injection во вводе** | `input_validation.sanitize_and_validate` |
-| **Галлюцинации цен** | Билеты: только `offers` из tool; афиша/рестораны — цены из `digest` |
-| **Нет прямых рейсов** | В `summary_for_llm` — стыковки на агрегаторах; ссылки с IATA и датами |
-| **Зарубежный маршрут** (Москва → Стамбул и т.п.) | IATA из `search/city_codes.py`; POI через Nominatim/Overpass **без** суффикса «Россия»; в билетах только «Самолёт»; critic не требует жд/автобус |
-| **Длинный внутренний маршрут** (>650 км по прямой) | Critic требует самолёт + поезд; **автобус** не обязателен (`BUS_MAX_ROUTE_KM` в `search/transport_codes.py`) |
-| **Короткий внутренний маршрут** (<500 км) | Самолёт не ищем (`PLANE_MIN_ROUTE_KM` в `search/airport_routing.py`); critic требует поезд + автобус |
-| **Город без действующего аэропорта** (Йошкар-Ола и др.) | Ближайший хаб из `search/city_codes.py` (IATA + Nominatim); в подписи ссылки — «аэропорт …» |
-| **Critic не прошёл** | До 2 повторов researcher; затем всё равно HITL с замечаниями |
-| **Пользователь не утвердил (n)** | Пересбор или сохранение черновика (`status=review`) |
-| **Повторный запуск без опросника** | `user_profile` + `trip_preferences`; fallback из последней поездки |
-| **Конфликт категорий** (музей в «Билетах») | Постфильтрация `SEARCH_FILTERS` в `search/web.py` |
-| **Даты в далёком будущем** | В поиске может не быть цен — в ответе ссылки «уточните на сайте» |
-| **Демо-точки вместо POI** | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
-| **Одинаковые маршруты A/B/C** | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → пересбор researcher |
-| **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
-| **Кольцевой маршрут** | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км |
-
-### Как понять, что агент работает хорошо?
-
-| Критерий | Приемлемый результат |
-|----------|----------------------|
-| **Полнота программы** | Билеты, 3 варианта маршрута A/B/C, лайфхаки; в билетах блоки из `offers` (3 для РФ, для зарубежа — самолёт) |
-| **Опора на поиск** | Маршруты A/B/C: сложность по **протяжённости** (A ~2–3.5 км, B ~4–5.5, C ~6–8.5), до 8 плотных leisure-точек; без повторов названий; `maps_route_url` по координатам (иногда кольцевой); питание — «Искать вдоль маршрута» в Яндекс.Картах |
-| **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят; в «Продолжить» видна поездка с версией программы |
 
 ---
 
