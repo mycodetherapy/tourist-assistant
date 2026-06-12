@@ -71,6 +71,49 @@ def _migrate_agent_runs_timings(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE agent_runs ADD COLUMN node_timings_json TEXT")
 
 
+def _migrate_user_profile(conn: sqlite3.Connection) -> None:
+    """Legacy SaaS: user_profile(user_id) → локальный singleton id=1."""
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_profile'"
+    ).fetchone()
+    if row is None:
+        return
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(user_profile)").fetchall()}
+    if "id" in columns:
+        return
+    if "user_id" not in columns:
+        return
+
+    legacy_row = conn.execute(
+        """
+        SELECT preferences_json, updated_at
+        FROM user_profile
+        ORDER BY CASE WHEN user_id = 1 THEN 0 ELSE 1 END, updated_at DESC
+        LIMIT 1
+        """
+    ).fetchone()
+
+    conn.execute("ALTER TABLE user_profile RENAME TO user_profile_legacy")
+    conn.executescript(
+        """
+        CREATE TABLE user_profile (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            preferences_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        """
+    )
+    if legacy_row is not None:
+        conn.execute(
+            """
+            INSERT INTO user_profile (id, preferences_json, updated_at)
+            VALUES (1, ?, ?)
+            """,
+            (legacy_row[0], legacy_row[1]),
+        )
+    conn.execute("DROP TABLE user_profile_legacy")
+
+
 def _migrate_affiliate_clicks(conn: sqlite3.Connection) -> None:
     row = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='affiliate_clicks'"
@@ -101,5 +144,6 @@ def init_db() -> None:
         conn.executescript(schema_sql)
         _migrate_program_item_feedback(conn)
         _migrate_agent_runs_timings(conn)
+        _migrate_user_profile(conn)
         _migrate_affiliate_clicks(conn)
         conn.commit()

@@ -6,7 +6,7 @@ import os
 import tempfile
 import unittest
 
-from db.connection import init_db
+from db.connection import connect, init_db
 from db.repository import (
     create_trip,
     delete_trip,
@@ -102,6 +102,29 @@ class TestRepository(unittest.TestCase):
         profile = get_user_profile()
         assert profile is not None
         self.assertEqual(profile["pace"], "packed")
+
+    def test_migrate_legacy_user_profile(self) -> None:
+        """Старая SaaS-схема user_profile(user_id) мигрирует в id=1."""
+        with connect() as conn:
+            conn.executescript(
+                """
+                DROP TABLE IF EXISTS user_profile;
+                CREATE TABLE user_profile (
+                    user_id INTEGER PRIMARY KEY,
+                    preferences_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                INSERT INTO user_profile (user_id, preferences_json, updated_at)
+                VALUES (2, '{"pace": "old"}', '2026-01-01T00:00:00+00:00');
+                INSERT INTO user_profile (user_id, preferences_json, updated_at)
+                VALUES (1, '{"pace": "current"}', '2026-06-01T00:00:00+00:00');
+                """
+            )
+            conn.commit()
+        init_db()
+        profile = get_user_profile()
+        assert profile is not None
+        self.assertEqual(profile["pace"], "current")
 
 
 if __name__ == "__main__":
