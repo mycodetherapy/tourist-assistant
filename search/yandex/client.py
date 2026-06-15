@@ -77,6 +77,18 @@ def geocode_places(
         return []
 
 
+def reverse_geocode_label(lat: float, lon: float, *, city_hint: str = "") -> str | None:
+    """Адрес по координатам (Yandex Geocoder: geocode=lon,lat)."""
+    _ = city_hint
+    features = geocode_places(f"{lon},{lat}", results=1)
+    if not features:
+        return None
+    props = features[0].get("properties") or {}
+    meta = props.get("CompanyMetaData") or {}
+    label = str(meta.get("address") or props.get("description") or props.get("name") or "").strip()
+    return label or None
+
+
 def _geo_member_to_feature(member: dict[str, Any]) -> dict[str, Any]:
     obj = member.get("GeoObject") or {}
     pos = str(obj.get("Point", {}).get("pos", ""))

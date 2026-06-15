@@ -33,6 +33,24 @@ _MIN_ROUTE_KM_MEDIUM = 3.0
 _MIN_ROUTE_KM_SHORT = 1.5
 _MAX_ROUTE_KM_SHORT = 4.0
 _ROUTE_MIN_STOPS = 3
+
+
+def _route_anchor_kwargs(route_anchor: Any | None = None) -> dict[str, float | bool]:
+    """Параметры базовой точки для build_maps_route_url."""
+    if route_anchor is None:
+        from search.context import get_session_preferences
+
+        prefs = get_session_preferences()
+        route_anchor = prefs.route_anchor if prefs else None
+    if route_anchor is None:
+        return {}
+    return {
+        "anchor_lat": float(route_anchor.lat),
+        "anchor_lon": float(route_anchor.lon),
+        "anchor_loop_end": bool(route_anchor.loop_end),
+    }
+
+
 _ROUTE_MAX_STOPS = 8
 # Целевая плотность при densify: ~1 остановка на 300–400 м пути.
 _KM_PER_STOP_DENSE = 0.35
@@ -1061,6 +1079,7 @@ def backfill_route_maps_only(
     materials: RouteMaterials,
     *,
     transport: str = "mixed",
+    route_anchor: Any | None = None,
 ) -> RouteProgram:
     """Заполняет maps_route_url по уже выбранным остановкам, без переподбора POI."""
     if not _needs_maps_backfill(program):
@@ -1116,6 +1135,7 @@ def backfill_route_maps_only(
                 transport=transport,
                 max_stops=profile.max_stops + (1 if close_loop else 0),
                 close_loop=close_loop,
+                **_route_anchor_kwargs(route_anchor),
             )
         cases.append(
             case.model_copy(
@@ -1208,6 +1228,7 @@ def _finalize_case_from_indices(
                 transport=transport,
                 max_stops=profile.max_stops + (1 if close_loop else 0),
                 close_loop=close_loop,
+                **_route_anchor_kwargs(),
             ),
         }
     )

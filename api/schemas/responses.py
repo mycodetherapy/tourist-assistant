@@ -133,21 +133,23 @@ class AffiliateMetricsResponse(BaseModel):
     by_trip: list[AffiliateMetricsByTrip]
 
 
-class HotelZoneResponse(BaseModel):
-    zone_id: str
+class GeocodeResultResponse(BaseModel):
+    lat: float
+    lon: float
     label: str
-    case_id: str
-    center_lat: float
-    center_lon: float
-    booking_url: str
 
 
-class HotelZonesResponse(BaseModel):
-    trip_id: int
-    case_id: str
-    city: str
-    checkin: str | None = None
-    checkout: str | None = None
-    guests_adults: int
-    zones: list[HotelZoneResponse] = Field(default_factory=list)
-    widget_configured: bool = False
+class GeocodeResponse(BaseModel):
+    results: list[GeocodeResultResponse] = Field(default_factory=list)
+
+
+class CityCenterResponse(BaseModel):
+    lat: float
+    lon: float
+    label: str
+
+
+class ReverseGeocodeResponse(BaseModel):
+    lat: float
+    lon: float
+    label: str

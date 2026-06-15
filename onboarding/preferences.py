@@ -19,6 +19,21 @@ TRAVEL_PARTY_VALUES = (
     "family_two",
 )
 
+RouteAnchorSource = Literal["address", "coordinates", "map"]
+
+
+class RouteAnchor(BaseModel):
+    """Базовая точка маршрута (отель, квартира, вокзал)."""
+
+    lat: float = Field(..., ge=-90.0, le=90.0)
+    lon: float = Field(..., ge=-180.0, le=180.0)
+    label: str = Field(default="", max_length=500)
+    source: RouteAnchorSource = "map"
+    loop_end: bool = Field(
+        default=False,
+        description="Конечная точка совпадает с базовой (кольцо через anchor)",
+    )
+
 
 class TripPreferences(BaseModel):
     """Результат опросника перед планированием программы."""
@@ -61,6 +76,10 @@ class TripPreferences(BaseModel):
         default="",
         description="Legacy: доп. пожелания",
     )
+    route_anchor: RouteAnchor | None = Field(
+        default=None,
+        description="Базовая точка маршрута; null — не задана",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -90,12 +109,27 @@ class TripPreferences(BaseModel):
         return merged
 
 
+def _parse_route_anchor(raw: Any) -> RouteAnchor | None:
+    if raw is None:
+        return None
+    if isinstance(raw, RouteAnchor):
+        return raw
+    if isinstance(raw, dict):
+        try:
+            return RouteAnchor.model_validate(raw)
+        except Exception:
+            return None
+    return None
+
+
 def normalize_trip_preferences(data: TripPreferences | dict[str, Any]) -> TripPreferences:
-    """Скрытые поля фиксированы; из UI/профиля берётся только travel_party."""
+    """Скрытые поля фиксированы; из UI — travel_party и route_anchor."""
     if isinstance(data, TripPreferences):
         party = data.travel_party
+        route_anchor = data.route_anchor
     else:
         party = str(data.get("travel_party") or "couple")
+        route_anchor = _parse_route_anchor(data.get("route_anchor"))
     if party not in TRAVEL_PARTY_VALUES:
         party = "couple"
     return TripPreferences(
@@ -107,6 +141,34 @@ def normalize_trip_preferences(data: TripPreferences | dict[str, Any]) -> TripPr
         transport_preference=FIXED_TRANSPORT,
         travel_party=party,  # type: ignore[arg-type]
         special_notes="",
+        route_anchor=route_anchor,
+    )
+
+
+def merge_trip_preferences(
+    existing: TripPreferences | dict[str, Any] | None,
+    update: dict[str, Any],
+) -> TripPreferences:
+    """Обновляет предпочтения поездки, сохраняя фиксированные поля."""
+    base = normalize_trip_preferences(existing or {})
+    party = base.travel_party
+    if "travel_party" in update:
+        candidate = str(update.get("travel_party") or party)
+        if candidate in TRAVEL_PARTY_VALUES:
+            party = candidate  # type: ignore[assignment]
+    route_anchor = base.route_anchor
+    if "route_anchor" in update:
+        route_anchor = _parse_route_anchor(update.get("route_anchor"))
+    return TripPreferences(
+        pace=FIXED_PACE,
+        budget=FIXED_BUDGET,
+        interests=[],
+        cuisine="",
+        min_restaurant_rating=4.0,
+        transport_preference=FIXED_TRANSPORT,
+        travel_party=party,
+        special_notes="",
+        route_anchor=route_anchor,
     )
 
 

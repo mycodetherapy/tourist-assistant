@@ -1,15 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Alert, Grid, Tabs, notification } from "antd";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
 import { parseRouteProgram, rawRouteCases, routeCaseAtIndex } from "../api/routeTypes";
 import type { ItemVote, ProgramResponse, VotableSectionKey } from "../api/types";
+import { pickPreferredCaseId } from "../utils/routeVotes";
 import { normalizeTicketsMarkdown } from "../utils/ticketsMarkdown";
-import { HotelsTab } from "./HotelsTab";
 import { ItemVoteButtons } from "./ItemVoteButtons";
+import { RouteAnchorSummary } from "./RouteAnchorSummary";
 import { RouteCaseDetails } from "./RouteCaseDetails";
+import { RouteCaseSwitcher } from "./RouteCaseSwitcher";
 import { RouteMapEmbed } from "./RouteMapEmbed";
 
 const { useBreakpoint } = Grid;
@@ -20,7 +22,7 @@ interface ProgramTabsProps {
   votingDisabled?: boolean;
 }
 
-type TabKey = "tickets" | "hotels" | VotableSectionKey;
+type TabKey = "tickets" | VotableSectionKey;
 
 interface TabDef {
   key: TabKey;
@@ -56,7 +58,6 @@ function buildTabs(data: ProgramResponse): TabDef[] {
   return [
     { key: "tickets", label: "Билеты", votable: false },
     { key: "routes", label: routesLabel, votable: true },
-    { key: "hotels", label: "Отели", votable: false },
     { key: "lifehacks", label: "Лайфхаки", votable: true },
   ];
 }
@@ -121,6 +122,14 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
   const legacy = isLegacyProgram(data);
   const routeCases = parseRouteProgram(data.program.routes);
   const routeCasesRaw = rawRouteCases(data.program.routes);
+  const defaultRouteCaseId = useMemo(
+    () => pickPreferredCaseId(routeCasesRaw, data.sections.routes.items),
+    [routeCasesRaw, data.sections.routes.items],
+  );
+  const [selectedRouteCaseId, setSelectedRouteCaseId] = useState<string | undefined>(
+    defaultRouteCaseId,
+  );
+  const activeRouteCaseId = selectedRouteCaseId ?? defaultRouteCaseId;
   const stopVoteByPoi = new Map(
     (data.sections.route_stops?.items ?? [])
       .filter((item) => item.poi_id)
@@ -240,21 +249,6 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
         onChange={setActiveTab}
         destroyInactiveTabPane
         items={tabs.map(({ key, label, votable }) => {
-          if (key === "hotels") {
-            return {
-              key,
-              label,
-              children: (
-                <HotelsTab
-                  tripId={tripId}
-                  routeCasesForVotes={routeCasesRaw}
-                  routeCasesDisplay={routeCases}
-                  routeItems={data.sections.routes.items}
-                />
-              ),
-            };
-          }
-
           if (!votable) {
             return {
               key,
@@ -285,19 +279,35 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
               ? data.program.routes_text
               : "";
 
+          const visibleItems =
+            isMobile && sectionKey === "routes" && activeRouteCaseId
+              ? section.items.filter((item) => {
+                  const routeCase = routeCaseAtIndex(routeCasesRaw, item.index);
+                  return routeCase && String(routeCase.case_id) === activeRouteCaseId;
+                })
+              : section.items;
+
           return {
             key,
             label,
             children: (
               <div>
+                {sectionKey === "routes" && !legacy && <RouteAnchorSummary tripId={tripId} />}
+                {isMobile && sectionKey === "routes" && routeCases.length > 1 && (
+                  <RouteCaseSwitcher
+                    cases={routeCases}
+                    value={activeRouteCaseId ?? String(routeCases[0]?.case_id)}
+                    onChange={setSelectedRouteCaseId}
+                  />
+                )}
                 <MarkdownBlock text={section.intro} />
                 {section.items.length === 0 && routesFallback ? (
                   <MarkdownBlock text={routesFallback} />
-                ) : section.items.length === 0 ? (
+                ) : visibleItems.length === 0 ? (
                   <p className="text-gray-500">Нет пунктов в этой секции.</p>
                 ) : (
                   <ul className="space-y-2">
-                    {section.items.map((item) => {
+                    {visibleItems.map((item) => {
                       const routeCase =
                         sectionKey === "routes"
                           ? routeCaseAtIndex(routeCases, item.index)

@@ -41,7 +41,7 @@ function sortKey(item: TripRouteCase): number {
   return 100 + (CASE_ORDER[item.case_id] ?? 50);
 }
 
-/** Порядок как в SQLite / API (для голосов и hotel-zones). */
+/** Порядок как в SQLite / API (для голосов). */
 export function rawRouteCases(routes: unknown): TripRouteCase[] {
   if (!routes || typeof routes !== "object") {
     return [];

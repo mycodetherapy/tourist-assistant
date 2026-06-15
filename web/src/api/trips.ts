@@ -1,8 +1,9 @@
 import { apiClient } from "./client";
 import type {
+  CityCenter,
   CreateTripPayload,
   CreateTripResponse,
-  HotelZonesResponse,
+  GeocodeResult,
   ItemFeedbackPayload,
   ProfileResponse,
   ProgramResponse,
@@ -13,6 +14,7 @@ import type {
   TripDetail,
   TripPreferences,
   TripSummary,
+  UpdatePreferencesPayload,
 } from "./types";
 
 export async function fetchTrips(): Promise<TripSummary[]> {
@@ -34,16 +36,6 @@ export async function logAffiliateClick(tripId: number, targetUrl: string): Prom
   await apiClient.post(`/trips/${tripId}/affiliate-clicks`, { target_url: targetUrl });
 }
 
-export async function fetchHotelZones(
-  tripId: number,
-  caseId?: string,
-): Promise<HotelZonesResponse> {
-  const { data } = await apiClient.get<HotelZonesResponse>(`/trips/${tripId}/hotel-zones`, {
-    params: caseId ? { case_id: caseId } : undefined,
-  });
-  return data;
-}
-
 export async function submitItemFeedback(
   tripId: number,
   payload: ItemFeedbackPayload,
@@ -62,6 +54,69 @@ export async function fetchProfile(): Promise<ProfileResponse> {
 
 export async function fetchPreferences(id: number): Promise<TripPreferences | null> {
   const { data } = await apiClient.get<TripPreferences | null>(`/trips/${id}/preferences`);
+  return data;
+}
+
+export async function updatePreferences(
+  tripId: number,
+  payload: UpdatePreferencesPayload,
+): Promise<TripPreferences> {
+  const { data } = await apiClient.put<TripPreferences>(`/trips/${tripId}/preferences`, payload);
+  return data;
+}
+
+export async function fetchCityCenter(tripId: number): Promise<CityCenter> {
+  const { data } = await apiClient.get<CityCenter>(`/trips/${tripId}/city-center`);
+  return data;
+}
+
+export async function geocodeAddress(
+  tripId: number,
+  query: string,
+  cityHint = "",
+): Promise<{ results: GeocodeResult[] }> {
+  const { data } = await apiClient.post<{ results: GeocodeResult[] }>(
+    `/trips/${tripId}/geocode`,
+    { query, city_hint: cityHint },
+  );
+  return data;
+}
+
+export async function geocodeQuery(
+  query: string,
+  cityHint: string,
+): Promise<{ results: GeocodeResult[] }> {
+  const { data } = await apiClient.post<{ results: GeocodeResult[] }>("/trips/geocode", {
+    query,
+    city_hint: cityHint,
+  });
+  return data;
+}
+
+export async function reverseGeocodeAddress(
+  tripId: number,
+  lat: number,
+  lon: number,
+  cityHint = "",
+): Promise<GeocodeResult> {
+  const { data } = await apiClient.post<GeocodeResult>(`/trips/${tripId}/reverse-geocode`, {
+    lat,
+    lon,
+    city_hint: cityHint,
+  });
+  return data;
+}
+
+export async function reverseGeocodeQuery(
+  lat: number,
+  lon: number,
+  cityHint: string,
+): Promise<GeocodeResult> {
+  const { data } = await apiClient.post<GeocodeResult>("/trips/reverse-geocode", {
+    lat,
+    lon,
+    city_hint: cityHint,
+  });
   return data;
 }
 

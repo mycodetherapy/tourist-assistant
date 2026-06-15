@@ -55,5 +55,5 @@ def affiliate_tutu_train_enabled() -> bool:
     return affiliate_enabled() and _env_bool("AFFILIATE_TUTU_TRAIN", default=False)
 
 
-def affiliate_booking_enabled() -> bool:
-    return affiliate_enabled() and _env_bool("AFFILIATE_BOOKING", default=False)
+def affiliate_yandex_travel_enabled() -> bool:
+    return affiliate_enabled() and _env_bool("AFFILIATE_YANDEX_TRAVEL", default=True)

@@ -527,8 +527,23 @@ def repair_program_routes(
         return program
 
     from agents.route_postprocess import backfill_route_maps_only, format_routes_text
+    from onboarding.preferences import RouteAnchor
 
-    repaired = backfill_route_maps_only(current, materials, transport=transport)
+    route_anchor: RouteAnchor | None = None
+    if trip_id is not None:
+        from db import get_preferences
+
+        prefs_raw = get_preferences(trip_id) or {}
+        anchor_raw = prefs_raw.get("route_anchor")
+        if anchor_raw:
+            try:
+                route_anchor = RouteAnchor.model_validate(anchor_raw)
+            except Exception:
+                route_anchor = None
+
+    repaired = backfill_route_maps_only(
+        current, materials, transport=transport, route_anchor=route_anchor
+    )
     if _routes_need_maps_finalize(repaired):
         return program
     updated = dict(program)

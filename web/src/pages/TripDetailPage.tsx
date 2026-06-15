@@ -7,10 +7,12 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getErrorMessage, isLlmKeyRequiredError } from "../api/client";
 import type { RebuildScope, ReviewAction } from "../api/types";
 import { deleteTrip, startRun, submitReview } from "../api/trips";
+import { parseRouteProgram } from "../api/routeTypes";
 import { BuildingOverlay } from "../components/BuildingOverlay";
 import { ProgramTabs } from "../components/ProgramTabs";
 import { RebuildScopeSelect } from "../components/RebuildScopeSelect";
 import { ReviewActions } from "../components/ReviewActions";
+import { TripAnchorCard } from "../components/TripAnchorCard";
 import { TripMetaCard } from "../components/TripMetaCard";
 import { useRunPolling } from "../hooks/useRunPolling";
 import { useTrip, useTripProgram } from "../hooks/useTrip";
@@ -89,7 +91,10 @@ export function TripDetailPage() {
       runQuery.data?.status === "queued" ||
       runQuery.data?.status === "running");
 
-  const isBuilding = runInProgress || rebuildMutation.isPending;
+  const isBuilding =
+    runInProgress ||
+    rebuildMutation.isPending ||
+    tripQuery.data?.status === "building";
 
   const programQuery = useTripProgram(tripId, !runInProgress);
 
@@ -179,6 +184,16 @@ export function TripDetailPage() {
       </div>
 
       <TripMetaCard trip={trip} />
+
+      {!isBuilding && (
+        <TripAnchorCard
+          tripId={tripId}
+          city={trip.city}
+          routeCases={
+            programQuery.data ? parseRouteProgram(programQuery.data.program.routes) : []
+          }
+        />
+      )}
 
       <BuildingOverlay visible={isBuilding} runStatus={runQuery.data?.status} />
 

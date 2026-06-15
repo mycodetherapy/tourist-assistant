@@ -6,6 +6,7 @@ import { getErrorMessage, isLlmKeyRequiredError } from "../api/client";
 import type { TripPreferences } from "../api/types";
 import { createTrip } from "../api/trips";
 import { LaunchSummary } from "../components/LaunchSummary";
+import { NewTripAnchorFields } from "../components/NewTripAnchorFields";
 import {
   DEFAULT_USER_QUERY,
   normalizeTripPreferences,
@@ -143,12 +144,31 @@ export function NewTripPage() {
       )}
 
       {step === 1 && draft && (
-        <LaunchSummary
-          city={draft.trip.city}
-          dates={draft.trip.dates}
-          originCity={draft.trip.origin_city?.trim() || "Москва"}
-          preferences={draft.preferences}
-        />
+        <>
+          <LaunchSummary
+            city={draft.trip.city}
+            dates={draft.trip.dates}
+            originCity={draft.trip.origin_city?.trim() || "Москва"}
+            preferences={draft.preferences}
+          />
+          <NewTripAnchorFields
+            city={draft.trip.city}
+            value={draft.preferences.route_anchor}
+            onChange={(route_anchor) =>
+              setDraft((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      preferences: normalizeTripPreferences({
+                        ...prev.preferences,
+                        route_anchor,
+                      }),
+                    }
+                  : prev,
+              )
+            }
+          />
+        </>
       )}
 
       <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:gap-3">

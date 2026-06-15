@@ -2,7 +2,7 @@
 /// <reference types="vite-plugin-pwa/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_TP_BOOKING_WIDGET_HTML?: string;
+  readonly VITE_TP_YANDEX_TRAVEL_WIDGET_SRC?: string;
 }
 
 interface ImportMeta {

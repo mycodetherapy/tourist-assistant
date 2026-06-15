@@ -37,6 +37,29 @@ export interface TripPreferences {
   transport_preference: "metro" | "taxi" | "walking" | "mixed";
   travel_party: "solo" | "couple" | "family" | "friends" | "parent_child" | "family_two";
   special_notes: string;
+  route_anchor?: RouteAnchor | null;
+}
+
+export type RouteAnchorSource = "address" | "coordinates" | "map";
+
+export interface RouteAnchor {
+  lat: number;
+  lon: number;
+  label: string;
+  source: RouteAnchorSource;
+  loop_end: boolean;
+}
+
+export interface GeocodeResult {
+  lat: number;
+  lon: number;
+  label: string;
+}
+
+export interface CityCenter {
+  lat: number;
+  lon: number;
+  label: string;
 }
 
 import type { RouteProgram } from "./routeTypes";
@@ -154,22 +177,7 @@ export interface UpdateSettingsPayload {
   llm_model?: string;
 }
 
-export interface HotelZone {
-  zone_id: string;
-  label: string;
-  case_id: string;
-  center_lat: number;
-  center_lon: number;
-  booking_url: string;
-}
-
-export interface HotelZonesResponse {
-  trip_id: number;
-  case_id: string;
-  city: string;
-  checkin: string | null;
-  checkout: string | null;
-  guests_adults: number;
-  zones: HotelZone[];
-  widget_configured: boolean;
+export interface UpdatePreferencesPayload {
+  travel_party?: TripPreferences["travel_party"];
+  route_anchor?: RouteAnchor | null;
 }

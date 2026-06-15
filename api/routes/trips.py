@@ -9,28 +9,74 @@ from api.deps import get_current_user, get_run_manager, get_trip_service
 from api.schemas.requests import (
     AffiliateClickRequest,
     CreateTripRequest,
+    GeocodeRequest,
     ItemFeedbackRequest,
+    ReverseGeocodeRequest,
     ReviewRequest,
     StartRunRequest,
+    UpdatePreferencesRequest,
 )
 from api.schemas.responses import (
+    CityCenterResponse,
     CreateTripResponse,
-    HotelZoneResponse,
-    HotelZonesResponse,
+    GeocodeResponse,
+    GeocodeResultResponse,
     ProgramItemResponse,
     ProgramResponse,
     ProgramSectionResponse,
     ReviewResponse,
+    ReverseGeocodeResponse,
     StructuredProgramResponse,
     TripDetailResponse,
     TripSummaryResponse,
 )
 from db.users import User
-from onboarding.preferences import TripPreferences, normalize_trip_preferences
+from onboarding.preferences import TripPreferences, merge_trip_preferences, normalize_trip_preferences
 from services.run_manager import RunManager
 from services.trip_service import ProgramView, TripService
 
 router = APIRouter(prefix="/trips", tags=["trips"])
+
+
+def _geocode_response(query: str, city_hint: str) -> GeocodeResponse:
+    from search.yandex.client import geocode_places as yandex_geocode
+
+    features = yandex_geocode(query, city_hint=city_hint, results=5)
+    results: list[GeocodeResultResponse] = []
+    for feature in features:
+        coords = feature.get("geometry", {}).get("coordinates") or []
+        if len(coords) < 2:
+            continue
+        lon, lat = float(coords[0]), float(coords[1])
+        props = feature.get("properties") or {}
+        meta = props.get("CompanyMetaData") or {}
+        label = str(meta.get("address") or props.get("name") or query).strip()
+        results.append(GeocodeResultResponse(lat=lat, lon=lon, label=label))
+    if not results and city_hint:
+        from search.osm.nominatim import resolve_city_center
+
+        center = resolve_city_center(f"{query}, {city_hint}")
+        if center is not None:
+            results.append(
+                GeocodeResultResponse(
+                    lat=center.lat,
+                    lon=center.lon,
+                    label=center.display_name or query,
+                )
+            )
+    return GeocodeResponse(results=results)
+
+
+def _reverse_geocode_response(lat: float, lon: float, city_hint: str = "") -> ReverseGeocodeResponse:
+    from search.osm.nominatim import reverse_geocode_label as nominatim_reverse
+    from search.yandex.client import reverse_geocode_label as yandex_reverse
+
+    label = yandex_reverse(lat, lon, city_hint=city_hint)
+    if not label:
+        label = nominatim_reverse(lat, lon)
+    if not label:
+        label = f"{lat:.5f}, {lon:.5f}"
+    return ReverseGeocodeResponse(lat=lat, lon=lon, label=label)
 
 
 def _llm_key_http_error(exc: AuthError) -> HTTPException:
@@ -105,6 +151,26 @@ def list_trips(
         )
         for t in service.list_all_trips(user.id)
     ]
+
+
+@router.post("/geocode", response_model=GeocodeResponse)
+def geocode_query(
+    body: GeocodeRequest,
+    user: User = Depends(get_current_user),
+) -> GeocodeResponse:
+    """Геокодинг адреса (мастер новой поездки, city_hint обязателен)."""
+    _ = user
+    return _geocode_response(body.query.strip(), body.city_hint.strip())
+
+
+@router.post("/reverse-geocode", response_model=ReverseGeocodeResponse)
+def reverse_geocode_query(
+    body: ReverseGeocodeRequest,
+    user: User = Depends(get_current_user),
+) -> ReverseGeocodeResponse:
+    """Обратный геокодинг для мастера новой поездки."""
+    _ = user
+    return _reverse_geocode_response(body.lat, body.lon, body.city_hint.strip())
 
 
 @router.post("", response_model=CreateTripResponse, status_code=201)
@@ -213,90 +279,72 @@ def get_program(
     return _program_response(view)
 
 
-@router.get("/{trip_id}/hotel-zones", response_model=HotelZonesResponse)
-def get_hotel_zones(
+@router.put("/{trip_id}/preferences", response_model=TripPreferences)
+def update_preferences(
     trip_id: int,
-    case_id: str | None = None,
+    body: UpdatePreferencesRequest,
     user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
-) -> HotelZonesResponse:
-    """Зоны поиска отелей Booking.com вдоль выбранного маршрута."""
+) -> TripPreferences:
+    if service.get_trip_details(trip_id, user_id=user.id) is None:
+        raise HTTPException(status_code=404, detail="Поездка не найдена")
+    update = body.model_dump(exclude_unset=True)
+    if not update:
+        raise HTTPException(status_code=400, detail="Нет полей для обновления")
+    try:
+        return service.update_trip_preferences(trip_id, user_id=user.id, update=update)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{trip_id}/city-center", response_model=CityCenterResponse)
+def get_city_center(
+    trip_id: int,
+    user: User = Depends(get_current_user),
+    service: TripService = Depends(get_trip_service),
+) -> CityCenterResponse:
     details = service.get_trip_details(trip_id, user_id=user.id)
     if details is None:
         raise HTTPException(status_code=404, detail="Поездка не найдена")
-    view = service.get_program_view(trip_id, user_id=user.id)
-    if view is None:
-        raise HTTPException(status_code=404, detail="Программа не найдена")
+    from search.osm.nominatim import resolve_city_center
 
-    routes = view.program.routes_model()
-    if routes is None or not routes.cases:
-        raise HTTPException(status_code=404, detail="Маршруты не найдены")
-
-    from search.booking_zones import (
-        compute_hotel_zones,
-        find_route_case,
-        pick_case_id_by_vote,
-        resolve_stay_dates,
-    )
-    from search.ticket_passengers import passengers_for_travel_party
-
-    route_section = view.sections.get("routes")
-    route_votes: list[tuple[str, int | None]] = []
-    for idx, case in enumerate(routes.cases):
-        vote = None
-        if route_section and idx < len(route_section.items):
-            vote = route_section.items[idx].vote
-        route_votes.append((str(case.case_id), vote))
-
-    try:
-        selected_case_id = pick_case_id_by_vote(
-            routes,
-            route_votes,
-            override=case_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    case = find_route_case(routes, selected_case_id)
-    if case is None:
-        raise HTTPException(status_code=404, detail="Маршрут не найден")
-
-    prefs = details.preferences or {}
-    party = str(prefs.get("travel_party") or "couple")
-    passengers = passengers_for_travel_party(party)
-    trip = details.trip
-    city = str(trip["city"])
-    dates_raw = str(trip["dates"])
-    checkin, checkout = resolve_stay_dates(dates_raw)
-
-    zones = compute_hotel_zones(
-        case,
-        city=city,
-        dates_raw=dates_raw,
-        passengers=passengers,
-        trip_id=trip_id,
+    city = str(details.trip["city"])
+    center = resolve_city_center(city)
+    if center is None:
+        raise HTTPException(status_code=404, detail=f"Не удалось определить центр города: {city}")
+    return CityCenterResponse(
+        lat=center.lat,
+        lon=center.lon,
+        label=center.display_name or city,
     )
 
-    return HotelZonesResponse(
-        trip_id=trip_id,
-        case_id=selected_case_id,
-        city=city,
-        checkin=checkin.isoformat() if checkin else None,
-        checkout=checkout.isoformat() if checkout else None,
-        guests_adults=passengers.adults,
-        zones=[
-            HotelZoneResponse(
-                zone_id=z.zone_id,
-                label=z.label,
-                case_id=z.case_id,
-                center_lat=z.center_lat,
-                center_lon=z.center_lon,
-                booking_url=z.booking_url,
-            )
-            for z in zones
-        ],
-        widget_configured=False,
-    )
+
+@router.post("/{trip_id}/geocode", response_model=GeocodeResponse)
+def geocode_address(
+    trip_id: int,
+    body: GeocodeRequest,
+    user: User = Depends(get_current_user),
+    service: TripService = Depends(get_trip_service),
+) -> GeocodeResponse:
+    details = service.get_trip_details(trip_id, user_id=user.id)
+    if details is None:
+        raise HTTPException(status_code=404, detail="Поездка не найдена")
+    city_hint = (body.city_hint or str(details.trip["city"])).strip()
+    return _geocode_response(body.query.strip(), city_hint)
+
+
+@router.post("/{trip_id}/reverse-geocode", response_model=ReverseGeocodeResponse)
+def reverse_geocode_address(
+    trip_id: int,
+    body: ReverseGeocodeRequest,
+    user: User = Depends(get_current_user),
+    service: TripService = Depends(get_trip_service),
+) -> ReverseGeocodeResponse:
+    details = service.get_trip_details(trip_id, user_id=user.id)
+    if details is None:
+        raise HTTPException(status_code=404, detail="Поездка не найдена")
+    city_hint = (body.city_hint or str(details.trip["city"])).strip()
+    return _reverse_geocode_response(body.lat, body.lon, city_hint)
 
 
 @router.put("/{trip_id}/program/feedback", response_model=ProgramResponse)
@@ -340,7 +388,7 @@ def log_affiliate_click(
     from search.affiliate.sub_id import build_sub_id
 
     provider = detect_provider(body.target_url)
-    channel = "hotels" if provider is not None and provider.key == "booking" else "tickets"
+    channel = "tickets"
     sub_id = (
         build_sub_id(trip_id, channel, provider)
         if provider is not None

@@ -267,3 +267,22 @@ def resolve_city_center(city: str) -> CityCenter | None:
                 display_name=center.display_name,
             )
     return None
+
+
+def reverse_geocode_label(lat: float, lon: float) -> str | None:
+    """Обратный геокодинг Nominatim → display_name."""
+    _throttle()
+    try:
+        response = requests.get(
+            f"{_NOMINATIM_URL}/reverse",
+            params={"lat": lat, "lon": lon, "format": "json"},
+            headers={"User-Agent": _USER_AGENT},
+            timeout=15,
+        )
+        if not response.ok:
+            return None
+        data = response.json()
+        label = str(data.get("display_name") or "").strip()
+        return label or None
+    except (requests.RequestException, KeyError, TypeError, ValueError):
+        return None

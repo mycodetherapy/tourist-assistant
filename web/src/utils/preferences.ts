@@ -34,5 +34,6 @@ export function normalizeTripPreferences(
   return {
     ...DEFAULT_PREFERENCES,
     travel_party,
+    route_anchor: raw?.route_anchor ?? null,
   };
 }

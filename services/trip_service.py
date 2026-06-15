@@ -40,7 +40,7 @@ from observability import (
     invoke_config,
     langfuse_metadata,
 )
-from onboarding import TripPreferences, build_search_context, normalize_trip_preferences
+from onboarding import TripPreferences, build_search_context, merge_trip_preferences, normalize_trip_preferences
 from planning import human_message_for_scope
 from program.item_key import make_item_key, make_route_stop_key
 from program.parse_items import (
@@ -146,6 +146,22 @@ class TripService:
         trip_id = create_trip(city_v, dates_v, origin_v, query_v, user_id=user_id)
         save_preferences(trip_id, prefs_dict)
         return trip_id
+
+    def update_trip_preferences(
+        self,
+        trip_id: int,
+        *,
+        user_id: int,
+        update: dict[str, Any],
+    ) -> TripPreferences:
+        """Обновляет предпочтения поездки (travel_party, route_anchor)."""
+        details = self.get_trip_details(trip_id, user_id=user_id)
+        if details is None:
+            raise ValueError("Поездка не найдена")
+        merged = merge_trip_preferences(details.preferences, update)
+        save_preferences(trip_id, merged.model_dump())
+        self.apply_preferences(merged)
+        return merged
 
     def build_initial_state(
         self,

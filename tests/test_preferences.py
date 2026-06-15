@@ -35,6 +35,25 @@ class TestPreferences(unittest.TestCase):
         self.assertEqual(prefs.transport_preference, "mixed")
         self.assertEqual(prefs.interests, [])
         self.assertEqual(prefs.special_notes, "")
+        self.assertIsNone(prefs.route_anchor)
+
+    def test_normalize_preserves_route_anchor(self) -> None:
+        prefs = normalize_trip_preferences(
+            {
+                "travel_party": "couple",
+                "route_anchor": {
+                    "lat": 55.75,
+                    "lon": 37.62,
+                    "label": "Отель",
+                    "source": "address",
+                    "loop_end": True,
+                },
+            }
+        )
+        self.assertIsNotNone(prefs.route_anchor)
+        assert prefs.route_anchor is not None
+        self.assertEqual(prefs.route_anchor.label, "Отель")
+        self.assertTrue(prefs.route_anchor.loop_end)
 
     def test_enrich_query(self) -> None:
         clear_search_context()

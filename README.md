@@ -10,8 +10,7 @@
 
 | Направление | Что планируется |
 |-------------|-----------------|
-| **Отели** | Отдельная вкладка с отелями вдоль маршрута; переход к бронированию (affiliate / партнёрские ссылки) |
-| **Маршруты** | Улучшить построение пешеходных маршрутов на основе выгрузок [Geofabrik](https://download.geofabrik.de/) (OSM: дорожная сеть, пешеходные зоны, точнее км и связность остановок) |
+| **Маршруты** | Базовая точка (отель/адрес) на карте Яндекс.Карт; улучшение пешеходных маршрутов по выгрузкам [Geofabrik](https://download.geofabrik.de/) |
 | **SaaS** | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (вместо локальной SQLite на одного пользователя) |
 
 ## Быстрый старт
@@ -79,7 +78,7 @@ npm run dev
 
 Статическая схема в репозитории: `docs/openapi.json` (обновление: `python3 scripts/export_openapi.py`).
 
-**Вкладка «Отели»:** зоны поиска на Booking.com вдоль маршрута A/B/C (bbox из `maps_route_url`), ленивая загрузка `GET /api/trips/{id}/hotel-zones`. По умолчанию — маршрут с лучшим голосом на вкладке «Маршруты». Affiliate: `AFFILIATE_BOOKING=true`, `TRAVELPAYOUTS_MARKER`, `TRAVELPAYOUTS_TRS`. Опционально виджет Travelpayouts: `VITE_TP_BOOKING_WIDGET_HTML` в `web/.env` (см. `web/.env.example`).
+**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
 
 Один раз установить автообновление схемы перед коммитом:
 
@@ -93,7 +92,7 @@ npm run dev
 | **Настройки** | BYOK: OpenRouter API key (шифруется в SQLite) |
 | **Список поездок** | Только поездки текущего пользователя |
 | **Новая поездка** | Wizard: поездка → запуск → фоновая сборка (polling 1–2 мин) |
-| **Карточка поездки** | Вкладки: билеты, маршруты (A/B/C) с **встроенной картой** Яндекс.Карт + ссылка в описании, лайфхаки; 👍/👎; утверждение / черновик / пересбор / удаление |
+| **Карточка поездки** | Вкладки: билеты, маршруты (A/B/C) с **встроенной картой** + базовая точка в настройках; лайфхаки; 👍/👎; утверждение / черновик / пересбор / удаление |
 
 Docker (веб + API и CLI): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
@@ -243,7 +242,7 @@ python3 scripts/refresh_tickets_fixtures.py --suite smoke
 | `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `TRAVELPAYOUTS_TRS`, `AFFILIATE_AVIASALES`, `AFFILIATE_TUTU_BUS`, `AFFILIATE_TUTU_TRAIN`, `AFFILIATE_BOOKING`; `VITE_TP_BOOKING_WIDGET_HTML` (`web/.env`, виджет Booking.com); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (legacy, POI не использует).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `TRAVELPAYOUTS_TRS`, `AFFILIATE_AVIASALES`, `AFFILIATE_TUTU_BUS`, `AFFILIATE_TUTU_TRAIN`; `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, выбор точки на карте); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 ### Модели LLM
 
@@ -374,12 +373,11 @@ python3 scripts/render_graph.py
 | **Bus.tutu.ru** | Deep links на автобус (`api-bus.tutu.ru` → id и slug в path) |
 | **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
 | **Travelpayouts affiliate** | `marker` в ссылках билетов; sync статистики: `python3 scripts/sync_affiliate_stats.py`; метрики: `/api/affiliate/metrics` |
-| **Booking.com** | Вкладка «Отели»: map-search deep links вдоль маршрута (`search/booking_zones.py`); опционально виджет TP |
+| **Яндекс.Карты (Geocoder + JS API)** | Геокодинг адреса базовой точки; клик на карте в вебе; deep link `maps_route_url` с anchor в начале маршрута |
 | **OpenStreetMap** (Overpass + Nominatim) | POI с координатами: музеи, парки, памятники в рамке города |
 | **Wikidata SPARQL** | Дополнение известных достопримечательностей (P625) |
-| **Яндекс.Карты (маршрут)** | Deep link `maps_route_url` из координат остановок (без Search API) |
 
-Билеты: `search/ticket_links.py` + `search/providers/avia.py` + `search/affiliate/` (обёртка `marker`, локальные клики). Отели: `search/booking_zones.py` + `GET /trips/{id}/hotel-zones`. Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`. Пул POI: Wikidata Tier 0 целиком + Tier 1 до ~50 (`search/wikidata/places.py`). LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
+Билеты: `search/ticket_links.py` + `search/providers/avia.py` + `search/affiliate/` (обёртка `marker`, локальные клики). Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`; базовая точка — `onboarding/preferences.py` (`route_anchor`), в URL — `search/yandex/route_url.py`. Пул POI: Wikidata Tier 0 целиком + Tier 1 до ~50 (`search/wikidata/places.py`). LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
 
 ### Почему нужен именно агент, а не workflow?
 
@@ -510,7 +508,6 @@ tourist-assistant/
 │   ├── hub_coords.py       # координаты IATA-хабов (domestic_hub_coords.json)
 │   ├── domestic_hub_coords.json
 │   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
-│   ├── booking_zones.py    # зоны отелей Booking.com вдоль maps_route_url
 │   ├── affiliate/          # marker, Partner Links API, метрики exposure
 │   ├── transport_codes.py  # коды Tutu/РЖД для URL
 │   ├── providers/avia.py   # Travelpayouts prices_for_dates

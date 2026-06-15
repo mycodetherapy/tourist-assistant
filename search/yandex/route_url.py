@@ -29,20 +29,33 @@ def build_maps_route_url(
     transport: str = "mixed",
     max_stops: int = 8,
     close_loop: bool = False,
+    anchor_lat: float | None = None,
+    anchor_lon: float | None = None,
+    anchor_loop_end: bool = False,
 ) -> str:
     """
     Маршрут по координатам POI (rtext=lat,lon~lat,lon).
 
+    Базовая точка (anchor) добавляется в начало и не входит в лимит max_stops POI.
     Всегда пеший режим (rtt=pd) — варианты A/B/C это прогулки между точками.
     """
     _ = labels, transport
-    points = _dedupe_points(points)
-    if close_loop and len(points) >= 3:
-        if haversine_km(points[0], points[-1]) >= 0.08:
-            points = [*points, points[0]]
-    if len(points) < 2:
-        if points:
-            p = points[0]
+    poi_points = _dedupe_points(points)[:max_stops]
+    has_anchor = anchor_lat is not None and anchor_lon is not None
+    if has_anchor:
+        anchor_pt = GeoPoint(lat=float(anchor_lat), lon=float(anchor_lon))
+        route_points: list[GeoPoint] = [anchor_pt, *poi_points]
+        if anchor_loop_end and len(route_points) >= 2:
+            if haversine_km(route_points[0], route_points[-1]) >= 0.08:
+                route_points = [*route_points, anchor_pt]
+    else:
+        route_points = list(poi_points)
+        if close_loop and len(route_points) >= 3:
+            if haversine_km(route_points[0], route_points[-1]) >= 0.08:
+                route_points = [*route_points, route_points[0]]
+    if len(route_points) < 2:
+        if route_points:
+            p = route_points[0]
             label = labels[0] if labels else ""
             if label.strip() and city:
                 text = f"{label.strip()}, {city}"
@@ -53,13 +66,13 @@ def build_maps_route_url(
             return f"https://yandex.ru/maps/?pt={p.lon},{p.lat}&z=15"
         return ""
 
-    parts = [f"{p.lat},{p.lon}" for p in points[:max_stops]]
+    parts = [f"{p.lat},{p.lon}" for p in route_points]
     params: dict[str, str] = {
         "mode": "routes",
         "rtext": "~".join(parts),
         "rtt": "pd",
     }
-    first = points[0]
+    first = route_points[0]
     params["ll"] = f"{first.lon},{first.lat}"
     params["z"] = "14"
     return f"https://yandex.ru/maps/?{urlencode(params)}"

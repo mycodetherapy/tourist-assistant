@@ -241,6 +241,100 @@
         ]
       }
     },
+    "/api/trips/geocode": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Geocode Query",
+        "description": "Геокодинг адреса (мастер новой поездки, city_hint обязателен).",
+        "operationId": "geocode_query_api_trips_geocode_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeocodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/trips/reverse-geocode": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Reverse Geocode Query",
+        "description": "Обратный геокодинг для мастера новой поездки.",
+        "operationId": "reverse_geocode_query_api_trips_reverse_geocode_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseGeocodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReverseGeocodeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/trips/{trip_id}": {
       "delete": {
         "tags": [
@@ -373,14 +467,13 @@
         }
       }
     },
-    "/api/trips/{trip_id}/hotel-zones": {
-      "get": {
+    "/api/trips/{trip_id}/preferences": {
+      "put": {
         "tags": [
           "trips"
         ],
-        "summary": "Get Hotel Zones",
-        "description": "Зоны поиска отелей Booking.com вдоль выбранного маршрута.",
-        "operationId": "get_hotel_zones_api_trips__trip_id__hotel_zones_get",
+        "summary": "Update Preferences",
+        "operationId": "update_preferences_api_trips__trip_id__preferences_put",
         "security": [
           {
             "HTTPBearer": []
@@ -395,21 +488,60 @@
               "type": "integer",
               "title": "Trip Id"
             }
-          },
-          {
-            "name": "case_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferencesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripPreferences"
                 }
-              ],
-              "title": "Case Id"
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Get Preferences",
+        "operationId": "get_preferences_api_trips__trip_id__preferences_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
             }
           }
         ],
@@ -419,7 +551,176 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HotelZonesResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TripPreferences"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Preferences Api Trips  Trip Id  Preferences Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/city-center": {
+      "get": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Get City Center",
+        "operationId": "get_city_center_api_trips__trip_id__city_center_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CityCenterResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/geocode": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Geocode Address",
+        "operationId": "geocode_address_api_trips__trip_id__geocode_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeocodeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/reverse-geocode": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Reverse Geocode Address",
+        "operationId": "reverse_geocode_address_api_trips__trip_id__reverse_geocode_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseGeocodeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReverseGeocodeResponse"
                 }
               }
             }
@@ -531,61 +832,6 @@
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/trips/{trip_id}/preferences": {
-      "get": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Get Preferences",
-        "operationId": "get_preferences_api_trips__trip_id__preferences_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/TripPreferences"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "title": "Response Get Preferences Api Trips  Trip Id  Preferences Get"
-                }
-              }
-            }
           },
           "422": {
             "description": "Validation Error",
@@ -1291,6 +1537,29 @@
         ],
         "title": "AuthResponse"
       },
+      "CityCenterResponse": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon",
+          "label"
+        ],
+        "title": "CityCenterResponse"
+      },
       "CreateTripRequest": {
         "properties": {
           "city": {
@@ -1407,6 +1676,63 @@
         "title": "FinalProgram",
         "description": "Структурированная культурная программа поездки."
       },
+      "GeocodeRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Query"
+          },
+          "city_hint": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "City Hint",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "GeocodeRequest"
+      },
+      "GeocodeResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/GeocodeResultResponse"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "title": "GeocodeResponse"
+      },
+      "GeocodeResultResponse": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon",
+          "label"
+        ],
+        "title": "GeocodeResultResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1419,106 +1745,6 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
-      },
-      "HotelZoneResponse": {
-        "properties": {
-          "zone_id": {
-            "type": "string",
-            "title": "Zone Id"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label"
-          },
-          "case_id": {
-            "type": "string",
-            "title": "Case Id"
-          },
-          "center_lat": {
-            "type": "number",
-            "title": "Center Lat"
-          },
-          "center_lon": {
-            "type": "number",
-            "title": "Center Lon"
-          },
-          "booking_url": {
-            "type": "string",
-            "title": "Booking Url"
-          }
-        },
-        "type": "object",
-        "required": [
-          "zone_id",
-          "label",
-          "case_id",
-          "center_lat",
-          "center_lon",
-          "booking_url"
-        ],
-        "title": "HotelZoneResponse"
-      },
-      "HotelZonesResponse": {
-        "properties": {
-          "trip_id": {
-            "type": "integer",
-            "title": "Trip Id"
-          },
-          "case_id": {
-            "type": "string",
-            "title": "Case Id"
-          },
-          "city": {
-            "type": "string",
-            "title": "City"
-          },
-          "checkin": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checkin"
-          },
-          "checkout": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checkout"
-          },
-          "guests_adults": {
-            "type": "integer",
-            "title": "Guests Adults"
-          },
-          "zones": {
-            "items": {
-              "$ref": "#/components/schemas/HotelZoneResponse"
-            },
-            "type": "array",
-            "title": "Zones"
-          },
-          "widget_configured": {
-            "type": "boolean",
-            "title": "Widget Configured",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "trip_id",
-          "case_id",
-          "city",
-          "guests_adults"
-        ],
-        "title": "HotelZonesResponse"
       },
       "ItemFeedbackRequest": {
         "properties": {
@@ -1757,6 +1983,57 @@
         ],
         "title": "RegisterRequest"
       },
+      "ReverseGeocodeRequest": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon"
+          },
+          "city_hint": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "City Hint",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "ReverseGeocodeRequest"
+      },
+      "ReverseGeocodeResponse": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon",
+          "label"
+        ],
+        "title": "ReverseGeocodeResponse"
+      },
       "ReviewRequest": {
         "properties": {
           "action": {
@@ -1803,6 +2080,51 @@
           "status"
         ],
         "title": "ReviewResponse"
+      },
+      "RouteAnchor": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Label",
+            "default": ""
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "address",
+              "coordinates",
+              "map"
+            ],
+            "title": "Source",
+            "default": "map"
+          },
+          "loop_end": {
+            "type": "boolean",
+            "title": "Loop End",
+            "description": "Конечная точка совпадает с базовой (кольцо через anchor)",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "RouteAnchor",
+        "description": "Базовая точка маршрута (отель, квартира, вокзал)."
       },
       "RouteProgram": {
         "properties": {
@@ -2136,6 +2458,17 @@
             "title": "Special Notes",
             "description": "Legacy: доп. пожелания",
             "default": ""
+          },
+          "route_anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RouteAnchor"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Базовая точка маршрута; null — не задана"
           }
         },
         "type": "object",
@@ -2230,6 +2563,42 @@
           "updated_at"
         ],
         "title": "TripSummaryResponse"
+      },
+      "UpdatePreferencesRequest": {
+        "properties": {
+          "travel_party": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "solo",
+                  "couple",
+                  "family",
+                  "friends",
+                  "parent_child",
+                  "family_two"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Travel Party"
+          },
+          "route_anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RouteAnchor"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — удалить базовую точку"
+          }
+        },
+        "type": "object",
+        "title": "UpdatePreferencesRequest"
       },
       "UpdateSettingsRequest": {
         "properties": {
