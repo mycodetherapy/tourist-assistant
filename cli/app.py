@@ -17,7 +17,6 @@ from db import (
     init_db,
     list_planned_trips,
     list_trips,
-    update_trip_status,
 )
 from models.state import AgentState
 from observability import langfuse_enabled, langsmith_enabled
@@ -31,7 +30,7 @@ from cli.feedback import run_feedback_session
 from services import TripService
 from services.errors import format_runtime_error
 
-DEFAULT_USER_QUERY = "Составь культурную программу поездки"
+DEFAULT_USER_QUERY = "Составь три варианта маршрута по городу"
 
 
 def _prompt_line(label: str, default: str = "") -> str:
@@ -119,7 +118,7 @@ def _choose_trip_from_list(*, prompt: str = "ID поездки для продо
     for trip in trips:
         print(
             f"  [{trip.id}] {trip.city}, {trip.dates} "
-            f"({trip.origin_city}) — {trip.status}"
+            f"({trip.origin_city})"
         )
     raw = _prompt_line(prompt)
     try:
@@ -139,7 +138,7 @@ def _choose_planned_trip_from_list(
     for index, trip in enumerate(trips, start=1):
         print(
             f"  {index}. [{trip.id}] {trip.city}, {trip.dates} "
-            f"({trip.origin_city}) — {trip.status}, "
+            f"({trip.origin_city}), "
             f"программа v{trip.last_version} ({trip.last_scope})"
         )
     raw = _prompt_line(prompt)
@@ -179,7 +178,6 @@ def _print_trip_details(service: TripService, trip_id: int) -> None:
     print("=" * 60)
     print(f"Маршрут: {trip['origin_city']} → {trip['city']}")
     print(f"Даты: {trip['dates']}")
-    print(f"Статус: {trip['status']}")
     if trip.get("user_query"):
         print(f"Запрос: {trip['user_query']}")
 
@@ -338,8 +336,6 @@ def main() -> None:
                 review_mode="cli",
             )
             rebuild_scope = "full"
-
-        update_trip_status(trip_id, "building")
 
         print(f"Режим пересборки: {rebuild_scope}")
         if rebuild_scope != "full":

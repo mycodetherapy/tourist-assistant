@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 from agents.llm_context import LlmConfig, run_with_llm_config
-from db import update_trip_status
 from models.state import AgentState
 from services.errors import format_runtime_error
 from services.trip_service import GraphRunResult, TripService
@@ -68,7 +67,6 @@ class RunManager:
         with self._lock:
             self._runs[run_id] = record
 
-        update_trip_status(trip_id, "building")
         thread = threading.Thread(
             target=self._execute,
             args=(run_id, state, llm_config),
@@ -94,7 +92,6 @@ class RunManager:
                 record.version_id = result.version_id
                 record.graph_run_id = result.run_id
         except Exception as exc:
-            update_trip_status(int(state["trip_id"]), "failed")
             with self._lock:
                 record = self._runs[run_id]
                 record.status = "failed"

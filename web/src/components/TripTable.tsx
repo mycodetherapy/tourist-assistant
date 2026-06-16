@@ -1,35 +1,16 @@
 import { DeleteOutlined } from "@ant-design/icons";
-import { Button, Grid, Popconfirm, Space, Table, Tag } from "antd";
+import { Button, Grid, Popconfirm, Space, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Link, useNavigate } from "react-router-dom";
 import type { TripSummary } from "../api/types";
 
 const { useBreakpoint } = Grid;
 
-const STATUS_COLORS: Record<string, string> = {
-  building: "processing",
-  review: "warning",
-  approved: "success",
-  draft: "default",
-  failed: "error",
-};
-
 interface TripTableProps {
   trips: TripSummary[];
   loading?: boolean;
   deletingId?: number | null;
   onDelete: (tripId: number) => void;
-}
-
-function statusColumn(mobile = false): ColumnsType<TripSummary>[number] {
-  return {
-    title: "Статус",
-    dataIndex: "status",
-    ...(mobile ? { align: "right" as const, className: "trip-mobile-status-col" } : {}),
-    render: (status: string) => (
-      <Tag color={STATUS_COLORS[status] ?? "default"}>{status}</Tag>
-    ),
-  };
 }
 
 export function TripTable({ trips, loading, deletingId, onDelete }: TripTableProps) {
@@ -40,12 +21,12 @@ export function TripTable({ trips, loading, deletingId, onDelete }: TripTablePro
   const desktopColumns: ColumnsType<TripSummary> = [
     { title: "ID", dataIndex: "id", width: 70 },
     { title: "Город", dataIndex: "city" },
-    { title: "Даты", dataIndex: "dates" },
     {
-      title: "Маршрут",
-      render: (_, row) => `${row.origin_city} → ${row.city}`,
+      title: "Обновлено",
+      dataIndex: "updated_at",
+      width: 200,
+      render: (value: string) => new Date(value).toLocaleString("ru-RU"),
     },
-    statusColumn(),
     {
       title: "",
       width: 200,
@@ -56,7 +37,7 @@ export function TripTable({ trips, loading, deletingId, onDelete }: TripTablePro
           </Link>
           <Popconfirm
             title={`Удалить поездку #${row.id}?`}
-            description={`${row.city}, ${row.dates}`}
+            description={row.city}
             okText="Удалить"
             cancelText="Отмена"
             okButtonProps={{ danger: true }}
@@ -84,12 +65,16 @@ export function TripTable({ trips, loading, deletingId, onDelete }: TripTablePro
       className: "trip-mobile-split-col",
     },
     {
-      title: "Даты",
-      dataIndex: "dates",
-      ellipsis: true,
-      className: "trip-mobile-split-col",
+      title: "Обновлено",
+      dataIndex: "updated_at",
+      align: "right",
+      className: "trip-mobile-updated-col",
+      render: (value: string) =>
+        new Date(value).toLocaleDateString("ru-RU", {
+          day: "numeric",
+          month: "short",
+        }),
     },
-    statusColumn(true),
   ];
 
   return (

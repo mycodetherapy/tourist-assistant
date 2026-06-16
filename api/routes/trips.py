@@ -12,7 +12,6 @@ from api.schemas.requests import (
     GeocodeRequest,
     ItemFeedbackRequest,
     ReverseGeocodeRequest,
-    ReviewRequest,
     StartRunRequest,
     UpdatePreferencesRequest,
 )
@@ -24,7 +23,6 @@ from api.schemas.responses import (
     ProgramItemResponse,
     ProgramResponse,
     ProgramSectionResponse,
-    ReviewResponse,
     ReverseGeocodeResponse,
     StructuredProgramResponse,
     TripDetailResponse,
@@ -106,17 +104,11 @@ def _map_section(view: ProgramView, key: str) -> ProgramSectionResponse:
 
 
 def _program_response(view: ProgramView) -> ProgramResponse:
-    from search.ticket_links import normalize_tickets_markdown
-
-    tickets_md = normalize_tickets_markdown(view.program.tickets)
-    program = view.program.model_copy(update={"tickets": tickets_md})
+    program = view.program
     sections = StructuredProgramResponse(
-        tickets=_map_section(view, "tickets"),
         routes=_map_section(view, "routes"),
         route_stops=_map_section(view, "route_stops"),
         lifehacks=_map_section(view, "lifehacks"),
-        events=_map_section(view, "events"),
-        dining=_map_section(view, "dining"),
     )
     return ProgramResponse(
         version=view.version,
@@ -132,21 +124,11 @@ def _program_response(view: ProgramView) -> ProgramResponse:
 def list_trips(
     user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
-    run_manager: RunManager = Depends(get_run_manager),
 ) -> list[TripSummaryResponse]:
-    for summary in service.list_all_trips(user.id):
-        if summary.status == "building":
-            service.recover_stale_building(
-                summary.id,
-                has_active_run=run_manager.has_active_run_for_trip(summary.id),
-            )
     return [
         TripSummaryResponse(
             id=t.id,
             city=t.city,
-            dates=t.dates,
-            origin_city=t.origin_city,
-            status=t.status,
             updated_at=t.updated_at,
         )
         for t in service.list_all_trips(user.id)
@@ -180,7 +162,10 @@ def create_trip(
     service: TripService = Depends(get_trip_service),
     run_manager: RunManager = Depends(get_run_manager),
 ) -> CreateTripResponse:
-    preferences = normalize_trip_preferences(body.preferences)
+    raw_preferences = (body.preferences.model_dump() if body.preferences else {}) | {
+        "route_anchor": body.route_anchor.model_dump() if body.route_anchor else None
+    }
+    preferences = normalize_trip_preferences(raw_preferences)
     llm_config = None
     if body.start_run:
         try:
@@ -189,8 +174,8 @@ def create_trip(
             raise _llm_key_http_error(exc) from exc
     trip_id = service.create_new_trip(
         city=body.city,
-        dates=body.dates,
-        origin_city=body.origin_city,
+        dates="Без дат",
+        origin_city=body.city,
         user_query=body.user_query,
         preferences=preferences,
         user_id=user.id,
@@ -243,12 +228,7 @@ def get_trip(
     trip_id: int,
     user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
-    run_manager: RunManager = Depends(get_run_manager),
 ) -> TripDetailResponse:
-    service.recover_stale_building(
-        trip_id,
-        has_active_run=run_manager.has_active_run_for_trip(trip_id),
-    )
     details = service.get_trip_details(trip_id, user_id=user.id)
     if details is None:
         raise HTTPException(status_code=404, detail="Поездка не найдена")
@@ -256,10 +236,7 @@ def get_trip(
     return TripDetailResponse(
         id=int(trip["id"]),
         city=trip["city"],
-        dates=trip["dates"],
-        origin_city=trip["origin_city"],
         user_query=trip.get("user_query"),
-        status=trip["status"],
         created_at=trip["created_at"],
         updated_at=trip["updated_at"],
     )
@@ -437,34 +414,3 @@ def start_run(
     state["review_mode"] = "deferred"
     run_id = run_manager.start_run(state, llm_config=llm_config)
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)
-
-
-@router.post("/{trip_id}/review", response_model=ReviewResponse)
-def submit_review(
-    trip_id: int,
-    body: ReviewRequest,
-    user: User = Depends(get_current_user),
-    service: TripService = Depends(get_trip_service),
-    run_manager: RunManager = Depends(get_run_manager),
-) -> ReviewResponse:
-    if service.get_trip_details(trip_id, user_id=user.id) is None:
-        raise HTTPException(status_code=404, detail="Поездка не найдена")
-    run_id: str | None = None
-    try:
-        if body.action == "rebuild":
-            llm_config = require_user_llm_config(user.id)
-            state = service.prepare_rebuild_state(trip_id)
-            run_id = run_manager.start_run(state, llm_config=llm_config)
-        else:
-            service.submit_review(trip_id, body.action)
-    except AuthError as exc:
-        raise _llm_key_http_error(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    details = service.get_trip_details(trip_id, user_id=user.id)
-    status = details.trip["status"] if details else "unknown"
-    if body.action == "rebuild":
-        status = "building"
-
-    return ReviewResponse(trip_id=trip_id, status=status, run_id=run_id)

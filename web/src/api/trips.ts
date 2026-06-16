@@ -7,8 +7,6 @@ import type {
   ItemFeedbackPayload,
   ProfileResponse,
   ProgramResponse,
-  ReviewAction,
-  ReviewResponse,
   RebuildScope,
   RunStatus,
   TripDetail,
@@ -30,10 +28,6 @@ export async function fetchTrip(id: number): Promise<TripDetail> {
 export async function fetchProgram(id: number): Promise<ProgramResponse> {
   const { data } = await apiClient.get<ProgramResponse>(`/trips/${id}/program`);
   return data;
-}
-
-export async function logAffiliateClick(tripId: number, targetUrl: string): Promise<void> {
-  await apiClient.post(`/trips/${tripId}/affiliate-clicks`, { target_url: targetUrl });
 }
 
 export async function submitItemFeedback(
@@ -137,12 +131,4 @@ export async function fetchRun(runId: string): Promise<RunStatus> {
 
 export async function deleteTrip(tripId: number): Promise<void> {
   await apiClient.delete(`/trips/${tripId}`);
-}
-
-export async function submitReview(
-  tripId: number,
-  action: ReviewAction,
-): Promise<ReviewResponse> {
-  const { data } = await apiClient.post<ReviewResponse>(`/trips/${tripId}/review`, { action });
-  return data;
 }

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from models.schemas import FinalProgram
 
-ProgramSectionKey = Literal["tickets", "routes", "lifehacks", "events", "dining"]
+ProgramSectionKey = Literal["routes", "lifehacks"]
 ItemVote = Literal[1, -1]
 from onboarding.preferences import TripPreferences
 
@@ -18,19 +18,13 @@ RunStatusName = Literal["queued", "running", "completed", "failed"]
 class TripSummaryResponse(BaseModel):
     id: int
     city: str
-    dates: str
-    origin_city: str
-    status: str
     updated_at: str
 
 
 class TripDetailResponse(BaseModel):
     id: int
     city: str
-    dates: str
-    origin_city: str
     user_query: str | None
-    status: str
     created_at: str
     updated_at: str
 
@@ -54,12 +48,9 @@ class ProgramSectionResponse(BaseModel):
 
 
 class StructuredProgramResponse(BaseModel):
-    tickets: ProgramSectionResponse
     routes: ProgramSectionResponse
     route_stops: ProgramSectionResponse
     lifehacks: ProgramSectionResponse
-    events: ProgramSectionResponse
-    dining: ProgramSectionResponse
 
 
 class ProgramResponse(BaseModel):
@@ -77,12 +68,6 @@ class RunStatusResponse(BaseModel):
     status: RunStatusName
     error: str | None = None
     version_id: int | None = None
-
-
-class ReviewResponse(BaseModel):
-    trip_id: int
-    status: str
-    run_id: str | None = None
 
 
 class ProfileResponse(BaseModel):

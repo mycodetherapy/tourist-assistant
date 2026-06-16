@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS trips (
     dates TEXT NOT NULL,
     origin_city TEXT NOT NULL,
     user_query TEXT,
-    status TEXT NOT NULL DEFAULT 'draft',
+    status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

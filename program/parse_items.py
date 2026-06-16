@@ -17,13 +17,10 @@ SECTION_KEYS: tuple[ProgramSectionKey, ...] = (
     "dining",
 )
 
-VotableSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
+VotableSectionKey = Literal["routes", "route_stops"]
 VOTABLE_SECTIONS: tuple[VotableSectionKey, ...] = (
     "routes",
     "route_stops",
-    "lifehacks",
-    "events",
-    "dining",
 )
 
 _NUMBERED_ITEM = re.compile(r"^\d+\.\s+")

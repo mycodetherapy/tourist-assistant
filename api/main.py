@@ -14,7 +14,6 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from api.auth.google_oauth import register_google_client
 from api.auth.routes import router as auth_router
-from api.deps import get_run_manager, get_trip_service
 from api.rate_limit import limiter
 from api.routes import affiliate, profile, runs, trips
 from config.settings import cors_origins, ensure_api_env
@@ -28,11 +27,6 @@ async def lifespan(_app: FastAPI):
     ensure_api_env()
     init_db()
     ensure_user_profile_from_trips()
-    run_manager = get_run_manager()
-    trip_service = get_trip_service()
-    trip_service.recover_all_stale_buildings(
-        has_active_run=run_manager.has_active_run_for_trip,
-    )
     yield
 
 
@@ -43,7 +37,7 @@ _OPENAPI_TAGS = [
     },
     {
         "name": "trips",
-        "description": "Поездки: создание, программа, предпочтения, пересбор, HITL.",
+        "description": "Поездки: создание, программа, предпочтения, пересбор маршрутов.",
     },
     {
         "name": "runs",

@@ -23,7 +23,6 @@ class TripSummary:
     city: str
     dates: str
     origin_city: str
-    status: str
     updated_at: str
 
 
@@ -35,7 +34,6 @@ class PlannedTripSummary:
     city: str
     dates: str
     origin_city: str
-    status: str
     updated_at: str
     last_version: int
     last_scope: str
@@ -48,7 +46,6 @@ def create_trip(
     user_query: str,
     *,
     user_id: int = CLI_LOCAL_USER_ID,
-    status: str = "draft",
 ) -> int:
     """Создаёт запись поездки и возвращает trip_id."""
     now = _utc_now()
@@ -60,7 +57,7 @@ def create_trip(
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (user_id, city, dates, origin_city, user_query, status, now, now),
+            (user_id, city, dates, origin_city, user_query, "active", now, now),
         )
         conn.commit()
         return int(cursor.lastrowid)
@@ -78,16 +75,6 @@ def delete_trip(trip_id: int, *, user_id: int | None = None) -> bool:
             cursor = conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
         conn.commit()
         return cursor.rowcount > 0
-
-
-def update_trip_status(trip_id: int, status: str) -> None:
-    """Обновляет статус поездки и updated_at."""
-    with connect() as conn:
-        conn.execute(
-            "UPDATE trips SET status = ?, updated_at = ? WHERE id = ?",
-            (status, _utc_now(), trip_id),
-        )
-        conn.commit()
 
 
 def save_preferences(trip_id: int, preferences: dict[str, Any]) -> None:
@@ -204,7 +191,6 @@ def list_planned_trips(limit: int = 20) -> list[PlannedTripSummary]:
                 t.city,
                 t.dates,
                 t.origin_city,
-                t.status,
                 t.updated_at,
                 iv.version AS last_version,
                 iv.scope AS last_scope
@@ -226,7 +212,6 @@ def list_planned_trips(limit: int = 20) -> list[PlannedTripSummary]:
             city=r["city"],
             dates=r["dates"],
             origin_city=r["origin_city"],
-            status=r["status"],
             updated_at=r["updated_at"],
             last_version=int(r["last_version"]),
             last_scope=r["last_scope"],
@@ -236,12 +221,12 @@ def list_planned_trips(limit: int = 20) -> list[PlannedTripSummary]:
 
 
 def list_trips(limit: int = 20, *, user_id: int | None = None) -> list[TripSummary]:
-    """Список поездок, новые сверху. user_id=None — все (восстановление статусов)."""
+    """Список поездок, новые сверху."""
     with connect() as conn:
         if user_id is not None:
             rows = conn.execute(
                 """
-                SELECT id, city, dates, origin_city, status, updated_at
+                SELECT id, city, dates, origin_city, updated_at
                 FROM trips
                 WHERE user_id = ?
                 ORDER BY updated_at DESC
@@ -252,7 +237,7 @@ def list_trips(limit: int = 20, *, user_id: int | None = None) -> list[TripSumma
         else:
             rows = conn.execute(
                 """
-                SELECT id, city, dates, origin_city, status, updated_at
+                SELECT id, city, dates, origin_city, updated_at
                 FROM trips
                 ORDER BY updated_at DESC
                 LIMIT ?
@@ -265,7 +250,6 @@ def list_trips(limit: int = 20, *, user_id: int | None = None) -> list[TripSumma
             city=r["city"],
             dates=r["dates"],
             origin_city=r["origin_city"],
-            status=r["status"],
             updated_at=r["updated_at"],
         )
         for r in rows
@@ -278,7 +262,7 @@ def get_trip(trip_id: int, *, user_id: int | None = None) -> dict[str, Any] | No
         if user_id is not None:
             row = conn.execute(
                 """
-                SELECT id, user_id, city, dates, origin_city, user_query, status,
+                SELECT id, user_id, city, dates, origin_city, user_query,
                        created_at, updated_at
                 FROM trips WHERE id = ? AND user_id = ?
                 """,
@@ -287,7 +271,7 @@ def get_trip(trip_id: int, *, user_id: int | None = None) -> dict[str, Any] | No
         else:
             row = conn.execute(
                 """
-                SELECT id, user_id, city, dates, origin_city, user_query, status,
+                SELECT id, user_id, city, dates, origin_city, user_query,
                        created_at, updated_at
                 FROM trips WHERE id = ?
                 """,
@@ -374,8 +358,8 @@ def save_itinerary_version(
             (trip_id, version, scope, program_json, int(approved), now),
         )
         conn.execute(
-            "UPDATE trips SET status = ?, updated_at = ? WHERE id = ?",
-            ("building" if not approved else "approved", now, trip_id),
+            "UPDATE trips SET updated_at = ? WHERE id = ?",
+            (now, trip_id),
         )
         conn.commit()
         return int(cursor.lastrowid)
@@ -523,7 +507,6 @@ def list_tool_runs(trip_id: int, limit: int = 50) -> list[dict[str, Any]]:
 
 def mark_latest_itinerary_approved(trip_id: int) -> None:
     """Помечает последнюю версию программы как утверждённую."""
-    now = _utc_now()
     with connect() as conn:
         row = conn.execute(
             """
@@ -539,10 +522,6 @@ def mark_latest_itinerary_approved(trip_id: int) -> None:
         conn.execute(
             "UPDATE itinerary_versions SET approved = 1 WHERE id = ?",
             (int(row["id"]),),
-        )
-        conn.execute(
-            "UPDATE trips SET status = ?, updated_at = ? WHERE id = ?",
-            ("approved", now, trip_id),
         )
         conn.commit()
 

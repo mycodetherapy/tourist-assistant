@@ -40,7 +40,7 @@ class ProgramDraft(BaseModel):
 
 
 class FinalProgram(BaseModel):
-    """Структурированная культурная программа поездки."""
+    """Структурированный результат построения маршрутов поездки."""
 
     tickets: str = Field(
         ...,

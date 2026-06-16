@@ -3,28 +3,29 @@ import { Card, Spin, Steps } from "antd";
 interface BuildingOverlayProps {
   visible: boolean;
   runStatus?: string;
+  runScope?: "routes" | "full";
 }
 
-export function BuildingOverlay({ visible, runStatus }: BuildingOverlayProps) {
+export function BuildingOverlay({ visible, runStatus, runScope = "full" }: BuildingOverlayProps) {
   if (!visible) return null;
 
-  const step = runStatus === "queued" ? 0 : 1;
+  const step = runStatus === "queued" ? 0 : runScope === "routes" ? 1 : 0;
 
   return (
     <Card className="mb-6">
       <div className="flex flex-col items-center gap-4 py-6">
         <Spin size="large" />
         <p className="text-neutral-600 text-center max-w-md">
-          Собираем билеты, ищем места на Яндекс.Картах и формируем три варианта маршрута
-          (A / B / C). Обычно 1–2 минуты.
+          Обновляем пул мест и формируем три варианта маршрута (A / B / C), затем
+          пересобираем лайфхаки. Обычно 1–2 минуты.
         </p>
         <Steps
           current={step}
           className="max-w-lg w-full"
           items={[
-            { title: "Билеты и POI" },
+            { title: "Пул мест (POI)" },
             { title: "Маршруты A/B/C" },
-            { title: "Проверка" },
+            { title: "Лайфхаки и проверка" },
           ]}
         />
       </div>

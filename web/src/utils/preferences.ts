@@ -1,6 +1,6 @@
 import type { TripPreferences } from "../api/types";
 
-export const DEFAULT_USER_QUERY = "Составь культурную программу поездки";
+export const DEFAULT_USER_QUERY = "Составь три варианта маршрута по городу";
 
 /** Скрытые defaults; в форме только travel_party. */
 export const DEFAULT_PREFERENCES: TripPreferences = {

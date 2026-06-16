@@ -903,63 +903,6 @@
         }
       }
     },
-    "/api/trips/{trip_id}/review": {
-      "post": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Submit Review",
-        "operationId": "submit_review_api_trips__trip_id__review_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReviewRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/runs/{run_id}": {
       "get": {
         "tags": [
@@ -1566,22 +1509,30 @@
             "type": "string",
             "title": "City"
           },
-          "dates": {
-            "type": "string",
-            "title": "Dates"
-          },
-          "origin_city": {
-            "type": "string",
-            "title": "Origin City",
-            "default": "Москва"
+          "route_anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RouteAnchor"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "user_query": {
             "type": "string",
             "title": "User Query",
-            "default": "Составь культурную программу поездки"
+            "default": "Составь три варианта маршрута по городу"
           },
           "preferences": {
-            "$ref": "#/components/schemas/TripPreferences"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripPreferences"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "start_run": {
             "type": "boolean",
@@ -1591,9 +1542,7 @@
         },
         "type": "object",
         "required": [
-          "city",
-          "dates",
-          "preferences"
+          "city"
         ],
         "title": "CreateTripRequest"
       },
@@ -1674,7 +1623,7 @@
           "lifehacks"
         ],
         "title": "FinalProgram",
-        "description": "Структурированная культурная программа поездки."
+        "description": "Структурированный результат построения маршрутов поездки."
       },
       "GeocodeRequest": {
         "properties": {
@@ -1763,10 +1712,7 @@
             "type": "string",
             "enum": [
               "routes",
-              "route_stops",
-              "lifehacks",
-              "events",
-              "dining"
+              "route_stops"
             ],
             "title": "Section"
           },
@@ -2034,53 +1980,6 @@
         ],
         "title": "ReverseGeocodeResponse"
       },
-      "ReviewRequest": {
-        "properties": {
-          "action": {
-            "type": "string",
-            "enum": [
-              "approve",
-              "save_draft",
-              "rebuild"
-            ],
-            "title": "Action"
-          }
-        },
-        "type": "object",
-        "required": [
-          "action"
-        ],
-        "title": "ReviewRequest"
-      },
-      "ReviewResponse": {
-        "properties": {
-          "trip_id": {
-            "type": "integer",
-            "title": "Trip Id"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "run_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Run Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "trip_id",
-          "status"
-        ],
-        "title": "ReviewResponse"
-      },
       "RouteAnchor": {
         "properties": {
           "lat": {
@@ -2284,15 +2183,11 @@
           "scope": {
             "type": "string",
             "enum": [
-              "full",
-              "tickets",
               "routes",
-              "lifehacks",
-              "events",
-              "dining"
+              "full"
             ],
             "title": "Scope",
-            "default": "full"
+            "default": "routes"
           }
         },
         "type": "object",
@@ -2300,9 +2195,6 @@
       },
       "StructuredProgramResponse": {
         "properties": {
-          "tickets": {
-            "$ref": "#/components/schemas/ProgramSectionResponse"
-          },
           "routes": {
             "$ref": "#/components/schemas/ProgramSectionResponse"
           },
@@ -2311,22 +2203,13 @@
           },
           "lifehacks": {
             "$ref": "#/components/schemas/ProgramSectionResponse"
-          },
-          "events": {
-            "$ref": "#/components/schemas/ProgramSectionResponse"
-          },
-          "dining": {
-            "$ref": "#/components/schemas/ProgramSectionResponse"
           }
         },
         "type": "object",
         "required": [
-          "tickets",
           "routes",
           "route_stops",
-          "lifehacks",
-          "events",
-          "dining"
+          "lifehacks"
         ],
         "title": "StructuredProgramResponse"
       },
@@ -2340,14 +2223,6 @@
             "type": "string",
             "title": "City"
           },
-          "dates": {
-            "type": "string",
-            "title": "Dates"
-          },
-          "origin_city": {
-            "type": "string",
-            "title": "Origin City"
-          },
           "user_query": {
             "anyOf": [
               {
@@ -2358,10 +2233,6 @@
               }
             ],
             "title": "User Query"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
           },
           "created_at": {
             "type": "string",
@@ -2376,10 +2247,7 @@
         "required": [
           "id",
           "city",
-          "dates",
-          "origin_city",
           "user_query",
-          "status",
           "created_at",
           "updated_at"
         ],
@@ -2536,18 +2404,6 @@
             "type": "string",
             "title": "City"
           },
-          "dates": {
-            "type": "string",
-            "title": "Dates"
-          },
-          "origin_city": {
-            "type": "string",
-            "title": "Origin City"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
           "updated_at": {
             "type": "string",
             "title": "Updated At"
@@ -2557,9 +2413,6 @@
         "required": [
           "id",
           "city",
-          "dates",
-          "origin_city",
-          "status",
           "updated_at"
         ],
         "title": "TripSummaryResponse"
@@ -2708,7 +2561,7 @@
     },
     {
       "name": "trips",
-      "description": "Поездки: создание, программа, предпочтения, пересбор, HITL."
+      "description": "Поездки: создание, программа, предпочтения, пересбор маршрутов."
     },
     {
       "name": "runs",

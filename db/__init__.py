@@ -28,7 +28,6 @@ from db.repository import (
     save_section_artifact,
     save_user_profile,
     get_section_artifact,
-    update_trip_status,
     upsert_item_feedback,
 )
 
@@ -61,6 +60,5 @@ __all__ = [
     "save_section_artifact",
     "save_user_profile",
     "get_section_artifact",
-    "update_trip_status",
     "upsert_item_feedback",
 ]

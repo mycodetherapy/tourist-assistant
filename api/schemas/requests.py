@@ -8,27 +8,21 @@ from pydantic import BaseModel, Field, model_validator
 
 from onboarding.preferences import RouteAnchor, TripPreferences
 
-RebuildScope = Literal["full", "tickets", "routes", "lifehacks", "events", "dining"]
-ReviewAction = Literal["approve", "save_draft", "rebuild"]
-VotableSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
+RebuildScope = Literal["routes", "full"]
+VotableSectionKey = Literal["routes", "route_stops"]
 ItemVote = Literal[1, -1]
 
 
 class CreateTripRequest(BaseModel):
     city: str
-    dates: str
-    origin_city: str = "Москва"
-    user_query: str = "Составь культурную программу поездки"
-    preferences: TripPreferences
+    route_anchor: RouteAnchor | None = None
+    user_query: str = "Составь три варианта маршрута по городу"
+    preferences: TripPreferences | None = None
     start_run: bool = True
 
 
 class StartRunRequest(BaseModel):
-    scope: RebuildScope = "full"
-
-
-class ReviewRequest(BaseModel):
-    action: ReviewAction
+    scope: RebuildScope = "routes"
 
 
 class AffiliateClickRequest(BaseModel):

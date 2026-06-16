@@ -20,7 +20,7 @@ from agents.finalize_helpers import (
 from agents.human_review import prompt_approve_program, prompt_reject_action
 from agents.llm import get_llm_final, get_llm_with_tools
 from agents.print_program import print_final_program
-from db import log_tool_run, update_trip_status
+from db import log_tool_run
 from models.schemas import (
     ExecutorNodeOutput,
     FinalProgram,
@@ -84,7 +84,7 @@ def _build_planner_system_prompt(ctx: PlannerContext, rebuild_scope: str) -> str
         prefs_block = f"\nПредпочтения пользователя (опросник): {ctx.search_context}\n"
     tools_hint = planner_tools_hint(rebuild_scope)
     return (
-        "Ты — туристический ассистент. Составляешь культурную программу поездки.\n"
+        "Ты — туристический ассистент. Составляешь маршруты по городу.\n"
         f"Город поездки: {ctx.city}. Даты: {ctx.dates}. Город вылета: {ctx.origin_city}."
         f"{prefs_block}\n"
         "Инструменты: tickets=билеты; route_materials=единый пул мест досуга и ресторанов "
@@ -398,8 +398,6 @@ def human_review_node(state: AgentState) -> dict[str, Any]:
         print(f"Замечания critic: {state['critic_notes']}")
 
     if state.get("review_mode") == "deferred":
-        if state.get("trip_id") is not None:
-            update_trip_status(int(state["trip_id"]), "review")
         return {"approved": False}
 
     if state.get("review_mode") == "cli" and state.get("trip_id") and state.get("program"):
@@ -415,14 +413,10 @@ def human_review_node(state: AgentState) -> dict[str, Any]:
 
     if prompt_approve_program():
         print("✓ Программа утверждена.\n")
-        if state.get("trip_id") is not None:
-            update_trip_status(int(state["trip_id"]), "approved")
         return {"approved": True}
 
     action = prompt_reject_action()
     if action == "save_draft":
-        if state.get("trip_id") is not None:
-            update_trip_status(int(state["trip_id"]), "review")
         return {"approved": True}
 
     print("Повторная сборка по замечаниям...\n")

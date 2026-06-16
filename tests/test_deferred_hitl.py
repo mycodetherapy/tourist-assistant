@@ -3,22 +3,19 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
 
 from agents.nodes import human_review_node, route_after_human
 from models.state import AgentState
 
 
 class TestDeferredHitl(unittest.TestCase):
-    def test_human_review_deferred_sets_review_status(self) -> None:
+    def test_human_review_deferred_skips_cli_prompt(self) -> None:
         state: AgentState = {
             "trip_id": 1,
             "review_mode": "deferred",
             "critic_notes": "",
         }
-        with patch("agents.nodes.update_trip_status") as mock_status:
-            result = human_review_node(state)
-        mock_status.assert_called_once_with(1, "review")
+        result = human_review_node(state)
         self.assertFalse(result["approved"])
 
     def test_route_after_human_deferred_ends(self) -> None:

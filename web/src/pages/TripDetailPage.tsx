@@ -1,21 +1,21 @@
 import { DeleteOutlined } from "@ant-design/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Card, Empty, Popconfirm, Space, notification } from "antd";
+import { Alert, Button, Card, Empty, Grid, Popconfirm, Typography, notification } from "antd";
 import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getErrorMessage, isLlmKeyRequiredError } from "../api/client";
-import type { RebuildScope, ReviewAction } from "../api/types";
-import { deleteTrip, startRun, submitReview } from "../api/trips";
+import type { RebuildScope } from "../api/types";
+import { deleteTrip, startRun } from "../api/trips";
 import { parseRouteProgram } from "../api/routeTypes";
 import { BuildingOverlay } from "../components/BuildingOverlay";
 import { ProgramTabs } from "../components/ProgramTabs";
-import { RebuildScopeSelect } from "../components/RebuildScopeSelect";
-import { ReviewActions } from "../components/ReviewActions";
 import { TripAnchorCard } from "../components/TripAnchorCard";
 import { TripMetaCard } from "../components/TripMetaCard";
 import { useRunPolling } from "../hooks/useRunPolling";
 import { useTrip, useTripProgram } from "../hooks/useTrip";
+
+const { useBreakpoint } = Grid;
 
 export function TripDetailPage() {
   const { id } = useParams();
@@ -24,32 +24,17 @@ export function TripDetailPage() {
   const [activeRunId, setActiveRunId] = useState<string | null>(
     searchParams.get("run"),
   );
-  const [rebuildScope, setRebuildScope] = useState<RebuildScope>("full");
+  const [activeRunScope, setActiveRunScope] = useState<"routes" | "full">(
+    searchParams.get("scope") === "routes" ? "routes" : "full",
+  );
   const sawRunInProgressRef = useRef(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const screens = useBreakpoint();
+  const isMobile = screens.md === false;
 
   const tripQuery = useTrip(tripId);
   const runQuery = useRunPolling(activeRunId);
-
-  const reviewMutation = useMutation({
-    mutationFn: (action: ReviewAction) => submitReview(tripId, action),
-    onSuccess: (data) => {
-      if (data.run_id) {
-        setActiveRunId(data.run_id);
-        setSearchParams({ run: data.run_id });
-      }
-      queryClient.invalidateQueries({ queryKey: ["trips", tripId] });
-      queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
-      queryClient.invalidateQueries({ queryKey: ["trips"] });
-      if (!data.run_id) {
-        notification.success({ message: "Готово" });
-      }
-    },
-    onError: (error) => {
-      notification.error({ message: "Ошибка", description: getErrorMessage(error) });
-    },
-  });
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteTrip(tripId),
@@ -65,10 +50,10 @@ export function TripDetailPage() {
 
   const rebuildMutation = useMutation({
     mutationFn: (scope: RebuildScope) => startRun(tripId, scope),
-    onSuccess: (data) => {
+    onSuccess: (data, scope) => {
       if (data.run_id) {
         setActiveRunId(data.run_id);
-        setSearchParams({ run: data.run_id });
+        setSearchParams({ run: data.run_id, scope });
       }
       queryClient.invalidateQueries({ queryKey: ["trips", tripId] });
     },
@@ -91,16 +76,17 @@ export function TripDetailPage() {
       runQuery.data?.status === "queued" ||
       runQuery.data?.status === "running");
 
-  const isBuilding =
-    runInProgress ||
-    rebuildMutation.isPending ||
-    tripQuery.data?.status === "building";
+  const isBuilding = runInProgress || rebuildMutation.isPending;
 
   const programQuery = useTripProgram(tripId, !runInProgress);
 
   useEffect(() => {
     const paramRun = searchParams.get("run");
+    const paramScope = searchParams.get("scope");
     if (paramRun) setActiveRunId(paramRun);
+    if (paramScope === "routes" || paramScope === "full") {
+      setActiveRunScope(paramScope);
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -127,6 +113,7 @@ export function TripDetailPage() {
       sawRunInProgressRef.current = false;
       setSearchParams({}, { replace: true });
       setActiveRunId(null);
+      setActiveRunScope("full");
       queryClient.invalidateQueries({ queryKey: ["trips", tripId] });
       queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
       queryClient.invalidateQueries({ queryKey: ["trips"] });
@@ -148,22 +135,17 @@ export function TripDetailPage() {
   }
 
   const trip = tripQuery.data;
-  const showReview = trip.status === "review" && !isBuilding;
-  const canRebuild = (trip.status === "review" || trip.status === "approved") && !isBuilding;
   const hasProgram = !!programQuery.data;
   const programSettled = !programQuery.isLoading;
-  const canStartBuild =
-    programSettled &&
-    !hasProgram &&
-    !isBuilding &&
-    (trip.status === "draft" || trip.status === "failed");
+  const canRebuild = hasProgram && !isBuilding;
+  const canStartBuild = programSettled && !hasProgram && !isBuilding;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-stretch sm:justify-end">
         <Popconfirm
           title={`Удалить поездку #${trip.id}?`}
-          description={`${trip.city}, ${trip.dates}`}
+          description={trip.city}
           okText="Удалить"
           cancelText="Отмена"
           okButtonProps={{ danger: true }}
@@ -195,53 +177,94 @@ export function TripDetailPage() {
         />
       )}
 
-      <BuildingOverlay visible={isBuilding} runStatus={runQuery.data?.status} />
+      <BuildingOverlay
+        visible={isBuilding}
+        runStatus={runQuery.data?.status}
+        runScope={activeRunScope}
+      />
 
       {canStartBuild && (
-        <Card title="Сборка программы">
+        <Card title="Сборка маршрутов">
           <Alert
             type="info"
             showIcon
             className="mb-4"
-            message="Программа ещё не собрана"
-            description="Нажмите кнопку ниже — агент подберёт билеты, маршруты и лайфхаки (1–2 минуты)."
+            message="Маршруты ещё не собраны"
+            description="Нажмите кнопку ниже — агент сгенерирует маршруты и лайфхаки (1–2 минуты)."
           />
           <Button
             type="primary"
             block
             className="sm:!w-auto"
             loading={rebuildMutation.isPending}
-            onClick={() => rebuildMutation.mutate("full")}
+            onClick={() => {
+              setActiveRunScope("full");
+              rebuildMutation.mutate("full");
+            }}
           >
-            Собрать программу
+            Собрать маршруты
           </Button>
         </Card>
       )}
 
-      {showReview && (
-        <Card title="Утверждение программы">
-          <ReviewActions
-            loading={reviewMutation.isPending}
-            onApprove={() => reviewMutation.mutate("approve")}
-            onSaveDraft={() => reviewMutation.mutate("save_draft")}
-            onRebuild={() => reviewMutation.mutate("rebuild")}
-          />
-        </Card>
-      )}
-
       {canRebuild && (
-        <Card title="Частичный пересбор">
-          <Space wrap className="w-full [&_.ant-space-item]:w-full sm:[&_.ant-space-item]:w-auto">
-            <RebuildScopeSelect value={rebuildScope} onChange={setRebuildScope} />
-            <Button
-              block
-              className="sm:!w-auto"
-              loading={rebuildMutation.isPending}
-              onClick={() => rebuildMutation.mutate(rebuildScope)}
-            >
-              Пересобрать раздел
-            </Button>
-          </Space>
+        <Card title="Пересбор маршрутов">
+          {isMobile ? (
+            <div className="space-y-2">
+              <Button
+                block
+                loading={rebuildMutation.isPending}
+              onClick={() => {
+                setActiveRunScope("routes");
+                rebuildMutation.mutate("routes");
+              }}
+              >
+                Пересобрать маршруты
+              </Button>
+              <Button
+                block
+                type="dashed"
+                loading={rebuildMutation.isPending}
+              onClick={() => {
+                setActiveRunScope("full");
+                rebuildMutation.mutate("full");
+              }}
+              >
+                Глубокий пересбор
+              </Button>
+              <Typography.Text
+                className="block text-gray-500"
+                style={{ fontSize: 12, lineHeight: "16px" }}
+              >
+                Используйте глубокий пересбор после долгого перерыва: в городе могли открыться
+                новые места или измениться данные.
+              </Typography.Text>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Button
+                type="primary"
+                loading={rebuildMutation.isPending}
+                onClick={() => rebuildMutation.mutate("routes")}
+              >
+                Пересобрать маршруты
+              </Button>
+              <Button
+                type="dashed"
+                loading={rebuildMutation.isPending}
+                onClick={() => rebuildMutation.mutate("full")}
+              >
+                Глубокий пересбор
+              </Button>
+              <Typography.Text
+                className="text-gray-500"
+                style={{ fontSize: 12, lineHeight: "16px" }}
+              >
+                Глубокий пересбор обновляет пул мест из источников заново; используйте его после
+                перерыва, когда данные по городу могли измениться.
+              </Typography.Text>
+            </div>
+          )}
         </Card>
       )}
 

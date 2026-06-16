@@ -24,11 +24,9 @@ from db import (
     list_item_feedback_by_index,
     list_trips,
     log_agent_run,
-    mark_latest_itinerary_approved,
     save_itinerary_version,
     save_preferences,
     save_user_profile,
-    update_trip_status,
     upsert_item_feedback,
 )
 from input_validation import sanitize_and_validate
@@ -50,7 +48,6 @@ from program.parse_items import (
 )
 from search.context import set_session
 
-ReviewAction = Literal["approve", "save_draft", "rebuild"]
 ProgramSectionKey = Literal["tickets", "routes", "route_stops", "lifehacks", "events", "dining"]
 VotableSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
 ItemVote = Literal[1, -1]
@@ -332,109 +329,8 @@ class TripService:
                 scope=rebuild_scope,
                 approved=approved,
             )
-            if mode == "deferred":
-                update_trip_status(trip_id, "review")
-        elif mode == "deferred":
-            update_trip_status(trip_id, "failed")
 
         return GraphRunResult(state=result, run_id=run_id, version_id=version_id)
-
-    def submit_review(self, trip_id: int, action: ReviewAction) -> None:
-        """Утверждение или сохранение черновика после deferred-сборки."""
-        if get_trip(trip_id) is None:
-            raise ValueError(f"Поездка #{trip_id} не найдена")
-
-        if action == "approve":
-            mark_latest_itinerary_approved(trip_id)
-            update_trip_status(trip_id, "approved")
-            return
-
-        if action == "save_draft":
-            update_trip_status(trip_id, "review")
-            return
-
-        raise ValueError(f"Действие {action!r} обрабатывается через prepare_rebuild_state")
-
-    def prepare_rebuild_state(self, trip_id: int, *, scope: str | None = None) -> AgentState:
-        """Готовит состояние для пересборки после отклонения программы."""
-        trip = get_trip(trip_id)
-        if trip is None:
-            raise ValueError(f"Поездка #{trip_id} не найдена")
-
-        latest = get_latest_itinerary(trip_id)
-        if latest is None:
-            raise ValueError("Нет сохранённой программы для пересборки")
-
-        base_program = normalize_stored_program(latest["program"])
-        prefs_data = get_preferences(trip_id) or {}
-        if prefs_data:
-            prefs = TripPreferences.model_validate(prefs_data)
-            search_context = self.apply_preferences(prefs)
-        else:
-            search_context = ""
-
-        from search.context import set_route_materials
-        from search.route_materials_store import ensure_route_materials_for_trip
-
-        cached = ensure_route_materials_for_trip(
-            trip_id,
-            city=trip["city"],
-            dates=trip["dates"],
-            base_program=base_program,
-        )
-        if cached is not None:
-            set_route_materials(cached.model_dump())
-
-        rebuild_scope = scope or latest["scope"]
-        return self.build_initial_state(
-            trip_id=trip_id,
-            city=trip["city"],
-            dates=trip["dates"],
-            origin_city=trip["origin_city"],
-            search_context=search_context,
-            preferences_dict=prefs_data,
-            rebuild_scope=rebuild_scope,
-            user_message=(
-                "Пользователь не утвердил программу. "
-                "Пересобери слабые разделы, опираясь на digest."
-            ),
-            base_program=base_program,
-            retry_count=1,
-            review_mode="deferred",
-        )
-
-    def recover_stale_building(
-        self,
-        trip_id: int,
-        *,
-        has_active_run: bool,
-    ) -> str | None:
-        """
-        Сбрасывает «осиротевший» статус building (прогон оборвался при reload API).
-        Возвращает новый статус или None, если восстановление не требуется.
-        """
-        trip = get_trip(trip_id)
-        if trip is None or trip["status"] != "building" or has_active_run:
-            return None
-
-        latest = get_latest_itinerary(trip_id)
-        if latest is not None:
-            new_status = "approved" if latest["approved"] else "review"
-        else:
-            new_status = "failed"
-        update_trip_status(trip_id, new_status)
-        return new_status
-
-    def recover_all_stale_buildings(self, *, has_active_run) -> int:
-        """При старте API: все поездки building без живого прогона."""
-        recovered = 0
-        for summary in list_trips(limit=100):
-            if self.recover_stale_building(
-                summary.id,
-                has_active_run=has_active_run(summary.id),
-            ):
-                recovered += 1
-        return recovered
 
     def delete_trip_by_id(
         self,
