@@ -270,7 +270,7 @@ export function RouteAnchorMapPicker({
   }, [value?.lat, value?.lon, label, focusPoint]);
 
   if (error && !isYandexMapsConfigured()) {
-    return <Alert type="warning" showIcon message={error} />;
+    return <Alert type="warning" showIcon title={error} />;
   }
 
   return (
@@ -310,7 +310,7 @@ export function RouteAnchorMapPicker({
         </Button>
       </div>
       {error && isYandexMapsConfigured() && (
-        <Alert type="warning" showIcon className="!mb-0" message={error} closable onClose={() => setError(null)} />
+        <Alert type="warning" showIcon className="!mb-0" title={error} closable onClose={() => setError(null)} />
       )}
       <div className="relative overflow-hidden rounded-b-lg border border-gray-200">
         {(loading || resolvingClick) && (
@@ -318,7 +318,7 @@ export function RouteAnchorMapPicker({
             className="absolute inset-0 z-10 flex items-center justify-center bg-white/70"
             style={{ height }}
           >
-            <Spin tip={resolvingClick ? "Определяем адрес…" : undefined} />
+            <Spin description={resolvingClick ? "Определяем адрес…" : undefined} />
           </div>
         )}
         <div ref={containerRef} style={{ height, width: "100%" }} />

@@ -1,4 +1,4 @@
-import { Segmented } from "antd";
+import { Button } from "antd";
 import type { TripRouteCase } from "../api/routeTypes";
 
 interface RouteCaseSwitcherProps {
@@ -19,14 +19,22 @@ export function RouteCaseSwitcher({
     return null;
   }
   return (
-    <Segmented
-      className={className ?? "routes-case-select mb-3"}
-      value={value}
-      onChange={(next) => onChange(String(next))}
-      options={cases.map((routeCase) => ({
-        label: `Вариант ${routeCase.case_id}`,
-        value: String(routeCase.case_id),
-      }))}
-    />
+    <div className={`mt-3 flex flex-wrap gap-2 ${className ?? ""}`.trim()}>
+      {cases.map((routeCase) => {
+        const caseId = String(routeCase.case_id);
+        const selected = value === caseId;
+        return (
+          <Button
+            key={caseId}
+            type={selected ? "primary" : "default"}
+            size="small"
+            className="!m-0 shrink-0"
+            onClick={() => onChange(caseId)}
+          >
+            Вариант {routeCase.case_id}
+          </Button>
+        );
+      })}
+    </div>
   );
 }

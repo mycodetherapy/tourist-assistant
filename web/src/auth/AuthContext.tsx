@@ -9,9 +9,7 @@ import {
 } from "react";
 import type { UserInfo } from "../api/types";
 import { fetchMe, login as apiLogin, register as apiRegister } from "../api/auth";
-import { setAuthToken } from "../api/client";
-
-const TOKEN_KEY = "tourist_auth_token";
+import { getAuthToken, setAuthToken, TOKEN_KEY } from "../api/client";
 
 interface AuthContextValue {
   user: UserInfo | null;
@@ -33,7 +31,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applySession = useCallback(async (accessToken: string) => {
     setAuthToken(accessToken);
     setToken(accessToken);
-    localStorage.setItem(TOKEN_KEY, accessToken);
     const me = await fetchMe();
     setUser(me);
   }, []);
@@ -42,7 +39,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthToken(null);
     setToken(null);
     setUser(null);
-    localStorage.removeItem(TOKEN_KEY);
   }, []);
 
   useEffect(() => {
@@ -53,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        setAuthToken(token);
+        setAuthToken(getAuthToken() ?? token);
         const me = await fetchMe();
         if (!cancelled) {
           setUser(me);

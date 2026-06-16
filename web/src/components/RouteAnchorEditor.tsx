@@ -93,17 +93,17 @@ export function RouteAnchorEditor({
       setBannerKind(deleted ? "deleted" : "saved");
       onSaved?.();
       notification.success({
-        message: deleted ? "Базовая точка удалена" : "Базовая точка сохранена",
+        title: deleted ? "Базовая точка удалена" : "Базовая точка сохранена",
       });
     },
     onError: (error) => {
-      notification.error({ message: "Не сохранено", description: getErrorMessage(error) });
+      notification.error({ title: "Не сохранено", description: getErrorMessage(error) });
     },
   });
 
   const handleSave = () => {
     if (draft.lat == null || draft.lon == null) {
-      notification.warning({ message: "Укажите точку на карте или через поиск" });
+      notification.warning({ title: "Укажите точку на карте или через поиск" });
       return;
     }
     const anchor: RouteAnchor = {
@@ -136,7 +136,7 @@ export function RouteAnchorEditor({
         <Alert
           type="info"
           showIcon
-          message="Точка сохранена"
+          title="Точка сохранена"
           description="Пересоберите раздел «Маршруты», чтобы обновить ссылки на Яндекс.Карты."
         />
       )}
@@ -144,7 +144,7 @@ export function RouteAnchorEditor({
         <Alert
           type="success"
           showIcon
-          message="Базовая точка удалена"
+          title="Базовая точка удалена"
           description="Пересоберите раздел «Маршруты», чтобы убрать базовую точку из ссылок на карту."
         />
       )}

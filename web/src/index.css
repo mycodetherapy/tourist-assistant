@@ -110,6 +110,23 @@ body {
   width: calc((100% - 5.75rem) / 2);
 }
 
+.trip-anchor-collapse.ant-collapse {
+  border: 1px solid rgb(229 231 235);
+  background: #fff;
+}
+
+.trip-anchor-collapse .ant-collapse-item > .ant-collapse-header {
+  background: #fff;
+}
+
+.trip-anchor-collapse .ant-collapse-content {
+  background: #fff;
+}
+
+.trip-anchor-collapse-label {
+  line-height: 1.35;
+}
+
 @media (max-width: 767px) {
   .program-card .ant-card-body {
     padding-inline: 0;
@@ -133,25 +150,60 @@ body {
     overflow: visible;
   }
 
-  .program-card .space-y-3 > .ant-alert {
+  .program-card .space-y-3 > * {
     margin-inline: 12px;
   }
 
   .route-item--with-map .route-map-embed {
-    --route-map-inset: 8px;
-    width: calc(100vw - 2 * var(--route-map-inset));
-    max-width: calc(100vw - 2 * var(--route-map-inset));
-    margin-inline: calc(50% - 50vw + var(--route-map-inset));
-    margin-bottom: 0;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    border-top: none;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    border: none;
+    border-radius: 0.5rem 0.5rem 0 0;
     overflow: visible;
   }
 
-  .route-map-iframe {
+  .route-map-scroll {
+    position: relative;
+    z-index: 1;
     height: min(62dvh, 480px);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-x pan-y;
+    transform: translateZ(0);
+    border-radius: 0.5rem 0.5rem 0 0;
+  }
+
+  .route-map-mobile-link {
+    display: block;
+    border-top: 1px solid rgb(243 244 246);
+    background: rgb(249 250 251);
+    padding: 10px 12px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.25;
+    color: rgb(37 99 235);
+    text-decoration: none;
+  }
+
+  .route-map-mobile-link:active {
+    background: rgb(243 244 246);
+  }
+
+  .route-item--with-map .route-map-embed .route-map-scroll {
+    border-radius: 0.5rem 0.5rem 0 0;
+  }
+
+  .route-item--with-map .route-map-embed .route-map-mobile-link {
+    border-radius: 0;
+  }
+
+  .route-map-iframe {
+    display: block;
+    height: min(62dvh, 480px);
+    min-height: 100%;
+    pointer-events: auto;
   }
 
   .route-item--with-map .route-item-body {
@@ -160,8 +212,14 @@ body {
 }
 
 @media (min-width: 768px) {
+  .route-map-scroll {
+    overflow: hidden;
+    border-radius: inherit;
+  }
+
   .route-map-iframe {
     height: min(360px, 50vh);
+    min-height: unset;
   }
 }
 

@@ -8,7 +8,6 @@ import { parseRouteProgram, rawRouteCases, routeCaseAtIndex } from "../api/route
 import type { ItemVote, ProgramResponse } from "../api/types";
 import { pickPreferredCaseId } from "../utils/routeVotes";
 import { ItemVoteButtons } from "./ItemVoteButtons";
-import { RouteAnchorSummary } from "./RouteAnchorSummary";
 import { RouteCaseDetails } from "./RouteCaseDetails";
 import { RouteCaseSwitcher } from "./RouteCaseSwitcher";
 import { RouteMapEmbed } from "./RouteMapEmbed";
@@ -19,14 +18,6 @@ interface ProgramTabsProps {
   tripId: number;
   data: ProgramResponse;
   votingDisabled?: boolean;
-}
-
-function routeCaseCount(program: ProgramResponse["program"]): number {
-  return parseRouteProgram(program.routes).length;
-}
-
-function hasRoutesProgram(program: ProgramResponse["program"]): boolean {
-  return routeCaseCount(program) > 0 || Boolean(program.routes_text?.trim());
 }
 
 function MarkdownBlock({
@@ -123,7 +114,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
         queryClient.setQueryData(["trips", tripId, "program"], context.previous);
       }
       notification.error({
-        message: "Оценка не сохранена",
+        title: "Оценка не сохранена",
         description: getErrorMessage(error),
       });
     },
@@ -137,7 +128,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
       <Alert
         type="warning"
         showIcon
-        message="Не удалось загрузить пункты программы"
+        title="Не удалось загрузить пункты программы"
         description="Перезапустите API (uvicorn или docker compose build api && docker compose up api)."
       />
     );
@@ -154,7 +145,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
     }
     if (!itemKey) {
       notification.error({
-        message: "Оценка не сохранена",
+        title: "Оценка не сохранена",
         description: "Обновите страницу (Ctrl+Shift+R) и попробуйте снова.",
       });
       queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
@@ -165,21 +156,6 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
 
   return (
     <div className="space-y-3">
-      {hasRoutesProgram(data.program) && (
-        <Alert
-          type={
-            (data.program.routes_text || "").includes("(fallback)") ? "warning" : "success"
-          }
-          showIcon
-          message="Три варианта маршрута на всю поездку"
-          description={
-            (data.program.routes_text || "").includes("(fallback)")
-              ? "Использованы демо-точки: проверьте доступ к Wikidata/Nominatim. python3 scripts/test_yandex_maps.py Город"
-              : "Оцените варианты A / B / C. Карта встроена в каждый вариант; ссылка на Яндекс.Карты — в описании."
-          }
-        />
-      )}
-      <RouteAnchorSummary tripId={tripId} />
       {isMobile && routeCases.length > 1 && (
         <RouteCaseSwitcher
           cases={routeCases}
@@ -230,12 +206,13 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
                 return (
                   <li
                     key={`routes-${item.item_key}`}
-                    className="route-item--with-map flex flex-col overflow-visible rounded-lg border border-gray-100 bg-white"
+                    className="route-item--with-map flex flex-col rounded-lg border border-gray-100 bg-white"
                   >
                     <RouteMapEmbed
                       mapsRouteUrl={routeCase!.maps_route_url}
                       caseId={routeCase!.case_id}
                       title={routeCase!.title}
+                      showMobileLink
                     />
                     <div className="route-item-body flex flex-col gap-2">
                       <div className="min-w-0 flex-1">{detailsBlock}</div>

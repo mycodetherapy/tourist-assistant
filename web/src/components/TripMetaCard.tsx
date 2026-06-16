@@ -10,9 +10,6 @@ export function TripMetaCard({ trip }: TripMetaCardProps) {
     <Card title={`Поездка #${trip.id}`}>
       <Descriptions column={1} size="small">
         <Descriptions.Item label="Город">{trip.city}</Descriptions.Item>
-        {trip.user_query && (
-          <Descriptions.Item label="Запрос">{trip.user_query}</Descriptions.Item>
-        )}
       </Descriptions>
     </Card>
   );

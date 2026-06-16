@@ -20,10 +20,10 @@ export function TripListPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trips"] });
-      notification.success({ message: "Поездка удалена" });
+      notification.success({ title: "Поездка удалена" });
     },
     onError: (error) => {
-      notification.error({ message: "Ошибка", description: getErrorMessage(error) });
+      notification.error({ title: "Ошибка", description: getErrorMessage(error) });
     },
     onSettled: () => {
       setDeletingId(null);

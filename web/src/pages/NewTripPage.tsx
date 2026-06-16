@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { Button, Form, Input, notification } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getErrorMessage, isLlmKeyRequiredError } from "../api/client";
 import type { RouteAnchor } from "../api/types";
@@ -17,7 +17,13 @@ export function NewTripPage() {
   const [form] = Form.useForm<TripFormValues>();
   const [routeAnchor, setRouteAnchor] = useState<RouteAnchor | null>(null);
   const city = Form.useWatch("city", form) ?? "";
-  const canSubmit = useMemo(() => city.trim().length > 0, [city]);
+  const cityReady = useMemo(() => city.trim().length > 0, [city]);
+
+  useEffect(() => {
+    if (!cityReady) {
+      setRouteAnchor(null);
+    }
+  }, [cityReady]);
 
   const createMutation = useMutation({
     mutationFn: createTrip,
@@ -68,19 +74,39 @@ export function NewTripPage() {
           <Input placeholder="Санкт-Петербург" />
         </Form.Item>
       </Form>
-      <NewTripAnchorFields city={city} value={routeAnchor} onChange={setRouteAnchor} />
 
-      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:gap-3">
-        <Button
-          type="primary"
-          block
-          className="sm:!w-auto"
-          loading={createMutation.isPending}
-          disabled={!canSubmit}
-          onClick={handleSubmit}
+      <div className="relative max-w-2xl">
+        <div
+          className={cityReady ? undefined : "pointer-events-none select-none opacity-50"}
+          aria-disabled={!cityReady}
         >
-          Собрать маршруты
-        </Button>
+          <NewTripAnchorFields
+            city={city}
+            value={routeAnchor}
+            onChange={setRouteAnchor}
+            disabled={!cityReady}
+          />
+
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <Button
+              type="primary"
+              block
+              className="sm:!w-auto"
+              loading={createMutation.isPending}
+              disabled={!cityReady}
+              onClick={handleSubmit}
+            >
+              Собрать маршруты
+            </Button>
+          </div>
+        </div>
+
+        {!cityReady && (
+          <div
+            className="absolute inset-0 z-10 rounded-lg bg-white/10"
+            aria-hidden
+          />
+        )}
       </div>
     </div>
   );

@@ -9,19 +9,25 @@ interface NewTripAnchorFieldsProps {
   city: string;
   value: RouteAnchor | null | undefined;
   onChange: (anchor: RouteAnchor | null) => void;
+  disabled?: boolean;
 }
 
 const FALLBACK_CENTER: MapPoint = { lat: 55.75, lon: 37.62 };
 
 /** Опциональная базовая точка при создании поездки (до trip_id). */
-export function NewTripAnchorFields({ city, value, onChange }: NewTripAnchorFieldsProps) {
+export function NewTripAnchorFields({
+  city,
+  value,
+  onChange,
+  disabled = false,
+}: NewTripAnchorFieldsProps) {
   const [loopEnd, setLoopEnd] = useState(Boolean(value?.loop_end));
   const cityTrimmed = city.trim();
 
   const cityCenterQuery = useQuery({
     queryKey: ["new-trip", "city-center", cityTrimmed],
     queryFn: () => geocodeQuery(cityTrimmed, cityTrimmed),
-    enabled: cityTrimmed.length > 0,
+    enabled: cityTrimmed.length >= 2,
   });
 
   const mapCenter = useMemo((): MapPoint => {
@@ -42,7 +48,7 @@ export function NewTripAnchorFields({ city, value, onChange }: NewTripAnchorFiel
       </p>
       {cityCenterQuery.isLoading ? (
         <div className="flex h-80 items-center justify-center rounded-lg border border-gray-200 bg-white">
-          <Spin tip={`Загрузка карты: ${cityTrimmed}`} />
+          <Spin description={`Загрузка карты: ${cityTrimmed}`} />
         </div>
       ) : (
         <RouteAnchorMapPicker
@@ -65,6 +71,7 @@ export function NewTripAnchorFields({ city, value, onChange }: NewTripAnchorFiel
         />
       )}
       <Checkbox
+        disabled={disabled}
         checked={loopEnd}
         onChange={(event) => {
           setLoopEnd(event.target.checked);
@@ -76,7 +83,13 @@ export function NewTripAnchorFields({ city, value, onChange }: NewTripAnchorFiel
         Конечная точка совпадает с базовой
       </Checkbox>
       {value && (
-        <Button type="link" danger className="!px-0" onClick={() => onChange(null)}>
+        <Button
+          type="link"
+          danger
+          disabled={disabled}
+          className="!px-0"
+          onClick={() => onChange(null)}
+        >
           Убрать точку
         </Button>
       )}

@@ -40,11 +40,11 @@ export function TripDetailPage() {
     mutationFn: () => deleteTrip(tripId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trips"] });
-      notification.success({ message: "Поездка удалена" });
+      notification.success({ title: "Поездка удалена" });
       navigate("/trips");
     },
     onError: (error) => {
-      notification.error({ message: "Ошибка", description: getErrorMessage(error) });
+      notification.error({ title: "Ошибка", description: getErrorMessage(error) });
     },
   });
 
@@ -60,13 +60,13 @@ export function TripDetailPage() {
     onError: (error) => {
       if (isLlmKeyRequiredError(error)) {
         notification.warning({
-          message: "Нужен ключ OpenRouter",
+          title: "Нужен ключ OpenRouter",
           description: "Добавьте API-ключ в настройках, затем запустите сборку снова.",
         });
         navigate("/settings");
         return;
       }
-      notification.error({ message: "Ошибка", description: getErrorMessage(error) });
+      notification.error({ title: "Ошибка", description: getErrorMessage(error) });
     },
   });
 
@@ -108,7 +108,7 @@ export function TripDetailPage() {
     }
     if (status === "completed" || status === "failed") {
       if (status === "completed" && sawRunInProgressRef.current) {
-        notification.success({ message: "Готово" });
+        notification.success({ title: "Готово" });
       }
       sawRunInProgressRef.current = false;
       setSearchParams({}, { replace: true });
@@ -119,7 +119,7 @@ export function TripDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["trips"] });
       if (status === "failed" && runQuery.data?.error) {
         notification.error({
-          message: "Ошибка сборки",
+          title: "Ошибка сборки",
           description: runQuery.data.error,
         });
       }
@@ -131,7 +131,7 @@ export function TripDetailPage() {
   }
 
   if (!tripQuery.data) {
-    return <Alert type="error" message="Поездка не найдена" />;
+    return <Alert type="error" title="Поездка не найдена" />;
   }
 
   const trip = tripQuery.data;
@@ -189,7 +189,7 @@ export function TripDetailPage() {
             type="info"
             showIcon
             className="mb-4"
-            message="Маршруты ещё не собраны"
+            title="Маршруты ещё не собраны"
             description="Нажмите кнопку ниже — агент сгенерирует маршруты и лайфхаки (1–2 минуты)."
           />
           <Button
@@ -212,6 +212,7 @@ export function TripDetailPage() {
           {isMobile ? (
             <div className="space-y-2">
               <Button
+                type="primary"
                 block
                 loading={rebuildMutation.isPending}
               onClick={() => {

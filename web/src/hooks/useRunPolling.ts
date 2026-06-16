@@ -8,8 +8,11 @@ export function useRunPolling(runId: string | null) {
     queryFn: () => fetchRun(runId!),
     enabled: !!runId,
     retry: (failureCount, error) => {
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        return false;
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        if (status === 401 || status === 404) {
+          return false;
+        }
       }
       return failureCount < 2;
     },
