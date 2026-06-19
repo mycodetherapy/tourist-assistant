@@ -47,7 +47,7 @@ def build_routes_task(graph_run_id: str, payload: dict[str, Any]) -> None:
         state = service.prepare_continue_trip(trip_id, scope)
         with search_context_scope():
             with run_with_llm_config(llm_config):
-                result = service.run_graph(state)
+                result = service.run_graph(state, graph_run_id=graph_run_id)
         version_id = result.version_id
         pg_runs.update_graph_run(
             run_uuid,

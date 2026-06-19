@@ -145,6 +145,15 @@ class TripService:
         save_user_profile(prefs_dict, user_id=user_id)
         trip_id = create_trip(city_v, dates_v, origin_v, query_v, user_id=user_id)
         save_preferences(trip_id, prefs_dict)
+        from services.saas_events import audit
+
+        audit(
+            action="trip.create",
+            entity_type="trip",
+            entity_id=str(trip_id),
+            user_id=user_id,
+            metadata={"city": city_v},
+        )
         return trip_id
 
     def update_trip_preferences(
@@ -253,6 +262,7 @@ class TripService:
         state: AgentState,
         *,
         on_progress: Callable[[str], None] | None = None,
+        graph_run_id: str | None = None,
     ) -> GraphRunResult:
         """Запускает мультиагентный граф и сохраняет версию программы."""
         trip_id = int(state["trip_id"])
@@ -307,15 +317,19 @@ class TripService:
         flush_langfuse()
 
         duration_ms = int((perf_counter() - started) * 1000)
+        prompt_tokens = int(getattr(cb, "prompt_tokens", 0)) if cb else None
+        completion_tokens = int(getattr(cb, "completion_tokens", 0)) if cb else None
+        total_tokens = int(getattr(cb, "total_tokens", 0)) if cb else None
+        total_cost_usd = float(getattr(cb, "total_cost", 0.0)) if cb else None
         log_agent_run(
             trip_id,
             run_id=run_id,
             rebuild_scope=rebuild_scope,
             duration_ms=duration_ms,
-            prompt_tokens=int(getattr(cb, "prompt_tokens", 0)) if cb else None,
-            completion_tokens=int(getattr(cb, "completion_tokens", 0)) if cb else None,
-            total_tokens=int(getattr(cb, "total_tokens", 0)) if cb else None,
-            total_cost_usd=float(getattr(cb, "total_cost", 0.0)) if cb else None,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            total_cost_usd=total_cost_usd,
             node_timings=run_metrics.to_dict(),
         )
 
@@ -331,6 +345,21 @@ class TripService:
                 program_to_save,
                 scope=rebuild_scope,
                 approved=False,
+            )
+
+        trip = get_trip(trip_id)
+        if trip is not None:
+            from services.saas_events import usage_from_graph_run
+
+            usage_from_graph_run(
+                user_id=int(trip["user_id"]),
+                trip_id=trip_id,
+                scope=rebuild_scope,
+                graph_run_id=graph_run_id,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                cost_usd=total_cost_usd,
             )
 
         return GraphRunResult(state=result, run_id=run_id, version_id=version_id)

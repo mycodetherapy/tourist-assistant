@@ -30,6 +30,7 @@ from api.schemas.responses import (
 from db.users import User
 from onboarding.preferences import TripPreferences, merge_trip_preferences, normalize_trip_preferences
 from services.run_manager import RunManager
+from services.run_quotas import RunQuotaError
 from services.trip_service import ProgramView, TripService
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -80,6 +81,13 @@ def _llm_key_http_error(exc: AuthError) -> HTTPException:
     return HTTPException(
         status_code=exc.status_code,
         detail={"code": "llm_key_required", "message": str(exc)},
+    )
+
+
+def _run_quota_http_error(exc: RunQuotaError) -> HTTPException:
+    return HTTPException(
+        status_code=429,
+        detail={"code": "run_quota_exceeded", "message": str(exc)},
     )
 
 
@@ -197,7 +205,10 @@ def create_trip(
             rebuild_scope="full",
             user_message=trip.get("user_query") or body.user_query,
         )
-        run_id = run_manager.start_run(state, llm_config=llm_config)
+        try:
+            run_id = run_manager.start_run(state, llm_config=llm_config)
+        except RunQuotaError as exc:
+            raise _run_quota_http_error(exc) from exc
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)
 
 
@@ -381,5 +392,8 @@ def start_run(
         raise _llm_key_http_error(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    run_id = run_manager.start_run(state, llm_config=llm_config)
+    try:
+        run_id = run_manager.start_run(state, llm_config=llm_config)
+    except RunQuotaError as exc:
+        raise _run_quota_http_error(exc) from exc
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)

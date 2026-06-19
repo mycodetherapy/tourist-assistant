@@ -14,6 +14,8 @@ from models.state import AgentState
 from search.context import bootstrap_from_agent_state, clear_search_context
 from services.city_fact_job import schedule_city_fact_generation
 from services.errors import format_runtime_error
+from services.run_quotas import check_and_consume_run_quota
+from services.saas_events import audit
 from services.trip_service import GraphRunResult, TripService
 
 RunStatusName = Literal["queued", "running", "completed", "failed"]
@@ -96,6 +98,18 @@ class RunManager:
         """Ставит прогон в очередь и возвращает run_id для polling."""
         trip_id = int(state["trip_id"])
         scope = str(state.get("rebuild_scope", "full"))
+        trip = get_trip(trip_id)
+        if trip is None:
+            raise ValueError(f"Поездка #{trip_id} не найдена")
+        user_id = int(trip["user_id"])
+        check_and_consume_run_quota(user_id=user_id, scope=scope)
+        audit(
+            action="graph_run.start",
+            entity_type="trip",
+            entity_id=str(trip_id),
+            user_id=user_id,
+            metadata={"scope": scope},
+        )
         if _use_job_queue():
             return self._start_run_queue(trip_id, scope, llm_config)
         return self._start_run_thread(state, trip_id, scope, llm_config)

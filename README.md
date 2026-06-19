@@ -198,7 +198,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
 | `DATABASE_PATH` | Нет | SQLite (legacy API), по умолчанию `data/trips.db` |
 | `DATABASE_URL` | Нет | Postgres (`postgresql+psycopg://…`); при задании — Alembic/тесты PG |
-| `REDIS_URL` | Нет | Redis для очереди и rate limits (следующие этапы миграции) |
+| `REDIS_URL` | Нет | Redis: RQ worker, locks, лимиты прогонов (5 full / 10 partial в час на user) |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
 | `LANGCHAIN_PROJECT` | Нет | Имя проекта (по умолчанию `tourist-assistant`) |
@@ -333,7 +333,7 @@ python3 scripts/render_graph.py
 | **OpenRouter** | Researcher, writer, опционально LLM-judge в eval (`openai/gpt-4.1-mini` через Azure) |
 | **SQLite** (`DATABASE_PATH`) | Legacy API: поездки, программы (до переключения на PG) |
 | **PostgreSQL** (`DATABASE_URL`) | Целевая SaaS-БД: Alembic, `graph_runs`, audit, usage (миграция) |
-| **Redis** (`REDIS_URL`) | Очередь worker, locks, rate limits (infra готова в compose) |
+| **Redis** (`REDIS_URL`) | Очередь worker, locks, per-user run quotas |
 | **Tavily API** (опционально) | Веб-поиск с ответом-сводкой |
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
 | **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
