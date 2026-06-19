@@ -10,6 +10,7 @@ from agents.llm_context import LlmConfig, run_with_llm_config
 from db.postgres import graph_runs as pg_runs
 from db.postgres._helpers import utc_now
 from db.session import is_postgres_enabled
+from search.context import search_context_scope
 from services.errors import format_runtime_error
 from services.trip_service import TripService
 
@@ -44,8 +45,9 @@ def build_routes_task(graph_run_id: str, payload: dict[str, Any]) -> None:
 
     try:
         state = service.prepare_continue_trip(trip_id, scope)
-        with run_with_llm_config(llm_config):
-            result = service.run_graph(state)
+        with search_context_scope():
+            with run_with_llm_config(llm_config):
+                result = service.run_graph(state)
         version_id = result.version_id
         pg_runs.update_graph_run(
             run_uuid,

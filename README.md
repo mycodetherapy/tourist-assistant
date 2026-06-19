@@ -465,7 +465,7 @@ tourist-assistant/
 │   ├── osm/                # Nominatim, Overpass
 │   ├── wikidata/           # SPARQL достопримечательностей, city_description (факт)
 │   ├── yandex/             # materials, maps_route_url
-│   ├── context.py          # search_context сессии
+│   ├── context.py          # ContextVar: prefs + route_materials (worker-safe)
 │   └── tool_logging.py     # разбор payload для tool_runs
 ├── agents/
 │   ├── llm.py              # ChatOpenAI, llm_with_tools, llm_final

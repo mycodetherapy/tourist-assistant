@@ -11,6 +11,7 @@ from agents.llm_context import LlmConfig, run_with_llm_config
 from db.repository import get_trip
 from db.session import is_postgres_enabled
 from models.state import AgentState
+from search.context import bootstrap_from_agent_state, clear_search_context
 from services.city_fact_job import schedule_city_fact_generation
 from services.errors import format_runtime_error
 from services.trip_service import GraphRunResult, TripService
@@ -167,6 +168,15 @@ class RunManager:
         return run_id
 
     def _execute(self, run_id: str, state: AgentState, llm_config: LlmConfig) -> None:
+        bootstrap_from_agent_state(state)
+        try:
+            self._execute_graph(run_id, state, llm_config)
+        finally:
+            clear_search_context()
+
+    def _execute_graph(
+        self, run_id: str, state: AgentState, llm_config: LlmConfig
+    ) -> None:
         with self._lock:
             record = self._runs[run_id]
             record.status = "running"
