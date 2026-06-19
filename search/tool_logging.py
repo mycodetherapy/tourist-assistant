@@ -49,21 +49,6 @@ def parse_tool_result(content: str) -> dict[str, Any]:
             "error": data.get("error") or data.get("warning"),
         }
 
-    if data.get("category") == "tickets" and data.get("schema_version") == "1":
-        count = int(data.get("offers_count", data.get("results_count", 0)))
-        provider = (
-            "travelpayouts"
-            if data.get("avia_api_status") == "ok"
-            else "deep_links"
-        )
-        return {
-            "live_data": bool(data.get("live_data", count > 0)),
-            "results_count": count,
-            "raw_results_count": count,
-            "provider": provider,
-            "error": data.get("error"),
-        }
-
     # search_dining: вложенный поиск ресторанов
     if "search" in data and isinstance(data["search"], dict):
         nested = data["search"]

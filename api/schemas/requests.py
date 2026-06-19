@@ -25,11 +25,6 @@ class StartRunRequest(BaseModel):
     scope: RebuildScope = "routes"
 
 
-class AffiliateClickRequest(BaseModel):
-    target_url: str = Field(..., min_length=8, max_length=2000)
-    provider: str | None = Field(default=None, max_length=64)
-
-
 class UpdateSettingsRequest(BaseModel):
     llm_api_key: str | None = Field(default=None, max_length=256)
     llm_base_url: str | None = Field(default=None, max_length=512)

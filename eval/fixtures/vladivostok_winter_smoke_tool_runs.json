@@ -1,22 +1,9 @@
 [
   {
-    "tool_name": "search_roundtrip_tickets",
+    "tool_name": "search_route_materials",
     "live_data": true,
-    "results_count": 2,
-    "raw_results_count": 2,
-    "provider": "deep_links",
-    "avia_api_status": "error"
-  },
-  {
-    "tool_name": "search_culture_events",
-    "live_data": true,
-    "results_count": 6,
-    "raw_results_count": 8
-  },
-  {
-    "tool_name": "search_dining",
-    "live_data": true,
-    "results_count": 12,
-    "raw_results_count": 15
+    "results_count": 8,
+    "raw_results_count": 8,
+    "provider": "osm"
   }
 ]

@@ -77,9 +77,6 @@ export function RouteCaseDetails({
           })}
         </ul>
       ) : null}
-      <p className="mb-0 mt-1 text-xs text-gray-500">
-        Рестораны — «Искать вдоль маршрута» в Яндекс.Картах.
-      </p>
     </div>
   );
 }

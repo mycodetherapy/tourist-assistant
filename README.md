@@ -4,7 +4,7 @@
 
 ## Статус и планы
 
-Приложение находится **в стадии активной разработки**. Текущая версия — **routes-first MVP**: агент собирает три маршрута и лайфхаки, веб и CLI позволяют сохранять поездки и пересобирать маршруты. Интерфейс и качество маршрутов будут дорабатываться.
+Приложение находится **в стадии активной разработки**. Текущая версия — **routes-first MVP**: агент собирает три маршрута и лайфхаки; **веб-интерфейс и REST API** позволяют создавать поездки и пересобирать маршруты. Консольный CLI снят.
 
 **Ближайшие планы:**
 
@@ -20,27 +20,24 @@
 - Python **3.10+** (работает на 3.9+)
 - Ключ **OpenRouter** ([openrouter.ai/keys](https://openrouter.ai/keys))
 
-### Установка и запуск
+### Быстрый старт (Docker)
 
 ```bash
 git clone <url-репозитория>
 cd tourist-assistant
 
-python3 -m venv .venv
-source .venv/bin/activate
-# Windows: .venv\Scripts\activate
+test -f .env || cp .env.example .env
+# JWT_SECRET, SETTINGS_ENCRYPTION_KEY — обязательны для API
 
-pip install -r requirements.txt
-
-cp .env.example .env
-# Отредактируйте .env: LLM_API_KEY=sk-or-...
-
-python3 main.py
+docker compose build
+docker compose up api web
 ```
 
-### Веб-интерфейс (FastAPI + React)
+UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/docs](http://localhost:8000/docs).
 
-Требования: Python 3.10+, Node.js 20+. В `.env` для API: `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). Ключ OpenRouter каждый пользователь задаёт в **Настройках** (BYOK); для CLI по-прежнему `LLM_API_KEY` в `.env`.
+### Локальная разработка (API + React)
+
+Требования: Python 3.10+, Node.js 20+. В `.env`: `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). Ключ OpenRouter каждый пользователь задаёт в **Настройках** (BYOK). Для `python -m eval --with-llm` нужен `LLM_API_KEY` в `.env`.
 
 **Терминал 1 — API:**
 
@@ -94,9 +91,9 @@ npm run dev
 | **Новая поездка** | Wizard: поездка → запуск → фоновая сборка (polling 1–2 мин) |
 | **Карточка поездки** | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; внизу лайфхаки; пересбор маршрутов одной кнопкой |
 
-Docker (веб + API и CLI): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
+Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
-**Оценки пунктов (👍/👎):** для **вариантов маршрута и лайфхаков** (билеты — без голосования). В legacy-программах — также мероприятия и питание. Веб: клик → `PUT /api/trips/{id}/program/feedback`; CLI: пункт меню «Оценить пункты» или опционально перед утверждением. Хранение: `program_item_feedback` в `data/trips.db`, ключ по тексту пункта. При пересборе раздела оценки **сбрасываются** у изменённых пунктов; у неизменённых — сохраняются. **Partial rebuild маршрутов (`routes`):** лайкнутые варианты остаются сверху списка без изменений; LLM генерирует **3 новых** (N-A/N-B/N-C). **Полная пересборка (`full`):** лайк маршрута — мягкий ориентир (длина, мотивы), LLM подбирает новые poi_id. Повторный клик по 👍/👎 **снимает оценку** (нейтрально). Оценки маршрута — по тексту варианта; **оценки остановок** — по `poi_id` (👍 учитываются при подборе новых мест, 👎 исключают точку и похожие по типу/названию). Оценки остановок **сохраняются до пересборки** (снимок в начале графа), после сохранения новой программы сбрасываются. Лимит: **10** лайков маршрутов и **40** лайков остановок на поездку. После `docker compose build api web` перезапустите оба контейнера.
+**Оценки пунктов (👍/👎):** для **вариантов маршрута и остановок** (лайфхаки без голосования в текущем UI). Веб: клик → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` в `data/trips.db`.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -116,73 +113,22 @@ cd tourist-assistant
 # Права только для вашего пользователя (рекомендуется):
 chmod 600 .env
 
-docker compose build
-docker compose run --rm app
-```
-
-Интерактивный CLI: ввод в том же терминале. БД: `./data/trips.db` на хосте.
-
-**LangFuse на хосте:** в `.env` задайте `LANGFUSE_HOST_DOCKER=http://host.docker.internal:3000` — compose подставит его в контейнер `app` (есть `extra_hosts: host-gateway`). Локально без Docker: `LANGFUSE_HOST=http://localhost:3000`.
-
-#### Веб + API
-
-```bash
 docker compose build api web
 docker compose up api web
 ```
 
 UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health).
 
-#### Повторный запуск CLI (`.env` уже есть)
+**LangFuse на хосте:** в `.env` задайте `LANGFUSE_HOST_DOCKER=http://host.docker.internal:3000` — compose подставит его в контейнер `api`.
+
+#### Тесты в Docker
 
 ```bash
-docker compose build    # после изменений в коде
-docker compose run --rm app
+docker compose run --rm api python -m unittest discover -s tests -v
+docker compose run --rm api python -m eval --suite smoke
 ```
 
 Скрипт `ensure_env_file.sh` и `test -f .env || cp …` **не трогают** существующий `.env`.
-
-#### Проверка, что ключи видны в контейнере (без вывода значений)
-
-```bash
-docker compose run --rm app python -c "import os; print('LLM_API_KEY', 'set' if os.getenv('LLM_API_KEY') else 'unset')"
-```
-
-Пример ввода в режиме «Новая поездка»:
-
-- Город: `Санкт-Петербург`
-- Даты: `1-4 августа 2026`
-- Вылет: `Москва` (Enter — по умолчанию)
-- Запрос: `Составь три варианта маршрута по городу` (фиксирован, как в веб)
-
-### Меню CLI
-
-| Режим | Действие |
-|-------|----------|
-| **Новая поездка** | Город, даты, вылет, состав группы → веб-поиск → программа → **👍/👎 (опционально)** → **утверждение Y/n** |
-| **Продолжить** | Выбор поездки по `id` → что пересобрать (всё или раздел) → снова граф, оценки и HITL |
-| **Показать подробности** | Выбор поездки из списка (с сохранённой программой) → программа и предпочтения из БД **без** поиска и LLM |
-| **Оценить пункты** | Выбор поездки → 👍/👎 у маршрутов и лайфхаков (в legacy-программах — также мероприятия и питание; та же БД, что в вебе) |
-| **Удалить поездку** | Выбор поездки по `id` → меню подтверждения (`1` — удалить) → CASCADE в SQLite |
-
-**Опросник (веб — одна форма)**
-
-- Поля: город, даты, вылет, **состав группы** (по умолчанию «2 взрослых»). Темп и транспорт фиксированы в коде.
-- Состав группы задаёт число пассажиров в deep links (Aviasales: `adults`/`children`; РЖД/Tutu: `travelers`).
-- Запрос к агенту: «Составь три варианта маршрута по городу» (не редактируется в UI).
-
-**CLI**
-
-- Ввод: город, даты, вылет; затем опросник (состав группы).
-- Запрос к агенту: «Составь три варианта маршрута по городу» (фиксирован, как в веб).
-- **Повторный запуск** — сохранённые предпочтения (`user_profile` в SQLite); опрос заново — по явному согласию.
-
-**Пересбор маршрутов** (режим «Продолжить»): `routes` (обновляет и маршруты, и лайфхаки).
-
-- **`routes`** — A/B/C пересобираются из пула `search_route_materials` с обновлением `maps_route_url`; лайфхаки пересобираются автоматически по новым маршрутам.
-- **`lifehacks`** — без веб-поиска (как раньше).
-
-После сборки программы: **Билеты**, **Маршруты** (A/B/C), **Лайфхаки** (обычно 1–2 минуты).
 
 ### Тесты и eval (без полного прогона агента)
 
@@ -204,19 +150,13 @@ python3 -m eval --suite smoke --with-llm
 
 Eval проверяет **fixtures** в `eval/fixtures/` (схема программы, tool_runs, regression к `eval/golden/`), а не живой интернет.
 
-Обновить билеты в fixtures после смены логики или ключа API:
-
-```bash
-python3 scripts/refresh_tickets_fixtures.py --suite smoke
-```
-
 ### Переменные окружения
 
 Шаблон: [`.env.example`](.env.example) (совпадает с типовым локальным `.env`).
 
 | Переменная | Обязательно | Описание |
 |------------|-------------|----------|
-| `LLM_API_KEY` | Да* | CLI: ключ [OpenRouter](https://openrouter.ai/keys). Веб-API: BYOK в профиле пользователя (*не нужен для `unittest` и `eval --suite smoke` без `--with-llm`) |
+| `LLM_API_KEY` | Нет* | Для `python -m eval --with-llm` и dev-скриптов; веб-API использует BYOK в профиле |
 | `JWT_SECRET` | Да** | Секрет подписи JWT для `uvicorn api.main:app` |
 | `SETTINGS_ENCRYPTION_KEY` | Да** | Fernet-ключ шифрования BYOK в БД (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
 | `JWT_ACCESS_TTL_MINUTES` | Нет | Срок жизни access token (по умолчанию 60) |
@@ -226,22 +166,18 @@ python3 scripts/refresh_tickets_fixtures.py --suite smoke
 | `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openrouter.ai/api/v1` |
 | `LLM_MODEL` | Нет | Slug модели на OpenRouter. По умолчанию `openai/gpt-4.1-mini` (см. [Модели LLM](#модели-llm)) |
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
-| `TRAVELPAYOUTS_API_KEY` | Нет | Авиа: цены и пересадки через [Travelpayouts](https://www.travelpayouts.com/developers/api); без ключа — только deep links |
-| `TRAVELPAYOUTS_MARKER` | Нет | Affiliate ID Travelpayouts (`marker=` в ссылках Aviasales) |
-| `AFFILIATE_ENABLED` | Нет | `true` — обёртка исходящих ссылок билетов в affiliate |
-| `AFFILIATE_ADMIN_TOKEN` | Нет | Bearer для `GET /api/affiliate/metrics` и `POST /api/affiliate/sync` |
 | `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
 | `LANGCHAIN_PROJECT` | Нет | Имя проекта (по умолчанию `tourist-assistant`) |
 | `LANGSMITH_ENDPOINT` | Нет | Кастомный endpoint LangSmith (опционально) |
 | `LANGFUSE_ENABLED` | Нет | `true` — включить трейсы в LangFuse (self-hosted) |
-| `LANGFUSE_HOST` | Нет | LangFuse для локального `python3 main.py`, например `http://localhost:3000` |
+| `LANGFUSE_HOST` | Нет | LangFuse, например `http://localhost:3000` |
 | `LANGFUSE_HOST_DOCKER` | Нет | LangFuse для Docker, например `http://host.docker.internal:3000` |
 | `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `TRAVELPAYOUTS_TRS`, `AFFILIATE_AVIASALES`, `AFFILIATE_TUTU_BUS`, `AFFILIATE_TUTU_TRAIN`; `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, выбор точки на карте); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, выбор точки на карте); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 ### Модели LLM
 
@@ -305,9 +241,9 @@ LLM_OPENROUTER_PROVIDERS=DeepInfra
 
 ![Схема графа агента](docs/assets/graph.png)
 
-Пунктирные рёбра — условные переходы (`lifehacks`, `tool_calls`, critic retry, HITL). Сплошные — фиксированные (`executor → researcher`, `writer → critic`).
+Пунктирные рёбра — условные переходы (`lifehacks`, `tool_calls`, critic retry). Сплошные — фиксированные (`executor → researcher`, `writer → critic`).
 
-**CLI, API и БД:** `cli/app.py` и `api/` вызывают общий `services/trip_service.py` → `app.invoke`; `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions` (SQLite). Веб: `web/` (React 19, Ant Design, TanStack Query).
+**API и БД:** `api/` вызывает `services/trip_service.py` → `app.invoke`; `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions` (SQLite). Веб: `web/` (React 19, Ant Design, TanStack Query).
 
 После изменения графа перегенерируйте PNG:
 
@@ -320,14 +256,12 @@ python3 scripts/render_graph.py
 | `researcher` | `agents/nodes.py` | LLM + tool_calls по `rebuild_scope` |
 | `executor` | `agents/nodes.py` | Выполняет tools, пишет строки в `tool_runs` |
 | `writer` | `agents/nodes.py` | Structured output → `FinalProgram`, merge с прошлой версией |
-| `critic` | `agents/critic.py` | Детерминированные проверки перед показом пользователю |
-| `human_review` | `agents/human_review.py` | Утвердить программу? Y/n; при отказе — пересбор или черновик |
+| `critic` | `agents/critic.py` | Детерминированные проверки; при успехе граф завершается |
 
 **Инструменты** (`search/tools.py`):
 
 | Инструмент | Что ищет |
 |------------|----------|
-| `search_roundtrip_tickets` | Deep links + опционально API авиа (`TRAVELPAYOUTS_API_KEY`); JSON `offers[]`, `schema_version=1` |
 | `search_route_materials` | Полный пул POI (до ~50): Wikidata — все Tier 0, затем Tier 1 по score; набережные по SPARQL; discovery; Overpass опционально (`POI_USE_OVERPASS=true`) |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
@@ -338,7 +272,7 @@ python3 scripts/render_graph.py
 
 | Уровень | Модуль | Что проверяет |
 |---------|--------|----------------|
-| 1 | `eval/checks/deterministic.py` | JSON-схема `FinalProgram`, ссылки, маркеры билетов |
+| 1 | `eval/checks/deterministic.py` | JSON-схема `FinalProgram`, `maps_route_url` в маршрутах |
 | 2 | `eval/checks/tools.py` | Вызовы tools, `live_data`, `results_count` |
 | 3 | `eval/checks/llm_judge.py` | Опционально: цены со ссылками, город (`--with-llm`) |
 | 4 | `eval/checks/regression.py` | Метрики vs `eval/golden/*.json` |
@@ -351,11 +285,11 @@ python3 scripts/render_graph.py
 
 ### Какую задачу решает агент?
 
-По городу, датам, предпочтениям (опросник) и городу отправления агент **собирает актуальную информацию** (билеты — агрегаторы/API; маршруты — Яндекс.Карты), формирует **структурированную программу** (билеты, `routes` + `routes_text`, лайфхаки) и сохраняет версии в SQLite. Пользователь **утверждает** результат или запрашивает доработку.
+По городу, предпочтениям и базовой точке (`route_anchor`) агент **собирает пул POI**, формирует **три маршрута A/B/C** и **лайфхаки**, сохраняет версии в SQLite. Результат сразу доступен в веб-интерфейсе после фонового прогона.
 
 ### Кто будет пользоваться агентом?
 
-**Частные путешественники** и **менеджеры поездок** (самостоятельный туризм): один запрос и опросник вместо ручного поиска на Aviasales, Афише и картах; возврат к поездке, частичный пересбор разделов, просмотр сохранённой программы.
+**Частные путешественники** через веб-приложение: регистрация, BYOK OpenRouter, создание поездки и пересбор маршрутов.
 
 ### С какими внешними системами и данными работает агент?
 
@@ -367,23 +301,18 @@ python3 scripts/render_graph.py
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
 | **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
 | **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
-| **Aviasales** | Deep links на поиск авиа с датами |
-| **РЖД / Tutu.ru** | Deep links на жд (`ticket.rzd.ru`, `tutu.ru/poezda/…`) |
-| **Bus.tutu.ru** | Deep links на автобус (`api-bus.tutu.ru` → id и slug в path) |
-| **Travelpayouts / Aviasales Data API** | `prices_for_dates` — рейсы, `transfers`, цена «от»; ключ `TRAVELPAYOUTS_API_KEY` |
-| **Travelpayouts affiliate** | `marker` в ссылках билетов; sync статистики: `python3 scripts/sync_affiliate_stats.py`; метрики: `/api/affiliate/metrics` |
-| **Яндекс.Карты (Geocoder + JS API)** | Геокодинг адреса базовой точки; клик на карте в вебе; deep link `maps_route_url` с anchor в начале маршрута |
-| **OpenStreetMap** (Overpass + Nominatim) | POI с координатами: музеи, парки, памятники в рамке города |
-| **Wikidata SPARQL** | Дополнение известных достопримечательностей (P625) |
+| **Яндекс.Карты (Geocoder + JS API)** | Геокодинг базовой точки; deep link `maps_route_url` |
+| **OpenStreetMap** (Overpass + Nominatim) | POI с координатами |
+| **Wikidata SPARQL** | Достопримечательности (P625) |
 
-Билеты: `search/ticket_links.py` + `search/providers/avia.py` + `search/affiliate/` (обёртка `marker`, локальные клики). Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`; базовая точка — `onboarding/preferences.py` (`route_anchor`), в URL — `search/yandex/route_url.py`. Пул POI: Wikidata Tier 0 целиком + Tier 1 до ~50 (`search/wikidata/places.py`). LLM в `finalize` ранжирует `poi_id` из пула; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C, при отклонении — алгоритмический fallback.
+Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`; базовая точка — `onboarding/preferences.py` (`route_anchor`). Пул POI: Wikidata Tier 0 + Tier 1 до ~50. LLM ранжирует `poi_id`; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C.
 
 ### Почему нужен именно агент, а не workflow?
 
 - **Нестабильный ввод**: даты и города в свободной форме, опросник и уточнения в запросе.
 - **Многошаговый сбор**: researcher решает, какие tools вызвать; critic и пользователь могут инициировать повтор.
 - **Синтез из шума**: LLM отбирает факты из `digest`, группирует по районам.
-- **Память и итерации**: SQLite, частичный пересбор, HITL без потери контекста поездки.
+- **Память и итерации**: SQLite, частичный пересбор (`routes` / `full`), автосохранение программы после critic.
 
 Детерминированный пайплайн «3 HTTP-запроса → шаблон» не покрывает вариативность запросов и качество сниппетов.
 
@@ -403,17 +332,9 @@ python3 scripts/render_graph.py
 | **Пустой или нерелевантный поиск** | Фильтр по `SEARCH_FILTERS` + fallback top-8; предупреждение в payload tool |
 | **Ошибка поиска / сети** | `ToolMessage` с ошибкой; граф не падает, `tool_runs` с `live_data=false` |
 | **Prompt-injection во вводе** | `input_validation.sanitize_and_validate` |
-| **Галлюцинации цен** | Билеты: только `offers` из tool; маршруты — только `poi_id` из пула materials |
-| **Нет прямых рейсов** | В `summary_for_llm` — стыковки на агрегаторах; ссылки с IATA и датами |
-| **Зарубежный маршрут** (Москва → Стамбул и т.п.) | IATA из `search/city_codes.py`; POI через Nominatim/Overpass **без** суффикса «Россия»; в билетах только «Самолёт»; critic не требует жд/автобус |
-| **Длинный внутренний маршрут** (>650 км по прямой) | Critic требует самолёт + поезд; **автобус** не обязателен (`BUS_MAX_ROUTE_KM` в `search/transport_codes.py`) |
-| **Короткий внутренний маршрут** (<500 км) | Самолёт не ищем (`PLANE_MIN_ROUTE_KM` в `search/airport_routing.py`); critic требует поезд + автобус |
-| **Город без действующего аэропорта** (Йошкар-Ола и др.) | Ближайший хаб из `search/city_codes.py` (IATA + Nominatim); в подписи ссылки — «аэропорт …» |
-| **Critic не прошёл** | До 2 повторов researcher; затем всё равно HITL с замечаниями |
-| **Пользователь не утвердил (n)** | CLI: пересбор или черновик; веб: маршруты сохраняются автоматически после сборки |
-| **Повторный запуск без опросника** | `user_profile` + `trip_preferences`; fallback из последней поездки |
-| **Конфликт категорий** (музей в «Билетах») | Постфильтрация `SEARCH_FILTERS` в `search/web.py` |
-| **Даты в далёком будущем** | В поиске может не быть цен — в ответе ссылки «уточните на сайте» |
+| **Галлюцинации мест** | Маршруты — только `poi_id` из пула materials |
+| **Critic не прошёл** | До 2 повторов researcher; затем сохранение текущей программы |
+| **Повторный запуск** | `user_profile` + `trip_preferences` из SQLite |
 | **Демо-точки вместо POI** | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
 | **Одинаковые маршруты A/B/C** | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → пересбор researcher |
 | **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
@@ -423,9 +344,9 @@ python3 scripts/render_graph.py
 
 | Критерий | Приемлемый результат |
 |----------|----------------------|
-| **Полнота программы** | Билеты, 3 варианта маршрута A/B/C, лайфхаки; в билетах блоки из `offers` (3 для РФ, для зарубежа — самолёт) |
+| **Полнота программы** | 3 варианта маршрута A/B/C + лайфхаки |
 | **Опора на поиск** | Маршруты A/B/C: сложность по **протяжённости** (A ~2–3.5 км, B ~4–5.5, C ~6–8.5), до 8 плотных leisure-точек; без повторов названий; `maps_route_url` по координатам (иногда кольцевой); POI только из Wikidata/discovery-пула |
-| **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят; в «Продолжить» видна поездка с версией программы |
+| **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят |
 
 ---
 
@@ -448,7 +369,7 @@ docker compose --env-file .env -f docker-compose.yml up -d
 - `LANGFUSE_PUBLIC_KEY=...`
 - `LANGFUSE_SECRET_KEY=...`
 
-3) Запустить `python3 main.py` — трейсинг пойдёт через LangChain callbacks.
+3) Запустите API (`uvicorn api.main:app`) или создайте поездку через веб — трейсинг пойдёт через LangChain callbacks.
 
 ### LangSmith (опционально, параллельно)
 
@@ -463,14 +384,14 @@ LangSmith можно включить одновременно с LangFuse:
 ## Метрики
 
 - **Success rate**: `python3 -m eval --suite smoke` (10 кейсов в `eval/dataset/smoke.yaml`)
-- **Latency p95 / cost per run**: после нескольких запусков CLI:
+- **Latency p95 / cost per run**: после нескольких прогонов через веб/API:
 
 ```bash
 python3 -m scripts.metrics_report --limit 50
 python3 -m scripts.metrics_report --trip-id 12
 ```
 
-В `agent_runs` сохраняются `duration_ms`, tokens/cost и **`node_timings`** (JSON: узлы `researcher` / `executor` / `writer` / `critic` / `human_review` + tools).
+В `agent_runs` сохраняются `duration_ms`, tokens/cost и **`node_timings`** (JSON: узлы `researcher` / `executor` / `writer` / `critic` + tools).
 
 Примечание: стоимость/токены пишутся через `get_openai_callback()` и могут быть пустыми для не-OpenAI провайдеров.
 
@@ -480,64 +401,47 @@ python3 -m scripts.metrics_report --trip-id 12
 
 ```
 tourist-assistant/
-├── main.py                 # Точка входа CLI: python3 main.py
 ├── api/                    # FastAPI REST для веб-UI
 │   └── auth/               # register, login, Google OAuth, BYOK crypto
 ├── docs/openapi.json       # OpenAPI 3 (scripts/export_openapi.py)
-├── services/               # TripService, RunManager — общий слой CLI + API
+├── services/               # TripService, RunManager
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query
-├── cli/app.py              # Меню, опросник, вызов TripService
-├── cli/feedback.py         # 👍/👎 пунктов программы в терминале
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
 │   ├── schemas.py          # FinalProgram, ProgramDraft, RouteMaterialsInput
 │   ├── routes.py           # RouteMaterials, TripRouteCase, RouteProgram
-│   ├── tickets.py          # TicketsSearchInput/Output, TicketOffer
 │   └── state.py            # AgentState
 ├── input_validation.py     # sanitize_and_validate
 ├── planning/dates.py       # parse_trip_dates
 ├── search/
 │   ├── web.py              # Tavily / ddgs, digest
-│   ├── tools.py            # @tool, TOOLS, TOOL_MAP
-│   ├── osm/                # Nominatim, Overpass, парсинг OSM-тегов
+│   ├── tools.py            # @tool search_route_materials
+│   ├── osm/                # Nominatim, Overpass
 │   ├── wikidata/           # SPARQL достопримечательностей
-│   ├── yandex/             # landmark_discovery, POI filters, maps_route_url
-│   ├── tickets_search.py   # оркестрация билетов
-│   ├── airport_routing.py  # ближайший аэропорт, порог 500 км для авиа
-│   ├── hub_coords.py       # координаты IATA-хабов (domestic_hub_coords.json)
-│   ├── domestic_hub_coords.json
-│   ├── ticket_links.py     # deep links Aviasales, РЖД, Tutu
-│   ├── affiliate/          # marker, Partner Links API, метрики exposure
-│   ├── transport_codes.py  # коды Tutu/РЖД для URL
-│   ├── providers/avia.py   # Travelpayouts prices_for_dates
-│   ├── providers/tutu_bus.py # api-bus.tutu.ru → bus.tutu.ru deep links
-│   ├── city_codes.py       # город → IATA (РФ + зарубеж)
+│   ├── yandex/             # materials, maps_route_url
 │   ├── context.py          # search_context сессии
 │   └── tool_logging.py     # разбор payload для tool_runs
 ├── agents/
 │   ├── llm.py              # ChatOpenAI, llm_with_tools, llm_final
-│   ├── nodes.py            # researcher, executor, writer
+│   ├── nodes.py            # researcher, executor, writer, critic
 │   ├── graph.py            # сборка LangGraph, app
 │   ├── critic.py
-│   ├── human_review.py
 │   └── print_program.py
 ├── planning/rebuild.py       # rebuild_scope, merge_program
-├── program/parse_items.py  # разбор markdown-секций на пункты (голосование)
-├── program/feedback_prune.py  # сброс оценок пересобранных пунктов
+├── program/parse_items.py  # разбор markdown-секций на пункты
 ├── program/route_feedback.py  # лайкнутые маршруты при partial rebuild
 ├── program/route_stops.py     # голосование за POI-остановки
-├── db/                     # schema.sql, repository (в т.ч. program_item_feedback)
-├── onboarding/             # опросник, TripPreferences
-├── observability/tracing.py
+├── db/                     # schema.sql, repository, bootstrap user id=1
+├── onboarding/             # TripPreferences
+├── observability/          # LangFuse tracing
 ├── eval/                   # python3 -m eval --suite smoke
 ├── scripts/render_graph.py # PNG графа → docs/assets/graph.png
-├── docs/assets/graph.png   # схема для README
+├── docs/assets/graph.png
 ├── tests/
 ├── data/                   # trips.db (в .gitignore)
 ├── requirements.txt
-├── Dockerfile              # образ приложения
-├── docker-compose.yml      # сервис app: CLI + volume data/
-├── .dockerignore
+├── Dockerfile              # uvicorn api.main:app
+├── docker-compose.yml      # сервисы api + web
 ├── .env.example
 └── README.md
 ```

@@ -8,7 +8,6 @@ from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import BaseModel, Field, model_validator
 
 from models.routes import RouteProgram
-from models.tickets import TicketsSearchInput  # контракт билетов — models/tickets.py
 
 _LEGACY_PROGRAM_KEYS = ("transport",)
 
@@ -30,7 +29,7 @@ class PlannerContext(BaseModel):
 
 
 class ProgramDraft(BaseModel):
-    """Маршруты и лайфхаки от LLM (билеты — из tool)."""
+    """Маршруты и лайфхаки от LLM."""
 
     routes: RouteProgram = Field(
         ...,
@@ -43,8 +42,8 @@ class FinalProgram(BaseModel):
     """Структурированный результат построения маршрутов поездки."""
 
     tickets: str = Field(
-        ...,
-        description="Билеты туда-обратно: самолёт, поезд (РЖД), автобус — со ссылками",
+        default="",
+        description="Legacy: билеты (не используется в routes-only MVP)",
     )
     routes: RouteProgram | dict[str, Any] | None = Field(
         default=None,

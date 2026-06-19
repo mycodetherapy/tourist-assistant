@@ -854,17 +854,6 @@ def _stops_from_indices(leisure: list[PoiPoint], indices: list[int]) -> list[Rou
                 narrative=poi.name,
             )
         )
-    if stops:
-        stops.append(
-            RouteStop(
-                order=stops[-1].order + 1,
-                kind="transit_note",
-                narrative=(
-                    "Пеший маршрут по достопримечательностям. "
-                    "Рестораны — «Искать вдоль маршрута» в Яндекс.Картах."
-                ),
-            )
-        )
     return stops
 
 
@@ -1335,13 +1324,7 @@ def finalize_route_program(
         else:
             cases.append(case)
     summary = (
-        f"Пул: {len(materials.leisure_points)} мест досуга"
-        + (
-            f", {len(materials.dining_options)} ресторанов"
-            if materials.dining_options
-            else ""
-        )
-        + f" ({materials.provider}). "
+        f"Пул: {len(materials.leisure_points)} мест досуга ({materials.provider}). "
         "Варианты A/B/C — разная длина и число точек на карте."
     )
     return program.model_copy(update={"materials_summary": summary, "cases": cases})

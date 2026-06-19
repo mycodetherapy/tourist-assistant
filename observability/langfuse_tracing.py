@@ -152,7 +152,7 @@ def langfuse_metadata(
     if trip_id is not None:
         tags.append(f"trip:{trip_id}")
     return {
-        "langfuse_user_id": "local-cli",
+        "langfuse_user_id": "system",
         "langfuse_session_id": f"trip-{trip_id}" if trip_id is not None else "trip-unknown",
         "langfuse_tags": ",".join(tags),
     }

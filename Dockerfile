@@ -1,4 +1,4 @@
-# CLI-агент и API: Python 3.11
+# API: Python 3.11
 FROM python:3.11-slim-bookworm
 
 WORKDIR /app
@@ -15,4 +15,4 @@ COPY . .
 
 RUN mkdir -p /app/data
 
-CMD ["python", "main.py"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

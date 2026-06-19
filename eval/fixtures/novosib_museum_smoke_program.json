@@ -1,6 +1,72 @@
 {
-  "tickets": "Маршрут: Томск → Новосибирск, даты: 03.03.2027 — 06.03.2027.\nПрямых рейсов может не быть — на Aviasales смотрите варианты со стыковками.\n\n**Самолёт**:\n- Aviasales: Томск → Новосибирск: https://www.aviasales.ru/search/TOF0303OVB0603?origin_airports=0&destination_airports=1\n\n**Поезд**:\n- Tutu (жд): Томск → Новосибирск: https://www.tutu.ru/poezda/Omsk/Novosibirsk/?date=03.03.2027&travelers=1",
-  "events": "Оперный театр https://novat.nsk.ru\nКраеведческий музей https://youmuseum.ru",
-  "dining": "1. Ресторан A https://2gis.ru/a\n2. B https://2gis.ru/b\n3. C https://tripadvisor.com/c\n4. D https://yandex.ru/maps/d\n5. E https://2gis.ru/e\n6. F https://2gis.ru/f\n7. G https://2gis.ru/g",
-  "lifehacks": "Без клубов: уточняй время работы музеев и делай ранний старт."
+  "tickets": "",
+  "routes": {
+    "cases": [
+      {
+        "case_id": "A",
+        "title": "Маршрут A",
+        "summary": "Тестовый маршрут",
+        "stops": [
+          {
+            "order": 1,
+            "kind": "leisure",
+            "poi_id": "poi:1",
+            "narrative": "Точка 1"
+          },
+          {
+            "order": 2,
+            "kind": "leisure",
+            "poi_id": "poi:2",
+            "narrative": "Точка 2"
+          }
+        ],
+        "maps_route_url": "https://yandex.ru/maps/?rtext=~1~2",
+        "loop_route": false
+      },
+      {
+        "case_id": "B",
+        "title": "Маршрут B",
+        "summary": "Тестовый маршрут",
+        "stops": [
+          {
+            "order": 1,
+            "kind": "leisure",
+            "poi_id": "poi:1",
+            "narrative": "Точка 1"
+          },
+          {
+            "order": 2,
+            "kind": "leisure",
+            "poi_id": "poi:2",
+            "narrative": "Точка 2"
+          }
+        ],
+        "maps_route_url": "https://yandex.ru/maps/?rtext=~2~3",
+        "loop_route": false
+      },
+      {
+        "case_id": "C",
+        "title": "Маршрут C",
+        "summary": "Тестовый маршрут",
+        "stops": [
+          {
+            "order": 1,
+            "kind": "leisure",
+            "poi_id": "poi:1",
+            "narrative": "Точка 1"
+          },
+          {
+            "order": 2,
+            "kind": "leisure",
+            "poi_id": "poi:2",
+            "narrative": "Точка 2"
+          }
+        ],
+        "maps_route_url": "https://yandex.ru/maps/?rtext=~3~4",
+        "loop_route": false
+      }
+    ]
+  },
+  "routes_text": "Маршруты A/B/C для eval fixture.",
+  "lifehacks": "Совет: начинайте с центра города."
 }

@@ -92,18 +92,30 @@ def _migrate_saas_auth(conn: sqlite3.Connection) -> None:
         );
         """
     )
-    from db.constants import CLI_LOCAL_EMAIL, CLI_LOCAL_USER_ID
+    from db.constants import (
+        BOOTSTRAP_USER_EMAIL,
+        BOOTSTRAP_USER_ID,
+        LEGACY_BOOTSTRAP_EMAIL,
+    )
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc).isoformat()
-    bootstrap = conn.execute("SELECT id FROM users WHERE id = ?", (CLI_LOCAL_USER_ID,)).fetchone()
+    bootstrap = conn.execute("SELECT id FROM users WHERE id = ?", (BOOTSTRAP_USER_ID,)).fetchone()
     if bootstrap is None:
         conn.execute(
             """
             INSERT INTO users (id, email, password_hash, google_sub, created_at, updated_at)
             VALUES (?, ?, NULL, NULL, ?, ?)
             """,
-            (CLI_LOCAL_USER_ID, CLI_LOCAL_EMAIL, now, now),
+            (BOOTSTRAP_USER_ID, BOOTSTRAP_USER_EMAIL, now, now),
+        )
+    else:
+        conn.execute(
+            """
+            UPDATE users SET email = ?, updated_at = ?
+            WHERE id = ? AND email = ?
+            """,
+            (BOOTSTRAP_USER_EMAIL, now, BOOTSTRAP_USER_ID, LEGACY_BOOTSTRAP_EMAIL),
         )
 
     trip_cols = {r[1] for r in conn.execute("PRAGMA table_info(trips)").fetchall()}
@@ -113,7 +125,7 @@ def _migrate_saas_auth(conn: sqlite3.Connection) -> None:
         )
         conn.execute(
             "UPDATE trips SET user_id = ? WHERE user_id IS NULL",
-            (CLI_LOCAL_USER_ID,),
+            (BOOTSTRAP_USER_ID,),
         )
 
     profile_row = conn.execute(
@@ -143,7 +155,7 @@ def _migrate_saas_auth(conn: sqlite3.Connection) -> None:
                     INSERT INTO user_profile (user_id, preferences_json, updated_at)
                     VALUES (?, ?, ?)
                     """,
-                    (CLI_LOCAL_USER_ID, legacy[0], legacy[1]),
+                    (BOOTSTRAP_USER_ID, legacy[0], legacy[1]),
                 )
             conn.execute("DROP TABLE user_profile_legacy")
 

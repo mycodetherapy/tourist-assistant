@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from db.connection import connect
-from db.constants import CLI_LOCAL_USER_ID
+from db.constants import BOOTSTRAP_USER_ID
 
 
 def _utc_now() -> str:
@@ -45,7 +45,7 @@ def create_trip(
     origin_city: str,
     user_query: str,
     *,
-    user_id: int = CLI_LOCAL_USER_ID,
+    user_id: int = BOOTSTRAP_USER_ID,
 ) -> int:
     """Создаёт запись поездки и возвращает trip_id."""
     now = _utc_now()
@@ -115,7 +115,7 @@ def _get_profile_from_table(user_id: int) -> dict[str, Any] | None:
     return json.loads(row["preferences_json"])
 
 
-def get_latest_trip_preferences(user_id: int = CLI_LOCAL_USER_ID) -> dict[str, Any] | None:
+def get_latest_trip_preferences(user_id: int = BOOTSTRAP_USER_ID) -> dict[str, Any] | None:
     """
     Предпочтения последней поездки — fallback, если user_profile ещё пуст
     (например, прогон оборвался до save_user_profile).
@@ -137,12 +137,12 @@ def get_latest_trip_preferences(user_id: int = CLI_LOCAL_USER_ID) -> dict[str, A
     return json.loads(row["preferences_json"])
 
 
-def has_user_profile(user_id: int = CLI_LOCAL_USER_ID) -> bool:
+def has_user_profile(user_id: int = BOOTSTRAP_USER_ID) -> bool:
     """True, если опросник уже проходили (профиль или любая поездка с prefs)."""
     return get_user_profile(user_id) is not None
 
 
-def get_user_profile(user_id: int = CLI_LOCAL_USER_ID) -> dict[str, Any] | None:
+def get_user_profile(user_id: int = BOOTSTRAP_USER_ID) -> dict[str, Any] | None:
     """Предпочтения: сначала user_profile, иначе последняя поездка с опросником."""
     profile = _get_profile_from_table(user_id)
     if profile is not None:
@@ -150,7 +150,7 @@ def get_user_profile(user_id: int = CLI_LOCAL_USER_ID) -> dict[str, Any] | None:
     return get_latest_trip_preferences(user_id)
 
 
-def ensure_user_profile_from_trips(user_id: int = CLI_LOCAL_USER_ID) -> None:
+def ensure_user_profile_from_trips(user_id: int = BOOTSTRAP_USER_ID) -> None:
     """Копирует prefs последней поездки в user_profile, если профиль пуст."""
     if _get_profile_from_table(user_id) is not None:
         return
@@ -162,7 +162,7 @@ def ensure_user_profile_from_trips(user_id: int = CLI_LOCAL_USER_ID) -> None:
 def save_user_profile(
     preferences: dict[str, Any],
     *,
-    user_id: int = CLI_LOCAL_USER_ID,
+    user_id: int = BOOTSTRAP_USER_ID,
 ) -> None:
     """Обновляет профиль предпочтений пользователя."""
     payload = json.dumps(preferences, ensure_ascii=False)

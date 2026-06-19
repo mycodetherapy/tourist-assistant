@@ -17,12 +17,11 @@ def print_final_program(program: FinalProgram) -> None:
         ]
     else:
         sections = [
-            ("Билеты", program.tickets),
             ("Маршруты", program.routes_text or ""),
             ("Лайфхаки", program.lifehacks),
         ]
     print("\n" + "=" * 60)
-    print("КУЛЬТУРНАЯ ПРОГРАММА ПОЕЗДКИ")
+    print("МАРШРУТЫ ПОЕЗДКИ")
     print("=" * 60)
     for title, body in sections:
         print(f"\n--- {title} ---\n")

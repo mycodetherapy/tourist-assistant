@@ -12,24 +12,16 @@ _FIXTURE = Path(__file__).resolve().parent.parent / "eval/fixtures/msk_weekend_s
 
 
 class TestParseItems(unittest.TestCase):
-    def test_smoke_fixture_tickets(self) -> None:
+    def test_smoke_fixture_routes(self) -> None:
         program = json.loads(_FIXTURE.read_text(encoding="utf-8"))
-        section = parse_section("tickets", program["tickets"])
-        self.assertIn("Маршрут:", section.intro)
-        self.assertEqual(len(section.items), 3)
-        self.assertTrue(section.items[0].startswith("- Aviasales"))
+        parsed = parse_program_sections(program)
+        self.assertEqual(len(parsed.routes.items), 3)
+        self.assertIn("Маршрут A", parsed.routes.items[0])
 
-    def test_smoke_fixture_events_lines(self) -> None:
+    def test_smoke_fixture_lifehacks(self) -> None:
         program = json.loads(_FIXTURE.read_text(encoding="utf-8"))
-        section = parse_section("events", program["events"])
-        self.assertEqual(len(section.items), 2)
-        self.assertIn("Третьяковская", section.items[0])
-
-    def test_smoke_fixture_dining_numbered(self) -> None:
-        program = json.loads(_FIXTURE.read_text(encoding="utf-8"))
-        section = parse_section("dining", program["dining"])
-        self.assertEqual(len(section.items), 7)
-        self.assertTrue(section.items[0].startswith("1."))
+        section = parse_section("lifehacks", program["lifehacks"])
+        self.assertGreater(len(section.items), 0)
 
     def test_lifehacks_paragraph(self) -> None:
         section = parse_section("lifehacks", "Утро: музей → обед рядом.")

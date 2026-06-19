@@ -17,7 +17,6 @@ class TestGraphRunMetrics(unittest.TestCase):
         metrics.record_node("researcher", 3.5, cumulative_sec=3.5)
         metrics.record_node("executor", 1.2, cumulative_sec=4.7)
         metrics.record_node("writer", 20.0, cumulative_sec=24.7)
-        metrics.record_tool("search_roundtrip_tickets", 0.3)
         metrics.record_tool("search_route_materials", 1.1)
 
         data = metrics.to_dict()

@@ -1,59 +1,47 @@
 # Smoke-набор для offline eval (fixtures в eval/fixtures/)
-# Билеты: обновить живыми данными — python3 scripts/refresh_tickets_fixtures.py
 cases:
   - id: spb_culture_smoke
     city: Санкт-Петербург
     dates: 1-4 августа 2026
     origin_city: Москва
-    user_query: культурная программа
+    user_query: три маршрута по городу
     expect:
       tools:
-        - search_roundtrip_tickets
-        - search_culture_events
-        - search_dining
+        - search_route_materials
       sections:
-        - tickets
-        - events
-        - dining
+        - routes
         - lifehacks
-      min_restaurant_links: 6
-      tickets_markers:
-        - "самол"
-        - "поезд"
-      min_ticket_offers: 2
+      min_route_urls: 3
 
   - id: msk_weekend_smoke
     city: Москва
     dates: 10-11 октября 2026
     origin_city: Санкт-Петербург
-    user_query: выходные, музеи и рестораны
+    user_query: выходные, пешие маршруты
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
-      sections: [tickets, events, dining, lifehacks]
-      min_restaurant_links: 6
-      min_ticket_offers: 2
+      tools: [search_route_materials]
+      sections: [routes, lifehacks]
+      min_route_urls: 3
 
   - id: kazan_family_smoke
     city: Казань
     dates: 5-7 ноября 2026
     origin_city: Москва
-    user_query: семейная поездка, без ночных мероприятий
+    user_query: семейная поездка, три маршрута
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
-      sections: [tickets, events, dining, lifehacks]
-      min_restaurant_links: 6
-      min_ticket_offers: 2
+      tools: [search_route_materials]
+      sections: [routes, lifehacks]
+      min_route_urls: 3
 
   - id: sochi_food_smoke
     city: Сочи
     dates: 20-23 сентября 2026
     origin_city: Екатеринбург
-    user_query: культура + акцент на кухню, рейтинг от 4.7
+    user_query: маршруты и лайфхаки
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
-      sections: [tickets, events, dining, lifehacks]
-      min_restaurant_links: 6
-      min_ticket_offers: 2
+      tools: [search_route_materials]
+      sections: [routes, lifehacks]
+      min_route_urls: 3
 
   - id: nnov_walk_smoke
     city: Нижний Новгород
@@ -61,61 +49,56 @@ cases:
     origin_city: Москва
     user_query: много пешком, центр
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
-      sections: [tickets, events, dining, lifehacks]
-      min_restaurant_links: 6
-      min_ticket_offers: 2
+      tools: [search_route_materials]
+      sections: [routes, lifehacks]
+      min_route_urls: 3
 
   - id: vladivostok_winter_smoke
     city: Владивосток
     dates: 2-5 января 2027
     origin_city: Москва
-    user_query: зимняя поездка, музеи, транспорт
+    user_query: зимние маршруты
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
-      sections: [tickets, events, dining, lifehacks]
-      min_restaurant_links: 6
-      min_ticket_offers: 2
+      tools: [search_route_materials]
+      sections: [routes, lifehacks]
+      min_route_urls: 3
 
   - id: ekb_budget_smoke
     city: Екатеринбург
     dates: 15-18 августа 2026
     origin_city: Пермь
-    user_query: бюджетно, но красиво
+    user_query: бюджетные маршруты
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
-      sections: [tickets, events, dining, lifehacks]
-      min_restaurant_links: 6
-      min_ticket_offers: 2
+      tools: [search_route_materials]
+      sections: [routes, lifehacks]
+      min_route_urls: 3
 
   - id: novosib_museum_smoke
     city: Новосибирск
     dates: 3-6 марта 2027
     origin_city: Томск
-    user_query: музеи и выставки, без клубов
+    user_query: музеи на маршруте
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
-      sections: [tickets, events, dining, lifehacks]
-      min_restaurant_links: 6
-      min_ticket_offers: 2
+      tools: [search_route_materials]
+      sections: [routes, lifehacks]
+      min_route_urls: 3
 
   - id: kaliningrad_history_smoke
     city: Калининград
     dates: 7-10 мая 2027
     origin_city: Москва
-    user_query: история и музеи
+    user_query: исторические маршруты
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
-      sections: [tickets, events, dining, lifehacks]
-      min_restaurant_links: 6
-      min_ticket_offers: 2
+      tools: [search_route_materials]
+      sections: [routes, lifehacks]
+      min_route_urls: 3
 
   - id: spb_repeat_smoke
     city: Санкт-Петербург
     dates: 1-4 августа 2026
     origin_city: Москва
-    user_query: пересобери программу, добавь больше выставок
+    user_query: пересобери маршруты
     expect:
-      tools: [search_roundtrip_tickets, search_culture_events, search_dining]
-      sections: [tickets, events, dining, lifehacks]
-      min_restaurant_links: 6
+      tools: [search_route_materials]
+      sections: [routes, lifehacks]
+      min_route_urls: 3

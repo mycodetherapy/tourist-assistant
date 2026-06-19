@@ -276,7 +276,7 @@ def is_placeholder_secret(value: str) -> bool:
 
 
 def ensure_env() -> None:
-    """Проверяет обязательные переменные окружения перед запуском CLI."""
+    """Проверяет env для eval и скриптов (LLM_API_KEY в .env)."""
     api_key = get_llm_api_key()
     if not api_key:
         raise SystemExit(

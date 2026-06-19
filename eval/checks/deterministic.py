@@ -17,8 +17,6 @@ def check_program_schema(program: dict[str, Any]) -> list[str]:
         model = FinalProgram.model_validate(normalize_stored_program(program))
     except ValidationError as exc:
         return [f"schema: {exc}"]
-    if not model.tickets.strip():
-        issues.append("пустое поле tickets")
     if not model.lifehacks.strip():
         issues.append("пустое поле lifehacks")
     if is_legacy_program(program):
@@ -46,6 +44,12 @@ def check_links_and_markers(
         links = len(re.findall(r"https?://", dining, flags=re.IGNORECASE))
         if links < min_restaurant_links:
             issues.append(f"dining: {links} ссылок (ожидалось ≥{min_restaurant_links})")
+        if tickets_markers:
+            tickets = str(program.get("tickets", ""))
+            lower = tickets.lower()
+            for marker in tickets_markers:
+                if str(marker).lower() not in lower:
+                    issues.append(f"tickets: нет маркера {marker}")
     else:
         routes = program.get("routes")
         url_count = 0
@@ -61,11 +65,6 @@ def check_links_and_markers(
             issues.append(
                 f"routes: {url_count} maps_route_url (ожидалось ≥{min_route_urls})"
             )
-    tickets = str(program.get("tickets", ""))
-    lower = tickets.lower()
-    for marker in tickets_markers or ("самол", "поезд"):
-        if str(marker).lower() not in lower:
-            issues.append(f"tickets: нет маркера {marker}")
     return issues
 
 

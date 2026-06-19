@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from db.connection import connect
-from db.constants import CLI_LOCAL_EMAIL, CLI_LOCAL_USER_ID
+from db.constants import BOOTSTRAP_USER_EMAIL, BOOTSTRAP_USER_ID
 
 
 def _utc_now() -> str:
@@ -44,11 +44,11 @@ def _row_to_user(row: Any) -> User:
     )
 
 
-def ensure_cli_bootstrap_user() -> None:
-    """Локальный пользователь id=1 для CLI и миграции legacy-данных."""
+def ensure_bootstrap_user() -> None:
+    """Системный пользователь id=1 для миграции legacy-данных."""
     now = _utc_now()
     with connect() as conn:
-        row = conn.execute("SELECT id FROM users WHERE id = ?", (CLI_LOCAL_USER_ID,)).fetchone()
+        row = conn.execute("SELECT id FROM users WHERE id = ?", (BOOTSTRAP_USER_ID,)).fetchone()
         if row is not None:
             return
         conn.execute(
@@ -56,9 +56,14 @@ def ensure_cli_bootstrap_user() -> None:
             INSERT INTO users (id, email, password_hash, google_sub, created_at, updated_at)
             VALUES (?, ?, NULL, NULL, ?, ?)
             """,
-            (CLI_LOCAL_USER_ID, CLI_LOCAL_EMAIL, now, now),
+            (BOOTSTRAP_USER_ID, BOOTSTRAP_USER_EMAIL, now, now),
         )
         conn.commit()
+
+
+def ensure_cli_bootstrap_user() -> None:
+    """Устаревшее имя — делегирует ensure_bootstrap_user."""
+    ensure_bootstrap_user()
 
 
 def create_user(

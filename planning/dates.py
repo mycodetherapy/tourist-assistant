@@ -1,11 +1,10 @@
-"""Парсинг дат поездки из свободного текста CLI."""
+"""Парсинг дат поездки из свободного текста."""
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import date, datetime
-
-from models.tickets import ParsedTripDates
 
 _MONTHS: dict[str, int] = {
     "январ": 1,
@@ -21,6 +20,14 @@ _MONTHS: dict[str, int] = {
     "ноябр": 11,
     "декабр": 12,
 }
+
+
+@dataclass
+class ParsedTripDates:
+    raw: str
+    parse_status: str
+    departure: date | None = None
+    return_date: date | None = None
 
 
 def _parse_iso(text: str) -> date | None:

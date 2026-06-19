@@ -23,18 +23,6 @@ def format_materials_digest(materials: RouteMaterials) -> str:
             f"L{index}. [{poi.name}]({poi.maps_url}) "
             f"(poi_id={poi.poi_id}, tag={poi.tag}{rating}) — {poi.address or 'адрес уточните'}"
         )
-    lines.append(f"Ресторанов: {len(materials.dining_options)}.")
-    if materials.dining_options:
-        for index, dining in enumerate(materials.dining_options, start=1):
-            rating = f", рейтинг {dining.rating}" if dining.rating else ""
-            lines.append(
-                f"R{index}. [{dining.name}]({dining.maps_url}) "
-                f"(poi_id={dining.poi_id}, anchor={dining.anchor_poi_id}{rating})"
-            )
-    else:
-        lines.append(
-            "Питание вдоль маршрута — «Искать вдоль маршрута» в Яндекс.Картах после открытия ссылки."
-        )
     return "\n".join(lines)
 
 

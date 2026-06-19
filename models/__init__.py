@@ -6,7 +6,6 @@ from models.schemas import (
     PlannerContext,
     PlannerNodeOutput,
     ProgramDraft,
-    TicketsSearchInput,
     normalize_stored_program,
 )
 from models.state import AgentState
@@ -18,6 +17,5 @@ __all__ = [
     "PlannerContext",
     "PlannerNodeOutput",
     "ProgramDraft",
-    "TicketsSearchInput",
     "normalize_stored_program",
 ]

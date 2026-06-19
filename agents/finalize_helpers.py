@@ -1,139 +1,17 @@
-"""Подготовка контекста для finalize: билеты из tool, без тяжёлого JSON."""
+"""Подготовка контекста для finalize: без тяжёлого JSON."""
 
 from __future__ import annotations
 
 import json
-import re
 from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage, ToolMessage
 
 from models.routes import RouteMaterials, RouteProgram
 from models.schemas import ProgramDraft
-from models.tickets import TicketsSearchOutput
 from planning.rebuild import required_tools_for_scope, resolve_tool_name
-from search.context import get_session_preferences
-from search.ticket_links import format_offers_summary, normalize_tickets_markdown
-from search.ticket_passengers import passengers_for_travel_party
-from search.tickets_search import run_tickets_search
-from search.transport_codes import ground_transport_available, required_ticket_markers
 
-_GARBAGE_TICKETS = re.compile(r"^[\s:{}\[\]]+$")
 _FINALIZE_MAX_TOOL_CHARS = 12_000
-
-
-def _is_garbage_tickets(
-    text: str,
-    *,
-    origin_city: str = "",
-    destination_city: str = "",
-) -> bool:
-    """Отсекает обломки structured output (:{, :[], пустые блоки)."""
-    t = text.strip()
-    has_ground = ground_transport_available(origin_city, destination_city)
-    min_len = 80 if has_ground or not (origin_city and destination_city) else 40
-    if len(t) < min_len:
-        return True
-    if _GARBAGE_TICKETS.match(t[:20]):
-        return True
-    if t.startswith(":[]") or t.startswith(":{") or t.startswith("{") and "http" not in t:
-        return True
-    low = t.lower()
-    if "http" not in low:
-        return True
-    if not any(label in low for label in required_ticket_markers(origin_city, destination_city)):
-        return True
-    return False
-
-
-def extract_tickets_summary(messages: list[Any]) -> Optional[str]:
-    """Билеты из последнего search_roundtrip_tickets (offers → markdown-ссылки)."""
-    for msg in reversed(messages):
-        if not isinstance(msg, ToolMessage) or msg.name != "search_roundtrip_tickets":
-            continue
-        raw = msg.content if isinstance(msg.content, str) else str(msg.content)
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        try:
-            output = TicketsSearchOutput.model_validate(data)
-        except Exception:
-            continue
-        origin_city = output.params.origin_city
-        destination_city = output.params.destination_city
-        if output.offers:
-            prefs = get_session_preferences()
-            party = prefs.travel_party if prefs else "couple"
-            passengers = passengers_for_travel_party(party)
-            built = normalize_tickets_markdown(
-                format_offers_summary(
-                    origin_city,
-                    destination_city,
-                    output.parsed_dates,
-                    output.offers,
-                    passengers=passengers,
-                )
-            )
-            if not _is_garbage_tickets(
-                built,
-                origin_city=origin_city,
-                destination_city=destination_city,
-            ):
-                return built
-        summary = str(data.get("summary_for_llm", "")).strip()
-        if summary:
-            normalized = normalize_tickets_markdown(summary)
-            if not _is_garbage_tickets(
-                normalized,
-                origin_city=origin_city,
-                destination_city=destination_city,
-            ):
-                return normalized
-    return None
-
-
-def resolve_tickets_section(
-    *,
-    messages: list[Any],
-    base_program: Optional[dict[str, Any]],
-    origin_city: str,
-    destination_city: str,
-    dates: str,
-    rebuild_scope: str,
-) -> str:
-    """Источники по приоритету: tool в истории → живой run_tickets_search → base_program."""
-    from_tool = extract_tickets_summary(messages)
-    if from_tool:
-        return from_tool
-
-    if rebuild_scope in ("full", "tickets"):
-        prefs = get_session_preferences()
-        party = prefs.travel_party if prefs else "couple"
-        output = run_tickets_search(
-            origin_city, destination_city, dates, travel_party=party
-        )
-        summary = normalize_tickets_markdown((output.summary_for_llm or "").strip())
-        if summary and not _is_garbage_tickets(
-            summary,
-            origin_city=origin_city,
-            destination_city=destination_city,
-        ):
-            return summary
-
-    if base_program:
-        base_t = normalize_tickets_markdown(str(base_program.get("tickets", "")).strip())
-        if base_t and not _is_garbage_tickets(
-            base_t,
-            origin_city=origin_city,
-            destination_city=destination_city,
-        ):
-            return base_t
-
-    return (
-        "Билеты: не удалось собрать раздел. "
-        "Повторите поиск (search_roundtrip_tickets) или проверьте даты и TRAVELPAYOUTS_API_KEY."
-    )
 
 
 def _truncate_text(text: str, limit: int) -> str:
@@ -159,17 +37,7 @@ def slim_tool_message_for_finalize(msg: ToolMessage) -> ToolMessage:
     if not isinstance(data, dict):
         return ToolMessage(content=raw[:4000], tool_call_id=msg.tool_call_id, name=name)
 
-    if data.get("category") == "tickets" or name == "search_roundtrip_tickets":
-        slim = {
-            "schema_version": data.get("schema_version"),
-            "category": "tickets",
-            "summary_for_llm": data.get("summary_for_llm", ""),
-            "instruction": data.get("instruction", ""),
-            "warning": data.get("warning"),
-            "avia_api_status": data.get("avia_api_status"),
-            "offers_count": data.get("offers_count"),
-        }
-    elif resolve_tool_name(name) == "search_route_materials":
+    if resolve_tool_name(name) == "search_route_materials":
         slim = {
             "category": "route_materials",
             "materials_digest": _truncate_text(
@@ -216,10 +84,7 @@ def _collect_latest_tool_messages(
 
     return [
         latest[name]
-        for name in (
-            "search_roundtrip_tickets",
-            "search_route_materials",
-        )
+        for name in ("search_route_materials",)
         if name in latest
     ]
 

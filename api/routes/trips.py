@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from api.auth.service import AuthError, require_user_llm_config
 from api.deps import get_current_user, get_run_manager, get_trip_service
 from api.schemas.requests import (
-    AffiliateClickRequest,
     CreateTripRequest,
     GeocodeRequest,
     ItemFeedbackRequest,
@@ -195,7 +194,6 @@ def create_trip(
             preferences_dict=preferences.model_dump(),
             rebuild_scope="full",
             user_message=trip.get("user_query") or body.user_query,
-            review_mode="deferred",
         )
         run_id = run_manager.start_run(state, llm_config=llm_config)
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)
@@ -350,36 +348,6 @@ def set_program_feedback(
     return _program_response(view)
 
 
-@router.post("/{trip_id}/affiliate-clicks", status_code=204, response_class=Response)
-def log_affiliate_click(
-    trip_id: int,
-    body: AffiliateClickRequest,
-    user: User = Depends(get_current_user),
-    service: TripService = Depends(get_trip_service),
-) -> Response:
-    """Локальный учёт клика по affiliate-ссылке в блоке билетов."""
-    if service.get_trip_details(trip_id, user_id=user.id) is None:
-        raise HTTPException(status_code=404, detail="Поездка не найдена")
-    from db.affiliate_repository import log_affiliate_click as persist_click
-    from search.affiliate.programs import detect_provider
-    from search.affiliate.sub_id import build_sub_id
-
-    provider = detect_provider(body.target_url)
-    channel = "tickets"
-    sub_id = (
-        build_sub_id(trip_id, channel, provider)
-        if provider is not None
-        else None
-    )
-    persist_click(
-        trip_id,
-        target_url=body.target_url,
-        provider=provider.key if provider else body.provider,
-        sub_id=sub_id,
-    )
-    return Response(status_code=204)
-
-
 @router.get("/{trip_id}/preferences", response_model=TripPreferences | None)
 def get_preferences(
     trip_id: int,
@@ -411,6 +379,5 @@ def start_run(
         raise _llm_key_http_error(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    state["review_mode"] = "deferred"
     run_id = run_manager.start_run(state, llm_config=llm_config)
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)

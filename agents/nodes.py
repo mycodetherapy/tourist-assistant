@@ -1,4 +1,4 @@
-"""Узлы LangGraph: researcher → executor|writer, critic, human_review."""
+"""Узлы LangGraph: researcher → executor|writer, critic."""
 
 from __future__ import annotations
 
@@ -15,9 +15,7 @@ from agents.finalize_helpers import (
     prepare_finalize_messages,
     repair_program_routes,
     resolve_routes_program,
-    resolve_tickets_section,
 )
-from agents.human_review import prompt_approve_program, prompt_reject_action
 from agents.llm import get_llm_final, get_llm_with_tools
 from agents.print_program import print_final_program
 from db import log_tool_run
@@ -58,20 +56,14 @@ def resolve_tool_args(
     if resolved == "search_route_materials":
         merged["city"] = state["city"]
         merged["dates"] = state["dates"]
-    elif resolved == "search_roundtrip_tickets":
-        merged["origin_city"] = state["origin_city"]
-        merged["destination_city"] = state["city"]
-        merged["dates"] = state["dates"]
     return merged
 
 __all__ = [
     "critic_node",
     "executor_node",
     "finalize_node",
-    "human_review_node",
     "planner_node",
     "route_after_critic",
-    "route_after_human",
     "route_after_researcher",
     "route_entry",
 ]
@@ -85,15 +77,14 @@ def _build_planner_system_prompt(ctx: PlannerContext, rebuild_scope: str) -> str
     tools_hint = planner_tools_hint(rebuild_scope)
     return (
         "Ты — туристический ассистент. Составляешь маршруты по городу.\n"
-        f"Город поездки: {ctx.city}. Даты: {ctx.dates}. Город вылета: {ctx.origin_city}."
+        f"Город поездки: {ctx.city}. Даты: {ctx.dates}."
         f"{prefs_block}\n"
-        "Инструменты: tickets=билеты; route_materials=единый пул мест досуга и ресторанов "
-        "(Яндекс.Карты, poi_id + координаты). Цены — только из tool JSON.\n\n"
+        "Инструмент: search_route_materials — единый пул мест досуга "
+        "(OSM/Wikidata, poi_id + координаты).\n\n"
         "Обязанности:\n"
-        "1. Билеты: search_roundtrip_tickets, не выдумывай ссылки.\n"
-        "2. Маршруты: search_route_materials — пул POI на всю поездку.\n\n"
+        "1. Вызови search_route_materials для сбора пула POI.\n"
+        "2. Не выдумывай места и URL — только данные из tool JSON.\n\n"
         f"{tools_hint}\n"
-        f"Билеты: origin={ctx.origin_city}, destination={ctx.city}, dates={ctx.dates}. "
         f"Материалы маршрута: city={ctx.city}, dates={ctx.dates}."
     )
 
@@ -197,14 +188,6 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
     if ctx.search_context:
         prefs_note = f"\nУчти предпочтения: {ctx.search_context}\n"
     scope_note = finalize_extra_prompt(rebuild_scope, base_program)
-    tickets_body = resolve_tickets_section(
-        messages=state["messages"],
-        base_program=base_program,
-        origin_city=ctx.origin_city,
-        destination_city=ctx.city,
-        dates=ctx.dates,
-        rebuild_scope=rebuild_scope,
-    )
     route_feedback_ctx = None
     trip_id = state.get("trip_id")
     feedback_snapshot = state.get("route_feedback_snapshot")
@@ -271,10 +254,10 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
 
     system = SystemMessage(
         content=(
-            "Составь программу по ToolMessage (билеты уже готовы).\n"
+            "Составь маршруты и лайфхаки по ToolMessage.\n"
             f"{routes_instruction}"
             "- lifehacks: 4–7 коротких советов, до 800 символов, без ссылок.\n"
-            f"Город: {ctx.city}. Даты: {ctx.dates}. Вылет из: {ctx.origin_city}."
+            f"Город: {ctx.city}. Даты: {ctx.dates}."
             f"{prefs_note}{scope_note}"
         )
     )
@@ -336,9 +319,9 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
             search_context=ctx.search_context or "",
         )
 
-    full_draft = {**draft_fields, "tickets": tickets_body}
+    full_draft = {**draft_fields, "tickets": ""}
     merged = merge_program(base_program, full_draft, rebuild_scope)
-    merged["tickets"] = tickets_body
+    merged["tickets"] = ""
     program = FinalProgram.model_validate(normalize_stored_program(merged))
     program_dump = program.model_dump()
     from agents.lifehacks_quality import clean_lifehacks_display
@@ -360,20 +343,12 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
             transport=transport,
             pace=pace,
         )
-    if trip_id is not None and rebuild_scope in ("full", "tickets"):
-        from search.affiliate.wrap import wrap_tickets_markdown
-
-        program_dump["tickets"] = wrap_tickets_markdown(
-            str(program_dump.get("tickets", "")),
-            int(trip_id),
-        )
     program = FinalProgram.model_validate(program_dump)
 
     print_final_program(program)
 
     routes_body = program.routes_text or ""
     summary = (
-        f"## Билеты\n{program.tickets}\n\n"
         f"## Маршруты\n{routes_body}\n\n"
         f"## Лайфхаки\n{program.lifehacks}"
     )
@@ -388,52 +363,6 @@ def critic_node(state: AgentState) -> dict[str, Any]:
     result: dict[str, Any] = {"critic_passed": passed, "critic_notes": notes}
     if not passed:
         result["retry_count"] = state.get("retry_count", 0) + 1
-    return result
-
-
-def human_review_node(state: AgentState) -> dict[str, Any]:
-    """Human-in-the-loop: утверждение программы y/n или отложенный review для API."""
-    print("\n--- Проверка программы ---")
-    if state.get("critic_notes"):
-        print(f"Замечания critic: {state['critic_notes']}")
-
-    if state.get("review_mode") == "deferred":
-        return {"approved": False}
-
-    if state.get("review_mode") == "cli" and state.get("trip_id") and state.get("program"):
-        from cli.feedback import offer_feedback_before_review
-        from services import TripService
-
-        offer_feedback_before_review(
-            TripService(),
-            int(state["trip_id"]),
-            program_data=state["program"],
-            scope=str(state.get("rebuild_scope", "full")),
-        )
-
-    if prompt_approve_program():
-        print("✓ Программа утверждена.\n")
-        return {"approved": True}
-
-    action = prompt_reject_action()
-    if action == "save_draft":
-        return {"approved": True}
-
-    print("Повторная сборка по замечаниям...\n")
-    result: dict[str, Any] = {
-        "approved": False,
-        "retry_count": state.get("retry_count", 0) + 1,
-        "messages": [
-            HumanMessage(
-                content=(
-                    "Пользователь не утвердил программу. "
-                    "Пересобери слабые разделы, опираясь на digest."
-                )
-            )
-        ],
-    }
-    if state.get("program"):
-        result["base_program"] = state["program"]
     return result
 
 
@@ -453,19 +382,11 @@ def route_after_researcher(state: AgentState) -> Literal["executor", "writer"]:
     return "writer"
 
 
-def route_after_critic(state: AgentState) -> Literal["human_review", "researcher"]:
-    """Critic: ok → HITL; иначе retry researcher (до 2 раз)."""
+def route_after_critic(state: AgentState) -> Literal["__end__", "researcher"]:
+    """Critic: ok → END; иначе retry researcher (до 2 раз)."""
     if state.get("critic_passed"):
-        return "human_review"
-    if state.get("retry_count", 0) >= 2:
-        print("  [critic] лимит повторов — передаём на утверждение пользователю.")
-        return "human_review"
-    return "researcher"
-
-
-def route_after_human(state: AgentState) -> Literal["researcher", "__end__"]:
-    if state.get("review_mode") == "deferred":
         return "__end__"
-    if state.get("approved"):
+    if state.get("retry_count", 0) >= 2:
+        print("  [critic] лимит повторов — завершаем с текущей программой.")
         return "__end__"
     return "researcher"

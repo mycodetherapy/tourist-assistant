@@ -15,7 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from api.auth.google_oauth import register_google_client
 from api.auth.routes import router as auth_router
 from api.rate_limit import limiter
-from api.routes import affiliate, profile, runs, trips
+from api.routes import profile, runs, trips
 from config.settings import cors_origins, ensure_api_env
 from db import ensure_user_profile_from_trips, init_db
 
@@ -46,10 +46,6 @@ _OPENAPI_TAGS = [
     {
         "name": "profile",
         "description": "Профиль предпочтений и BYOK OpenRouter.",
-    },
-    {
-        "name": "affiliate",
-        "description": "Affiliate-метрики и синхронизация Travelpayouts (admin token).",
     },
     {
         "name": "health",
@@ -90,7 +86,6 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(trips.router, prefix="/api")
 app.include_router(runs.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
-app.include_router(affiliate.router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])

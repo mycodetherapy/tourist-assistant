@@ -1,6 +1,72 @@
 {
-  "tickets": "Маршрут: Санкт-Петербург → Москва, даты: 10.10.2026 — 11.10.2026.\nПрямых рейсов может не быть — на Aviasales смотрите варианты со стыковками.\n\n**Самолёт**:\n- Aviasales: Санкт-Петербург → Москва: https://www.aviasales.ru/search/LED1010MOW1110?origin_airports=0&destination_airports=1\n\n**Поезд**:\n- Tutu (жд): Санкт-Петербург → Москва: https://www.tutu.ru/poezda/Sankt-Peterburg/Moskva/?date=10.10.2026&travelers=1\n\n**Автобус**:\n- Tutu (автобус): Санкт-Петербург → Москва, 10.10.2026: https://bus.tutu.ru/raspisanie/gorod_Sankt-Peterburg/gorod_Moskva/?date=10.10.2026&amount=1&from=1447874&to=1447874&travelers=1",
-  "events": "Третьяковская галерея https://www.tretyakovgallery.ru\nПушкинский музей https://pushkinmuseum.art",
-  "dining": "1. Ресторан A https://2gis.ru/a\n2. B https://2gis.ru/b\n3. C https://tripadvisor.com/c\n4. D https://yandex.ru/maps/d\n5. E https://2gis.ru/e\n6. F https://2gis.ru/f\n7. G https://2gis.ru/g",
-  "lifehacks": "Утро: музей → обед рядом → прогулка по центру."
+  "tickets": "",
+  "routes": {
+    "cases": [
+      {
+        "case_id": "A",
+        "title": "Маршрут A",
+        "summary": "Тестовый маршрут",
+        "stops": [
+          {
+            "order": 1,
+            "kind": "leisure",
+            "poi_id": "poi:1",
+            "narrative": "Точка 1"
+          },
+          {
+            "order": 2,
+            "kind": "leisure",
+            "poi_id": "poi:2",
+            "narrative": "Точка 2"
+          }
+        ],
+        "maps_route_url": "https://yandex.ru/maps/?rtext=~1~2",
+        "loop_route": false
+      },
+      {
+        "case_id": "B",
+        "title": "Маршрут B",
+        "summary": "Тестовый маршрут",
+        "stops": [
+          {
+            "order": 1,
+            "kind": "leisure",
+            "poi_id": "poi:1",
+            "narrative": "Точка 1"
+          },
+          {
+            "order": 2,
+            "kind": "leisure",
+            "poi_id": "poi:2",
+            "narrative": "Точка 2"
+          }
+        ],
+        "maps_route_url": "https://yandex.ru/maps/?rtext=~2~3",
+        "loop_route": false
+      },
+      {
+        "case_id": "C",
+        "title": "Маршрут C",
+        "summary": "Тестовый маршрут",
+        "stops": [
+          {
+            "order": 1,
+            "kind": "leisure",
+            "poi_id": "poi:1",
+            "narrative": "Точка 1"
+          },
+          {
+            "order": 2,
+            "kind": "leisure",
+            "poi_id": "poi:2",
+            "narrative": "Точка 2"
+          }
+        ],
+        "maps_route_url": "https://yandex.ru/maps/?rtext=~3~4",
+        "loop_route": false
+      }
+    ]
+  },
+  "routes_text": "Маршруты A/B/C для eval fixture.",
+  "lifehacks": "Совет: начинайте с центра города."
 }

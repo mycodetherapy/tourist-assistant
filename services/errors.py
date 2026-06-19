@@ -45,7 +45,7 @@ def format_runtime_error(exc: Exception) -> str:
     if "messages with role 'tool'" in text or "tool_calls" in text:
         return (
             "Ошибка LLM (400): некорректная история сообщений для API.\n"
-            "Перезапустите python3 main.py. Если повторяется — сообщите об ошибке.\n"
+            "Перезапустите сборку программы через веб или API. Если повторяется — сообщите об ошибке.\n"
             f"Детали: {text}"
         )
     return f"Ошибка выполнения: {text}"

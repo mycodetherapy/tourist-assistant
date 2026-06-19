@@ -1,16 +1,16 @@
-# Туристический ассистент: интерактивный CLI (локально и на сервере).
+# Туристический ассистент: FastAPI + React.
 #
 # Подготовка (НЕ перезаписывайте существующий .env!):
 #   test -f .env || cp .env.example .env
-#   # затем отредактируйте .env: LLM_API_KEY и др.
+#   # затем отредактируйте .env: JWT_SECRET, SETTINGS_ENCRYPTION_KEY и др.
 #
 # Сборка и запуск:
 #   docker compose build
-#   docker compose run --rm app
+#   docker compose up api web
 #
-# Тесты / eval (без интерактива):
-#   docker compose run --rm app python -m unittest discover -s tests -v
-#   docker compose run --rm app python -m eval --suite smoke
+# Тесты / eval:
+#   docker compose run --rm api python -m unittest discover -s tests -v
+#   docker compose run --rm api python -m eval --suite smoke
 
 services:
   api:
@@ -40,21 +40,3 @@ services:
       - "5173:80"
     depends_on:
       - api
-
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: tourist-assistant:latest
-    env_file:
-      - .env
-    environment:
-      DATABASE_PATH: /app/data/trips.db
-      TOURIST_ASSISTANT_IN_DOCKER: "1"
-      LANGFUSE_HOST: ${LANGFUSE_HOST_DOCKER:-http://host.docker.internal:3000}
-    volumes:
-      - ./data:/app/data
-    stdin_open: true
-    tty: true
-    extra_hosts:
-      - "host.docker.internal:host-gateway"

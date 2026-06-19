@@ -8,37 +8,58 @@ from agents.critic import run_critic
 from langchain_core.messages import ToolMessage
 
 
+def _leisure_stops(case_id: str, count: int) -> list[dict]:
+    return [
+        {
+            "order": i + 1,
+            "kind": "leisure",
+            "poi_id": f"poi:{case_id}:{i}",
+            "narrative": f"Место {case_id}-{i}",
+        }
+        for i in range(count)
+    ]
+
+
 class TestCritic(unittest.TestCase):
-    def test_passes_with_tools_and_links(self) -> None:
+    def test_passes_with_route_materials_and_routes(self) -> None:
         state = {
             "rebuild_scope": "full",
             "messages": [
-                ToolMessage(content="{}", tool_call_id="1", name="search_roundtrip_tickets"),
-                ToolMessage(content="{}", tool_call_id="2", name="search_culture_events"),
-                ToolMessage(
-                    content="{}",
-                    tool_call_id="3",
-                    name="search_dining",
-                ),
+                ToolMessage(content="{}", tool_call_id="1", name="search_route_materials"),
             ],
             "program": {
-                "tickets": (
-                    "Самолёт: рейс SU https://avia.example/a\n"
-                    "Поезд: плацкарт https://rzd.example/b\n"
-                    "Автобус: междугородний https://bus.example/c\n"
-                ),
-                "events": (
-                    "Эрмитаж — музей https://hermitagemuseum.org\n"
-                    "Русский музей — выставки https://rusmuseum.ru\n"
-                ),
-                "dining": "\n".join(
-                    f"Ресторан {i} https://dining.example/r{i}" for i in range(7)
-                ),
-                "lifehacks": "Маршрут: музей утром → обед рядом → вечерний театр пешком.",
+                "tickets": "",
+                "routes": {
+                    "cases": [
+                        {
+                            "case_id": "A",
+                            "title": "A",
+                            "summary": "",
+                            "stops": _leisure_stops("A", 3),
+                            "maps_route_url": "https://yandex.ru/maps/?rtext=1",
+                        },
+                        {
+                            "case_id": "B",
+                            "title": "B",
+                            "summary": "",
+                            "stops": _leisure_stops("B", 3),
+                            "maps_route_url": "https://yandex.ru/maps/?rtext=2",
+                        },
+                        {
+                            "case_id": "C",
+                            "title": "C",
+                            "summary": "",
+                            "stops": _leisure_stops("C", 3),
+                            "maps_route_url": "https://yandex.ru/maps/?rtext=3",
+                        },
+                    ]
+                },
+                "routes_text": "Маршруты A/B/C с достаточным описанием для critic и проверки минимальной длины текста.",
+                "lifehacks": "Совет по городу: начинайте прогулку с центра.",
             },
         }
-        passed, _ = run_critic(state)
-        self.assertTrue(passed)
+        passed, notes = run_critic(state)
+        self.assertTrue(passed, notes)
 
 
 if __name__ == "__main__":

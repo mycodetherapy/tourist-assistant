@@ -12,7 +12,6 @@ from agents.route_postprocess import (
     overlap_limits_for_pool,
 )
 from models.routes import RouteProgram, TripRouteCase
-from search.transport_codes import required_ticket_markers
 
 _GARBAGE_PREFIX = re.compile(r"^[\s:{}\[\],]+$")
 _JSON_ARTIFACT = re.compile(r"^[\s]*[:,\[\]{}]+")
@@ -159,6 +158,7 @@ def critic_program_issues(
     origin_city: str = "",
     destination_city: str = "",
 ) -> list[str]:
+    _ = origin_city, destination_city
     issues: list[str] = []
     if scope in ("full", "routes", "events", "dining"):
         if program.get("routes") or program.get("routes_text"):
@@ -168,21 +168,4 @@ def critic_program_issues(
             issues.extend(issues_for_section(program, "dining"))
     if scope in ("full", "lifehacks"):
         issues.extend(issues_for_section(program, "lifehacks"))
-    if scope in ("full", "tickets"):
-        tickets = str(program.get("tickets", ""))
-        lower = tickets.lower()
-        for label in required_ticket_markers(origin_city, destination_city):
-            if label not in lower:
-                issues.append(f"в билетах нет «{label}…»")
-        try:
-            from agents.finalize_helpers import _is_garbage_tickets
-
-            if _is_garbage_tickets(
-                tickets,
-                origin_city=origin_city,
-                destination_city=destination_city,
-            ):
-                issues.append("раздел «tickets» некорректен")
-        except ImportError:
-            pass
     return issues

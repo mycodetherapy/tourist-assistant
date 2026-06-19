@@ -92,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     init_db()
     rows: list[dict[str, Any]] = list_agent_runs(args.trip_id, limit=args.limit)
     if not rows:
-        print("Нет данных в agent_runs. Запустите `python3 main.py` хотя бы один раз.")
+        print("Нет данных в agent_runs. Создайте поездку через веб или API хотя бы один раз.")
         return 0
 
     durations = [int(r.get("duration_ms") or 0) for r in rows if r.get("duration_ms") is not None]

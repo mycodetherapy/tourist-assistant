@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypedDict
-
-ReviewMode = Literal["cli", "deferred"]
+from typing import Annotated, Any, TypedDict
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
@@ -25,7 +23,5 @@ class AgentState(TypedDict, total=False):
     critic_passed: bool
     critic_notes: str
     retry_count: int
-    approved: bool
-    review_mode: ReviewMode
     route_feedback_snapshot: dict[str, Any]
     messages: Annotated[list[AnyMessage], add_messages]

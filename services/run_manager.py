@@ -82,10 +82,7 @@ class RunManager:
 
         try:
             with run_with_llm_config(llm_config):
-                result: GraphRunResult = self._service.run_graph(
-                    state,
-                    review_mode="deferred",
-                )
+                result: GraphRunResult = self._service.run_graph(state)
             with self._lock:
                 record = self._runs[run_id]
                 record.status = "completed"

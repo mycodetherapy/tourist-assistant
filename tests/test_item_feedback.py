@@ -13,6 +13,8 @@ from db import (
     save_itinerary_version,
     upsert_item_feedback,
 )
+from program.item_key import make_item_key
+from program.parse_items import parse_program_sections
 from services.trip_service import TripService
 
 
@@ -39,7 +41,7 @@ def _sample_routes_program(case_ids: list[str]) -> dict:
     ]
     program = RouteProgram(cases=cases)
     return {
-        "tickets": "- Aviasales: url",
+        "tickets": "",
         "routes": program.model_dump(),
         "routes_text": format_routes_text(program),
         "lifehacks": "- Совет",
@@ -54,141 +56,87 @@ class TestItemFeedback(unittest.TestCase):
             os.remove(self._db_path)
         init_db()
         self.trip_id = create_trip("Москва", "июль 2026", "СПб", "тест")
-        self.version_id = save_itinerary_version(
-            self.trip_id,
-            {
-                "tickets": "- Aviasales: url",
-                "events": "1. Музей",
-                "dining": "1. Кафе",
-                "lifehacks": "- Совет",
-            },
-        )
+        self.program = _sample_routes_program(["A", "B", "C"])
+        self.version_id = save_itinerary_version(self.trip_id, self.program)
         self.service = TripService()
 
     def test_upsert_and_list_feedback(self) -> None:
-        from program.item_key import make_item_key
-
+        parsed = parse_program_sections(self.program)
+        route_a = parsed.routes.items[0]
+        route_b = parsed.routes.items[1]
         upsert_item_feedback(
             self.trip_id,
             self.version_id,
-            "events",
+            "routes",
             0,
-            make_item_key("events", "1. Музей"),
+            make_item_key("routes", route_a),
             1,
         )
         upsert_item_feedback(
             self.trip_id,
             self.version_id,
-            "dining",
-            0,
-            make_item_key("dining", "1. Кафе"),
+            "routes",
+            1,
+            make_item_key("routes", route_b),
             -1,
         )
         votes = list_item_feedback(self.trip_id)
-        self.assertEqual(votes[make_item_key("events", "1. Музей")], 1)
-        self.assertEqual(votes[make_item_key("dining", "1. Кафе")], -1)
+        self.assertEqual(votes[make_item_key("routes", route_a)], 1)
+        self.assertEqual(votes[make_item_key("routes", route_b)], -1)
 
     def test_get_program_view_includes_votes(self) -> None:
-        from program.item_key import make_item_key
-
+        parsed = parse_program_sections(self.program)
+        route_text = parsed.routes.items[0]
         self.service.set_item_feedback(
             self.trip_id,
             version_id=self.version_id,
-            section="events",
-            item_key=make_item_key("events", "1. Музей"),
+            section="routes",
+            item_key=make_item_key("routes", route_text),
             vote=1,
         )
         view = self.service.get_program_view(self.trip_id)
         assert view is not None
-        self.assertEqual(view.sections["events"].items[0].vote, 1)
-        self.assertIsNone(view.sections["dining"].items[0].vote)
-        self.assertEqual(view.sections["tickets"].items, ())
-        self.assertIn("Aviasales", view.sections["tickets"].intro)
+        self.assertEqual(view.sections["routes"].items[0].vote, 1)
+        self.assertIsNone(view.sections["routes"].items[1].vote)
 
     def test_votes_cleared_when_rebuilt_item_changes(self) -> None:
-        from program.item_key import make_item_key
-
+        parsed = parse_program_sections(self.program)
+        route_text = parsed.routes.items[0]
         self.service.set_item_feedback(
             self.trip_id,
-            section="events",
-            item_key=make_item_key("events", "1. Музей"),
+            section="routes",
+            item_key=make_item_key("routes", route_text),
             vote=1,
         )
-        save_itinerary_version(
-            self.trip_id,
-            {
-                "tickets": "- Aviasales: url",
-                "events": "1. Другой музей",
-                "dining": "1. Кафе",
-                "lifehacks": "- Совет",
-            },
-            scope="events",
-        )
+        changed = _sample_routes_program(["X", "B", "C"])
+        save_itinerary_version(self.trip_id, changed, scope="routes")
         view = self.service.get_program_view(self.trip_id)
         assert view is not None
-        self.assertIsNone(view.sections["events"].items[0].vote)
-
-    def test_partial_rebuild_keeps_other_sections_votes(self) -> None:
-        from program.item_key import make_item_key
-
-        self.service.set_item_feedback(
-            self.trip_id,
-            section="dining",
-            item_key=make_item_key("dining", "1. Кафе"),
-            vote=-1,
-        )
-        self.service.set_item_feedback(
-            self.trip_id,
-            section="events",
-            item_key=make_item_key("events", "1. Музей"),
-            vote=1,
-        )
-        save_itinerary_version(
-            self.trip_id,
-            {
-                "tickets": "- Aviasales: url",
-                "events": "1. Новое мероприятие",
-                "dining": "1. Кафе",
-                "lifehacks": "- Совет",
-            },
-            scope="events",
-        )
-        view = self.service.get_program_view(self.trip_id)
-        assert view is not None
-        self.assertIsNone(view.sections["events"].items[0].vote)
-        self.assertEqual(view.sections["dining"].items[0].vote, -1)
+        self.assertIsNone(view.sections["routes"].items[0].vote)
 
     def test_votes_survive_new_program_version(self) -> None:
-        from program.item_key import make_item_key
-
+        parsed = parse_program_sections(self.program)
+        route_text = parsed.routes.items[0]
         self.service.set_item_feedback(
             self.trip_id,
             version_id=self.version_id,
-            section="events",
-            item_key=make_item_key("events", "1. Музей"),
+            section="routes",
+            item_key=make_item_key("routes", route_text),
             vote=1,
         )
-        new_version_id = save_itinerary_version(
-            self.trip_id,
-            {
-                "tickets": "- Aviasales: url",
-                "events": "1. Музей",
-                "dining": "1. Кафе",
-                "lifehacks": "- Совет",
-            },
-        )
+        new_version_id = save_itinerary_version(self.trip_id, self.program)
         self.assertNotEqual(new_version_id, self.version_id)
         view = self.service.get_program_view(self.trip_id)
         assert view is not None
         self.assertEqual(view.version_id, new_version_id)
-        self.assertEqual(view.sections["events"].items[0].vote, 1)
+        self.assertEqual(view.sections["routes"].items[0].vote, 1)
 
     def test_set_item_feedback_validates_item_key(self) -> None:
         with self.assertRaises(ValueError):
             self.service.set_item_feedback(
                 self.trip_id,
                 version_id=self.version_id,
-                section="events",
+                section="routes",
                 item_key="missing-key",
                 vote=1,
             )
@@ -204,43 +152,38 @@ class TestItemFeedback(unittest.TestCase):
             )
 
     def test_stale_key_no_longer_applies_by_index(self) -> None:
-        """После пересборки оценка по старому item_key не «переезжает» на новый пункт."""
         upsert_item_feedback(
             self.trip_id,
             self.version_id,
-            "events",
+            "routes",
             0,
             "stale-key-not-in-program",
             1,
         )
         view = self.service.get_program_view(self.trip_id)
         assert view is not None
-        self.assertIsNone(view.sections["events"].items[0].vote)
+        self.assertIsNone(view.sections["routes"].items[0].vote)
 
     def test_unlike_clears_vote(self) -> None:
-        from program.item_key import make_item_key
-
-        key = make_item_key("events", "1. Музей")
+        parsed = parse_program_sections(self.program)
+        key = make_item_key("routes", parsed.routes.items[0])
         self.service.set_item_feedback(
             self.trip_id,
-            section="events",
+            section="routes",
             item_key=key,
             vote=1,
         )
         self.service.set_item_feedback(
             self.trip_id,
-            section="events",
+            section="routes",
             item_key=key,
             vote=None,
         )
         view = self.service.get_program_view(self.trip_id)
         assert view is not None
-        self.assertIsNone(view.sections["events"].items[0].vote)
+        self.assertIsNone(view.sections["routes"].items[0].vote)
 
     def test_rebuild_does_not_show_old_like_on_new_route(self) -> None:
-        from program.item_key import make_item_key
-        from program.parse_items import parse_program_sections
-
         program_v1 = _sample_routes_program(["A", "B", "C"])
         save_itinerary_version(self.trip_id, program_v1, scope="full")
         key_b = make_item_key("routes", parse_program_sections(program_v1).routes.items[1])
@@ -263,46 +206,13 @@ class TestItemFeedback(unittest.TestCase):
     def test_set_item_feedback_accepts_item_index(self) -> None:
         self.service.set_item_feedback(
             self.trip_id,
-            section="dining",
-            item_index=0,
+            section="routes",
+            item_index=1,
             vote=-1,
         )
         view = self.service.get_program_view(self.trip_id)
         assert view is not None
-        self.assertEqual(view.sections["dining"].items[0].vote, -1)
-
-    def test_votes_persist_for_events_with_district_intro(self) -> None:
-        from program.item_key import make_item_key
-
-        trip_id = create_trip("Москва", "июль 2026", "СПб", "районы")
-        events_text = (
-            "Центр, Китай-город\n"
-            "1. [Музей A](https://example.com/a)\n"
-            "2. [Музей B](https://example.com/b)"
-        )
-        version_id = save_itinerary_version(
-            trip_id,
-            {
-                "tickets": "- Aviasales: url",
-                "events": events_text,
-                "dining": "1. Кафе",
-                "lifehacks": "- Совет",
-            },
-        )
-        item_key = make_item_key("events", "1. [Музей A](https://example.com/a)")
-        self.service.set_item_feedback(
-            trip_id,
-            version_id=version_id,
-            section="events",
-            item_key=item_key,
-            vote=1,
-        )
-        view = self.service.get_program_view(trip_id)
-        assert view is not None
-        self.assertEqual(view.sections["events"].intro, "Центр, Китай-город")
-        self.assertEqual(len(view.sections["events"].items), 2)
-        self.assertEqual(view.sections["events"].items[0].vote, 1)
-        self.assertIsNone(view.sections["events"].items[1].vote)
+        self.assertEqual(view.sections["routes"].items[1].vote, -1)
 
     def test_get_itinerary_version(self) -> None:
         row = get_itinerary_version(self.trip_id, self.version_id)

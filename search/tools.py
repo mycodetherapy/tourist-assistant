@@ -1,4 +1,4 @@
-"""LangChain tools для веб-поиска по категориям поездки."""
+"""LangChain tools для поиска материалов маршрута."""
 
 from __future__ import annotations
 
@@ -9,9 +9,7 @@ from langchain_core.tools import tool
 from pydantic import ValidationError
 
 from models.schemas import RouteMaterialsInput
-from models.routes import RouteMaterials
 from search.context import get_session_preferences, set_route_materials
-from search.tickets_search import run_tickets_search
 from search.yandex.materials import (
     format_materials_digest,
     run_route_materials_search,
@@ -22,31 +20,9 @@ __all__ = [
     "TOOLS",
     "TOOL_MAP",
     "search_route_materials",
-    "search_roundtrip_tickets",
-    # legacy aliases
     "search_culture_events",
     "search_dining",
 ]
-
-
-@tool
-def search_roundtrip_tickets(
-    origin_city: str,
-    destination_city: str,
-    dates: str,
-) -> str:
-    """
-    Билеты туда-обратно: deep links на агрегаторы с датами и маршрутом.
-    Самолёт (Aviasales + API), поезд (РЖД, Tutu), автобус (Bus.tutu.ru).
-    Число пассажиров берётся из состава группы (сессионные предпочтения).
-    Возвращает JSON schema_version=1 с полем offers.
-    """
-    prefs = get_session_preferences()
-    travel_party = prefs.travel_party if prefs else "couple"
-    result = run_tickets_search(
-        origin_city, destination_city, dates, travel_party=travel_party
-    )
-    return result.model_dump_json(ensure_ascii=False, indent=2)
 
 
 @tool
@@ -81,7 +57,6 @@ def search_route_materials(city: str, dates: str) -> str:
         "instruction": (
             "Собери 3 пеших маршрута A/B/C разной длины: компактный, средний, длинный. "
             "Используй ТОЛЬКО poi_id из materials_digest. "
-            "transit_note для прогулки; dining на карту не добавляй. "
             "Не выдумывай места и URL."
         ),
     }
@@ -118,7 +93,6 @@ def search_dining(city: str, dates: str) -> str:
 
 
 TOOLS = [
-    search_roundtrip_tickets,
     search_route_materials,
 ]
 TOOL_MAP: dict[str, Any] = {t.name: t for t in TOOLS}

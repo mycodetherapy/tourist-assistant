@@ -1,4 +1,4 @@
-"""Тесты подготовки finalize (билеты из tool, маршруты из materials)."""
+"""Тесты подготовки finalize (маршруты из materials)."""
 
 from __future__ import annotations
 
@@ -12,15 +12,11 @@ from models.schemas import ProgramDraft
 
 from agents.finalize_helpers import (
     _coerce_program_draft,
-    _is_garbage_tickets,
     build_fallback_program_draft,
-    extract_tickets_summary,
     prepare_finalize_messages,
     resolve_routes_program,
     slim_tool_message_for_finalize,
-    resolve_tickets_section,
 )
-from search.tickets_search import run_tickets_search
 
 
 def _materials_payload() -> dict:
@@ -62,49 +58,6 @@ def _materials_payload() -> dict:
 
 
 class TestFinalizeHelpers(unittest.TestCase):
-    def test_garbage_detects_broken_llm_output(self) -> None:
-        self.assertTrue(_is_garbage_tickets(":[]"))
-        self.assertTrue(_is_garbage_tickets(":{"))
-
-    def test_extract_summary_from_tool(self) -> None:
-        payload = run_tickets_search("Москва", "Казань", "10-12 августа 2026")
-        messages = [
-            ToolMessage(
-                content=payload.model_dump_json(),
-                tool_call_id="1",
-                name="search_roundtrip_tickets",
-            )
-        ]
-        summary = extract_tickets_summary(messages)
-        self.assertIsNotNone(summary)
-        self.assertIn("Самолёт", summary or "")
-        self.assertIn("Поезд", summary or "")
-
-    def test_resolve_falls_back_to_live_search(self) -> None:
-        body = resolve_tickets_section(
-            messages=[],
-            base_program={"tickets": ":[]"},
-            origin_city="Москва",
-            destination_city="Казань",
-            dates="10-12 августа 2026",
-            rebuild_scope="full",
-        )
-        self.assertFalse(_is_garbage_tickets(body))
-        self.assertIn("http", body.lower())
-
-    def test_slim_removes_offers_array(self) -> None:
-        payload = run_tickets_search("Москва", "Казань", "10-12 августа 2026")
-        msg = ToolMessage(
-            content=payload.model_dump_json(),
-            tool_call_id="1",
-            name="search_roundtrip_tickets",
-        )
-        prepared = prepare_finalize_messages([msg])
-        self.assertEqual(len(prepared), 1)
-        self.assertIsInstance(prepared[0], HumanMessage)
-        self.assertIn("summary_for_llm", str(prepared[0].content))
-        self.assertNotIn('"offers"', str(prepared[0].content))
-
     def test_slim_route_materials_drops_heavy_fields(self) -> None:
         heavy = {
             "materials": _materials_payload()["materials"],
@@ -118,7 +71,6 @@ class TestFinalizeHelpers(unittest.TestCase):
         )
         slim = slim_tool_message_for_finalize(msg)
         data = json.loads(str(slim.content))
-        self.assertEqual(data.get("category"), "route_materials")
         self.assertIn("materials_digest", data)
 
     def test_prepare_keeps_latest_route_materials_only(self) -> None:
@@ -224,36 +176,6 @@ class TestFinalizeHelpers(unittest.TestCase):
         )
         a_ids = [s.poi_id for s in program.cases[0].stops if s.kind == "leisure" and s.poi_id]
         self.assertEqual(a_ids[0], "l2")
-
-    def test_invoke_fallback_passes_city(self) -> None:
-        from unittest.mock import MagicMock
-
-        from agents.finalize_helpers import invoke_program_draft
-        from langchain_core.messages import HumanMessage, SystemMessage
-
-        class LengthErr(Exception):
-            pass
-
-        llm = MagicMock()
-        llm.invoke.side_effect = LengthErr(
-            "Could not parse response content as the length limit was reached"
-        )
-        messages = [
-            ToolMessage(
-                content=json.dumps(_materials_payload(), ensure_ascii=False),
-                tool_call_id="m",
-                name="search_route_materials",
-            ),
-        ]
-        draft = invoke_program_draft(
-            llm,
-            system=SystemMessage(content="test"),
-            tool_messages=[],
-            human=HumanMessage(content="test"),
-            state_messages=messages,
-            city="Казань",
-        )
-        self.assertEqual(len(draft.routes.cases), 3)
 
 
 if __name__ == "__main__":

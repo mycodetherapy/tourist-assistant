@@ -1,4 +1,4 @@
-"""Оркестрация поездок: граф, БД, HITL — общий слой для CLI и API."""
+"""Оркестрация поездок: граф, БД — общий слой для API."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any, Callable, Literal
 
 from langchain_core.messages import HumanMessage
 
-from db.constants import CLI_LOCAL_USER_ID
+from db.constants import BOOTSTRAP_USER_ID
 from db import (
     TripSummary,
     create_trip,
@@ -31,7 +31,7 @@ from db import (
 )
 from input_validation import sanitize_and_validate
 from models.schemas import FinalProgram, normalize_stored_program
-from models.state import AgentState, ReviewMode
+from models.state import AgentState
 from observability import (
     build_langfuse_callbacks,
     flush_langfuse,
@@ -48,7 +48,7 @@ from program.parse_items import (
 )
 from search.context import set_session
 
-ProgramSectionKey = Literal["tickets", "routes", "route_stops", "lifehacks", "events", "dining"]
+ProgramSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
 VotableSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
 ItemVote = Literal[1, -1]
 
@@ -104,7 +104,7 @@ class GraphRunResult:
 
 @dataclass(frozen=True)
 class TripDetails:
-    """Детали поездки для CLI и API."""
+    """Детали поездки для API."""
 
     trip: dict[str, Any]
     preferences: dict[str, Any] | None
@@ -173,7 +173,6 @@ class TripService:
         user_message: str,
         base_program: dict[str, Any] | None = None,
         retry_count: int = 0,
-        review_mode: ReviewMode = "cli",
     ) -> AgentState:
         """Собирает начальное состояние графа."""
         state: AgentState = {
@@ -185,10 +184,8 @@ class TripService:
             "preferences": preferences_dict,
             "rebuild_scope": rebuild_scope,
             "retry_count": retry_count,
-            "approved": False,
             "critic_passed": False,
             "critic_notes": "",
-            "review_mode": review_mode,
             "messages": [HumanMessage(content=user_message)],
         }
         if base_program is not None:
@@ -250,13 +247,11 @@ class TripService:
         self,
         state: AgentState,
         *,
-        review_mode: ReviewMode | None = None,
         on_progress: Callable[[str], None] | None = None,
     ) -> GraphRunResult:
         """Запускает мультиагентный граф и сохраняет версию программы."""
         trip_id = int(state["trip_id"])
         rebuild_scope = str(state.get("rebuild_scope", "full"))
-        mode: ReviewMode = review_mode or state.get("review_mode", "cli")
 
         if on_progress:
             on_progress(
@@ -266,10 +261,8 @@ class TripService:
         run_state: AgentState = {
             **state,
             "retry_count": state.get("retry_count", 0),
-            "approved": False,
             "critic_passed": False,
             "critic_notes": "",
-            "review_mode": mode,
         }
         config = invoke_config(trip_id, rebuild_scope=rebuild_scope)
         run_id = str(uuid.uuid4())
@@ -322,12 +315,11 @@ class TripService:
         version_id: int | None = None
         program = result.get("program")
         if program:
-            approved = bool(result.get("approved")) and mode == "cli"
             version_id = save_itinerary_version(
                 trip_id,
                 program,
                 scope=rebuild_scope,
-                approved=approved,
+                approved=False,
             )
 
         return GraphRunResult(state=result, run_id=run_id, version_id=version_id)
@@ -434,7 +426,6 @@ class TripService:
         sections = self._attach_feedback(
             parsed, trip_id=trip_id, program_data=program_data
         )
-        sections["tickets"] = ProgramSectionView(intro=program.tickets, items=())
         return ProgramView(
             version=version,
             version_id=version_id,
@@ -448,7 +439,7 @@ class TripService:
         self,
         trip_id: int,
         *,
-        user_id: int = CLI_LOCAL_USER_ID,
+        user_id: int = BOOTSTRAP_USER_ID,
     ) -> ProgramView | None:
         """Программа с разбивкой на пункты и сохранёнными оценками."""
         details = self.get_trip_details(trip_id, user_id=user_id)
@@ -468,16 +459,6 @@ class TripService:
             transport=str(prefs.get("transport_preference") or "mixed"),
             pace=str(prefs.get("pace") or "moderate"),
         )
-        from search.affiliate.config import affiliate_enabled
-        from search.affiliate.wrap import wrap_tickets_markdown
-
-        if affiliate_enabled() and program_data.get("tickets"):
-            program_data = dict(program_data)
-            program_data["tickets"] = wrap_tickets_markdown(
-                str(program_data["tickets"]),
-                trip_id,
-                log_exposure=False,
-            )
         return self.build_program_view(
             trip_id,
             program_data,
@@ -498,9 +479,9 @@ class TripService:
         version_id: int | None = None,
         program_data: dict[str, Any] | None = None,
     ) -> None:
-        """Сохраняет, обновляет или снимает оценку пункта подборки (не для билетов)."""
+        """Сохраняет, обновляет или снимает оценку пункта подборки."""
         if section not in VOTABLE_SECTIONS:
-            raise ValueError("Оценки для раздела «Билеты» не поддерживаются")
+            raise ValueError(f"Неизвестный раздел: {section}")
         if get_trip(trip_id) is None:
             raise ValueError("Поездка не найдена")
 

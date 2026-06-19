@@ -14,24 +14,21 @@ from planning.rebuild import (
 class TestRebuild(unittest.TestCase):
     def test_merge_partial_routes(self) -> None:
         base = {
-            "tickets": "old tickets",
             "routes": {"cases": []},
             "routes_text": "old routes",
             "lifehacks": "old tips",
         }
         updated = {
-            "tickets": "new tickets",
             "routes": {"cases": [{"case_id": "A"}]},
             "routes_text": "new routes",
             "lifehacks": "new tips",
         }
         merged = merge_program(base, updated, "routes")
         self.assertEqual(merged["routes_text"], "new routes")
-        self.assertEqual(merged["tickets"], "old tickets")
+        self.assertEqual(merged["lifehacks"], "old tips")
 
     def test_normalize_strips_transport(self) -> None:
         raw = {
-            "tickets": "t",
             "routes_text": "r",
             "lifehacks": "l",
             "transport": "x",
@@ -46,9 +43,9 @@ class TestRebuild(unittest.TestCase):
         tools = required_tools_for_scope("routes")
         self.assertEqual(tools, [])
 
-    def test_tickets_one_tool(self) -> None:
-        tools = required_tools_for_scope("tickets")
-        self.assertEqual(tools, ["search_roundtrip_tickets"])
+    def test_full_uses_route_materials(self) -> None:
+        tools = required_tools_for_scope("full")
+        self.assertEqual(tools, ["search_route_materials"])
 
 
 if __name__ == "__main__":
