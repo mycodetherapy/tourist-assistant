@@ -9,6 +9,8 @@ from rq import Queue
 
 from db.redis_client import get_redis
 
+_ON_FAILURE = "worker.callbacks.on_graph_job_failure"
+
 
 def get_queue(name: str = "default") -> Queue:
     return Queue(name, connection=get_redis())
@@ -20,6 +22,7 @@ def enqueue_build_routes(*, graph_run_id: UUID, payload: dict[str, Any]) -> str:
         str(graph_run_id),
         payload,
         job_timeout=1800,
+        on_failure=_ON_FAILURE,
     )
     return job.id
 
@@ -30,5 +33,6 @@ def enqueue_city_fact(*, graph_run_id: UUID, payload: dict[str, Any]) -> str:
         str(graph_run_id),
         payload,
         job_timeout=600,
+        on_failure=_ON_FAILURE,
     )
     return job.id

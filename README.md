@@ -153,6 +153,7 @@ python3 -m unittest tests.test_graph_runs -v
 
 # Worker (очередь RQ): при DATABASE_URL + REDIS_URL API ставит задачи в worker
 python -m worker
+# macOS: worker автоматически использует SimpleWorker (без fork)
 # или docker compose --profile pg up worker
 ```
 

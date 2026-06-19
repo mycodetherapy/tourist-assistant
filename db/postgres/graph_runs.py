@@ -7,7 +7,7 @@ import uuid
 from datetime import timedelta
 from typing import Any, Literal
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from db.models.schema import GraphRun
 from db.postgres._helpers import iso_dt, utc_now
@@ -75,13 +75,22 @@ def fail_stale_graph_runs(trip_id: int, *, max_age_sec: int | None = None) -> in
     if max_age_sec is None:
         max_age_sec = int(os.getenv("GRAPH_RUN_STALE_SEC", "600"))
     cutoff = utc_now() - timedelta(seconds=max_age_sec)
+    stale_filter = or_(
+        (GraphRun.status == "queued") & (GraphRun.created_at < cutoff),
+        (GraphRun.status == "running")
+        & (GraphRun.started_at.is_not(None))
+        & (GraphRun.started_at < cutoff),
+        (GraphRun.status == "running")
+        & (GraphRun.started_at.is_(None))
+        & (GraphRun.created_at < cutoff),
+    )
     with pg_session() as session:
         result = session.execute(
             update(GraphRun)
             .where(
                 GraphRun.trip_id == trip_id,
                 GraphRun.status.in_(("queued", "running")),
-                GraphRun.created_at < cutoff,
+                stale_filter,
             )
             .values(
                 status="failed",
