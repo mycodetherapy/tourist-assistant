@@ -21,6 +21,8 @@ class TestAuth(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATABASE_PATH"] = os.path.join(self._tmpdir.name, "test.db")
+        os.environ.pop("DATABASE_URL", None)
+        os.environ.pop("REDIS_URL", None)
         init_db()
         self.client = TestClient(app)
 

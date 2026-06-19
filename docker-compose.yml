@@ -1,15 +1,19 @@
 # Туристический ассистент: FastAPI + React + Postgres (infra) + Redis.
 #
-# Локально (SQLite, как раньше):
+# SQLite (локально, по умолчанию):
 #   docker compose up api web
 #
-# Postgres + Redis (миграция SaaS, API пока на SQLite если DATABASE_URL пуст):
-#   docker compose up postgres redis
-#   export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5432/tourist
-#   alembic upgrade head
+# Полный SaaS-стек (Postgres + Redis + worker + API):
+#   cp .env.example .env
+#   # в .env раскомментируйте для Docker-сети:
+#   # DATABASE_URL=postgresql+psycopg://tourist:tourist@postgres:5432/tourist
+#   # REDIS_URL=redis://redis:6379/0
+#   docker compose --profile pg up -d --build
 #
-# Полный стек с PG (когда API переключён на DATABASE_URL):
-#   docker compose --profile pg up
+# Только инфра на хосте (порты 5433 / 6380):
+#   docker compose --profile infra up -d postgres redis
+#   export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5433/tourist
+#   alembic upgrade head
 
 services:
   postgres:
@@ -50,11 +54,14 @@ services:
       context: .
       dockerfile: Dockerfile
     image: tourist-assistant:latest
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    entrypoint: ["/app/scripts/docker_api_entrypoint.sh"]
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file:
       - .env
     environment:
       DATABASE_PATH: /app/data/trips.db
+      DATABASE_URL: ${DATABASE_URL:-}
+      REDIS_URL: ${REDIS_URL:-}
       TOURIST_ASSISTANT_IN_DOCKER: "1"
       LANGFUSE_HOST: ${LANGFUSE_HOST_DOCKER:-http://host.docker.internal:3000}
     ports:
@@ -63,6 +70,13 @@ services:
       - ./data:/app/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+      redis:
+        condition: service_healthy
+        required: false
 
   web:
     build:

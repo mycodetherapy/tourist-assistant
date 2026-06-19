@@ -188,7 +188,19 @@ def _migrate_affiliate_clicks(conn: sqlite3.Connection) -> None:
 
 
 def init_db() -> None:
-    """Создаёт таблицы по schema.sql, если их ещё нет."""
+    """Создаёт таблицы: SQLite по DATABASE_PATH или Postgres через Alembic."""
+    from db.session import is_postgres_enabled
+
+    if is_postgres_enabled():
+        from db.postgres.bootstrap import init_postgres_db
+
+        init_postgres_db()
+        return
+    _init_sqlite()
+
+
+def _init_sqlite() -> None:
+    """Создаёт таблицы SQLite по schema.sql, если их ещё нет."""
     schema_sql = _SCHEMA_PATH.read_text(encoding="utf-8")
     with connect() as conn:
         conn.executescript(schema_sql)

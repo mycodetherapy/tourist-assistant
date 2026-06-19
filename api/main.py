@@ -56,8 +56,8 @@ _OPENAPI_TAGS = [
 app = FastAPI(
     title="Туристический ассистент API",
     description=(
-        "REST API веб-интерфейса: multi-user SaaS, поездки в SQLite, "
-        "асинхронная сборка программы LangGraph, BYOK OpenRouter."
+        "REST API веб-интерфейса: multi-user SaaS, SQLite или Postgres "
+        "(DATABASE_URL), асинхронная сборка LangGraph, BYOK OpenRouter."
     ),
     version="2.0.0",
     openapi_tags=_OPENAPI_TAGS,

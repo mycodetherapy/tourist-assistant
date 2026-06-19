@@ -158,6 +158,23 @@ python -m worker
 
 При `DATABASE_URL` и `REDIS_URL` фоновые прогоны идут через **RQ** (`worker/tasks.py`, таблица `graph_runs`); без них — потоки в процессе API (SQLite).
 
+#### Полный стек Postgres (Docker, profile `pg`)
+
+API, worker, auth и CRUD переключаются на Postgres при `DATABASE_URL` (см. `db/backends.py`, `init_db()` → Alembic).
+
+```bash
+# В .env для контейнеров (хост postgres/redis в docker-сети):
+# DATABASE_URL=postgresql+psycopg://tourist:tourist@postgres:5432/tourist
+# REDIS_URL=redis://redis:6379/0
+
+docker compose --profile pg up -d --build
+```
+
+Сервисы: `postgres`, `redis`, `api` (entrypoint: `alembic upgrade head`), `worker`, `web`.  
+UI: [http://localhost:5173](http://localhost:5173), health: [http://localhost:8000/api/health](http://localhost:8000/api/health).
+
+Локально без Docker: `export DATABASE_URL=…` + `export REDIS_URL=…` + `uvicorn api.main:app` + `python -m worker`.
+
 Бэкап prod (cron на VPS): [`scripts/pg_backup.sh`](scripts/pg_backup.sh).
 
 ### Тесты и eval (без полного прогона агента)
@@ -197,7 +214,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LLM_MODEL` | Нет | Slug модели на OpenRouter. По умолчанию `openai/gpt-4.1-mini` (см. [Модели LLM](#модели-llm)) |
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
 | `DATABASE_PATH` | Нет | SQLite (legacy API), по умолчанию `data/trips.db` |
-| `DATABASE_URL` | Нет | Postgres (`postgresql+psycopg://…`); при задании — Alembic/тесты PG |
+| `DATABASE_URL` | Нет | Postgres SaaS: Alembic при старте API, repository + users + audit |
 | `REDIS_URL` | Нет | Redis: RQ worker, locks, лимиты прогонов (5 full / 10 partial в час на user) |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
@@ -450,8 +467,11 @@ tourist-assistant/
 │   ├── session.py          # DATABASE_URL engine
 │   ├── connection.py       # SQLite (legacy API)
 │   ├── sqlite/repository.py
+│   ├── sqlite/users.py
 │   ├── postgres/repository.py
+│   ├── postgres/users.py
 │   ├── repository.py       # facade (DATABASE_URL → PG)
+│   ├── users.py              # auth/BYOK facade
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
 │   ├── schemas.py          # FinalProgram, ProgramDraft, RouteMaterialsInput

@@ -15,3 +15,13 @@ def get_repository_backend() -> ModuleType:
     from db.sqlite import repository as backend
 
     return backend
+
+
+def get_users_backend() -> ModuleType:
+    if is_postgres_enabled():
+        from db.postgres import users as backend
+
+        return backend
+    from db.sqlite import users as backend
+
+    return backend
