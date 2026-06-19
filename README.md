@@ -146,7 +146,17 @@ python3 -m unittest tests.test_postgres_schema -v
 
 # CRUD на Postgres (те же сценарии, что tests/test_db.py)
 python3 -m unittest tests.test_db_postgres -v
+
+# graph_runs + Redis lock (нужен REDIS_URL)
+export REDIS_URL=redis://localhost:6380/0
+python3 -m unittest tests.test_graph_runs -v
+
+# Worker (очередь RQ): при DATABASE_URL + REDIS_URL API ставит задачи в worker
+python -m worker
+# или docker compose --profile pg up worker
 ```
+
+При `DATABASE_URL` и `REDIS_URL` фоновые прогоны идут через **RQ** (`worker/tasks.py`, таблица `graph_runs`); без них — потоки в процессе API (SQLite).
 
 Бэкап prod (cron на VPS): [`scripts/pg_backup.sh`](scripts/pg_backup.sh).
 
@@ -431,7 +441,8 @@ tourist-assistant/
 ├── api/                    # FastAPI REST для веб-UI
 │   └── auth/               # register, login, Google OAuth, BYOK crypto
 ├── docs/openapi.json       # OpenAPI 3 (scripts/export_openapi.py)
-├── services/               # TripService, RunManager, city_fact_job
+├── services/               # TripService, RunManager, job_enqueue
+├── worker/                 # RQ worker (python -m worker)
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query
 ├── alembic/                # Миграции Postgres (Alembic)
 ├── db/

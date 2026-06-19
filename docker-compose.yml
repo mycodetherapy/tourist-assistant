@@ -73,6 +73,26 @@ services:
     depends_on:
       - api
 
+  worker:
+    profiles: ["pg"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tourist-assistant:latest
+    command: python -m worker
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://tourist:tourist@postgres:5432/tourist
+      REDIS_URL: redis://redis:6379/0
+      TOURIST_ASSISTANT_IN_DOCKER: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pg_data:
   redis_data:
