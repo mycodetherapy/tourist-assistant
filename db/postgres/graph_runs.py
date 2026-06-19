@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import uuid
+from datetime import timedelta
 from typing import Any, Literal
 
 from sqlalchemy import select, update
@@ -66,6 +68,30 @@ def has_active_graph_run(trip_id: int) -> bool:
             .limit(1)
         ).first()
     return row is not None
+
+
+def fail_stale_graph_runs(trip_id: int, *, max_age_sec: int | None = None) -> int:
+    """Помечает зависшие queued/running прогоны как failed (потерянная RQ-задача)."""
+    if max_age_sec is None:
+        max_age_sec = int(os.getenv("GRAPH_RUN_STALE_SEC", "600"))
+    cutoff = utc_now() - timedelta(seconds=max_age_sec)
+    with pg_session() as session:
+        result = session.execute(
+            update(GraphRun)
+            .where(
+                GraphRun.trip_id == trip_id,
+                GraphRun.status.in_(("queued", "running")),
+                GraphRun.created_at < cutoff,
+            )
+            .values(
+                status="failed",
+                error="Прогон прерван (timeout). Запустите сборку снова.",
+                finished_at=utc_now(),
+            )
+        )
+    if result.rowcount:
+        release_trip_build_lock(trip_id)
+    return int(result.rowcount or 0)
 
 
 def acquire_trip_build_lock(trip_id: int, *, ttl_sec: int = 3600) -> bool:

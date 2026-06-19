@@ -91,6 +91,13 @@ def _run_quota_http_error(exc: RunQuotaError) -> HTTPException:
     )
 
 
+def _active_run_http_error(exc: ValueError) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={"code": "active_run", "message": str(exc)},
+    )
+
+
 def _map_section(view: ProgramView, key: str) -> ProgramSectionResponse:
     section = view.sections.get(key)  # type: ignore[arg-type]
     if section is None:
@@ -209,6 +216,10 @@ def create_trip(
             run_id = run_manager.start_run(state, llm_config=llm_config)
         except RunQuotaError as exc:
             raise _run_quota_http_error(exc) from exc
+        except ValueError as exc:
+            if "сборк" in str(exc).lower() or "маршрут" in str(exc).lower():
+                raise _active_run_http_error(exc) from exc
+            raise
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)
 
 
@@ -396,4 +407,8 @@ def start_run(
         run_id = run_manager.start_run(state, llm_config=llm_config)
     except RunQuotaError as exc:
         raise _run_quota_http_error(exc) from exc
+    except ValueError as exc:
+        if "сборк" in str(exc).lower() or "маршрут" in str(exc).lower():
+            raise _active_run_http_error(exc) from exc
+        raise
     return CreateTripResponse(trip_id=trip_id, run_id=run_id)

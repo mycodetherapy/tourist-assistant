@@ -121,6 +121,7 @@ class RunManager:
         trip = get_trip(trip_id)
         if trip is None:
             raise ValueError(f"Поездка #{trip_id} не найдена")
+        pg_runs.fail_stale_graph_runs(trip_id)
         if pg_runs.has_active_graph_run(trip_id):
             raise ValueError("Для поездки уже выполняется сборка маршрута")
         if not pg_runs.acquire_trip_build_lock(trip_id):

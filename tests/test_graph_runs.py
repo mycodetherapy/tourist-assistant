@@ -94,6 +94,20 @@ class GraphRunsTests(unittest.TestCase):
         pg_runs.release_trip_build_lock(self.trip_id)
         self.assertTrue(pg_runs.acquire_trip_build_lock(self.trip_id, ttl_sec=60))
 
+    def test_fail_stale_graph_runs(self) -> None:
+        run_id = pg_runs.create_graph_run(
+            user_id=self.user_id,
+            trip_id=self.trip_id,
+            scope="full",
+        )
+        self.assertTrue(pg_runs.has_active_graph_run(self.trip_id))
+        cleared = pg_runs.fail_stale_graph_runs(self.trip_id, max_age_sec=0)
+        self.assertEqual(cleared, 1)
+        self.assertFalse(pg_runs.has_active_graph_run(self.trip_id))
+        row = pg_runs.get_graph_run(run_id)
+        assert row is not None
+        self.assertEqual(row["status"], "failed")
+
     def test_get_missing(self) -> None:
         self.assertIsNone(pg_runs.get_graph_run(uuid.uuid4()))
 
