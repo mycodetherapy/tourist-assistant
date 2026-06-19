@@ -143,6 +143,9 @@ alembic upgrade head
 
 # Проверка схемы
 python3 -m unittest tests.test_postgres_schema -v
+
+# CRUD на Postgres (те же сценарии, что tests/test_db.py)
+python3 -m unittest tests.test_db_postgres -v
 ```
 
 Бэкап prod (cron на VPS): [`scripts/pg_backup.sh`](scripts/pg_backup.sh).
@@ -435,7 +438,9 @@ tourist-assistant/
 │   ├── models/             # SQLAlchemy models (PG)
 │   ├── session.py          # DATABASE_URL engine
 │   ├── connection.py       # SQLite (legacy API)
-│   └── repository.py
+│   ├── sqlite/repository.py
+│   ├── postgres/repository.py
+│   ├── repository.py       # facade (DATABASE_URL → PG)
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
 │   ├── schemas.py          # FinalProgram, ProgramDraft, RouteMaterialsInput
