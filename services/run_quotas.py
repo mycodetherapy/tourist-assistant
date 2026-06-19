@@ -16,7 +16,7 @@ class RunQuotaError(Exception):
 
 
 def _full_limit() -> int:
-    return int(os.getenv("RUN_QUOTA_FULL_PER_HOUR", "5"))
+    return int(os.getenv("RUN_QUOTA_FULL_PER_HOUR", "10"))
 
 
 def _partial_limit() -> int:
