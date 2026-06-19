@@ -1,5 +1,6 @@
 export type RebuildScope = "routes" | "full";
 export type RunStatusName = "queued" | "running" | "completed" | "failed";
+export type CityFactStatusName = "pending" | "ready" | "failed" | "skipped" | "idle";
 
 export interface TripSummary {
   id: number;
@@ -87,6 +88,8 @@ export interface ProgramResponse {
   approved: boolean;
   program: FinalProgram;
   sections: StructuredProgram;
+  data_warnings?: string[];
+  city_fact_status?: CityFactStatusName;
 }
 
 export interface ItemFeedbackPayload {
@@ -116,6 +119,7 @@ export interface RunStatus {
   status: RunStatusName;
   error: string | null;
   version_id: number | null;
+  city_fact_status?: CityFactStatusName;
 }
 
 export interface ProfileResponse {

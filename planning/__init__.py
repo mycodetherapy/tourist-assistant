@@ -10,10 +10,18 @@ from planning.rebuild import (
     required_tools_for_scope,
     scope_field,
 )
+from planning.tools_readiness import (
+    ToolsReadinessResult,
+    evaluate_materials_tool,
+    evaluate_tools_readiness,
+)
 
 __all__ = [
     "REBUILD_SCOPES",
     "RebuildScope",
+    "ToolsReadinessResult",
+    "evaluate_materials_tool",
+    "evaluate_tools_readiness",
     "finalize_extra_prompt",
     "human_message_for_scope",
     "merge_program",

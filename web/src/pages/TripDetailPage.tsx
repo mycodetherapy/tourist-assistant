@@ -167,6 +167,15 @@ export function TripDetailPage() {
 
       <TripMetaCard trip={trip} />
 
+      {!isBuilding && programQuery.data?.data_warnings?.length ? (
+        <Alert
+          type="warning"
+          showIcon
+          title="Ограничения данных"
+          description={programQuery.data.data_warnings.join(" ")}
+        />
+      ) : null}
+
       {!isBuilding && (
         <TripAnchorCard
           tripId={tripId}
@@ -190,7 +199,7 @@ export function TripDetailPage() {
             showIcon
             className="mb-4"
             title="Маршруты ещё не собраны"
-            description="Нажмите кнопку ниже — агент сгенерирует маршруты и лайфхаки (1–2 минуты)."
+            description="Нажмите кнопку ниже — агент сгенерирует маршруты (1–2 минуты). Факт о городе подгрузится отдельно."
           />
           <Button
             type="primary"

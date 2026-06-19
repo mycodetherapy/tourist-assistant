@@ -1,4 +1,4 @@
-"""Маршрутизация после critic: END или retry researcher."""
+"""Маршрутизация после critic."""
 
 import unittest
 
@@ -9,15 +9,39 @@ class TestRouteAfterCritic(unittest.TestCase):
     def test_passed_goes_to_end(self) -> None:
         self.assertEqual(route_after_critic({"critic_passed": True}), "__end__")
 
-    def test_failed_retries_researcher(self) -> None:
+    def test_tool_fail_retries_researcher(self) -> None:
         self.assertEqual(
-            route_after_critic({"critic_passed": False, "retry_count": 0}),
+            route_after_critic(
+                {
+                    "critic_passed": False,
+                    "retry_count": 0,
+                    "critic_retry_target": "researcher",
+                }
+            ),
             "researcher",
+        )
+
+    def test_program_fail_retries_writer(self) -> None:
+        self.assertEqual(
+            route_after_critic(
+                {
+                    "critic_passed": False,
+                    "retry_count": 0,
+                    "critic_retry_target": "writer",
+                }
+            ),
+            "writer",
         )
 
     def test_retry_limit_goes_to_end(self) -> None:
         self.assertEqual(
-            route_after_critic({"critic_passed": False, "retry_count": 2}),
+            route_after_critic(
+                {
+                    "critic_passed": False,
+                    "retry_count": 2,
+                    "critic_retry_target": "writer",
+                }
+            ),
             "__end__",
         )
 

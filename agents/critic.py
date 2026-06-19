@@ -2,18 +2,40 @@
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from langchain_core.messages import ToolMessage
 
 from agents.section_quality import critic_program_issues
 from planning.rebuild import required_tools_for_scope, tool_call_satisfied
 
+CriticRetryTarget = Literal["researcher", "writer"]
 
-def run_critic(state: dict[str, Any]) -> tuple[bool, str]:
+
+@dataclass(frozen=True)
+class CriticResult:
+    passed: bool
+    notes: str
+    retry_target: CriticRetryTarget = "researcher"
+
+
+def _is_tool_issue(issue: str) -> bool:
+    return issue.startswith("не вызван ") or issue.startswith(
+        "нет сохранённого пула POI"
+    )
+
+
+def _retry_target_for_issues(issues: list[str]) -> CriticRetryTarget:
+    if any(_is_tool_issue(issue) for issue in issues):
+        return "researcher"
+    return "writer"
+
+
+def run_critic(state: dict[str, Any]) -> CriticResult:
     """
     Проверяет: вызваны ли нужные tools, достаточно ли ссылок в dining.
-    Возвращает (passed, notes).
+    Возвращает CriticResult с retry_target при fail.
     """
     issues: list[str] = []
     scope = state.get("rebuild_scope", "full")
@@ -50,5 +72,10 @@ def run_critic(state: dict[str, Any]) -> tuple[bool, str]:
         )
 
     if issues:
-        return False, "; ".join(issues)
-    return True, "проверка пройдена"
+        notes = "; ".join(issues)
+        return CriticResult(
+            passed=False,
+            notes=notes,
+            retry_target=_retry_target_for_issues(issues),
+        )
+    return CriticResult(passed=True, notes="проверка пройдена", retry_target="writer")

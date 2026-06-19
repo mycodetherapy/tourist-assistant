@@ -10,6 +10,7 @@ from agents.nodes import (
     finalize_node,
     planner_node,
     route_after_critic,
+    route_after_executor,
     route_after_researcher,
     route_entry,
 )
@@ -17,7 +18,7 @@ from models.state import AgentState
 
 
 def build_app():
-    """Собирает и компилирует граф researcher → executor → writer → critic."""
+    """Собирает граф: researcher → executor → writer|critic с условным skip 2-го researcher."""
     workflow = StateGraph(AgentState)
 
     workflow.add_node("researcher", planner_node)
@@ -35,12 +36,16 @@ def build_app():
         route_after_researcher,
         {"executor": "executor", "writer": "writer"},
     )
-    workflow.add_edge("executor", "researcher")
+    workflow.add_conditional_edges(
+        "executor",
+        route_after_executor,
+        {"writer": "writer", "researcher": "researcher"},
+    )
     workflow.add_edge("writer", "critic")
     workflow.add_conditional_edges(
         "critic",
         route_after_critic,
-        {"__end__": END, "researcher": "researcher"},
+        {"__end__": END, "researcher": "researcher", "writer": "writer"},
     )
 
     return workflow.compile()

@@ -9,10 +9,12 @@ from typing import Literal
 
 from agents.llm_context import LlmConfig, run_with_llm_config
 from models.state import AgentState
+from services.city_fact_job import schedule_city_fact_generation
 from services.errors import format_runtime_error
 from services.trip_service import GraphRunResult, TripService
 
 RunStatusName = Literal["queued", "running", "completed", "failed"]
+CityFactStatusName = Literal["pending", "ready", "failed", "skipped", "idle"]
 
 
 @dataclass
@@ -26,6 +28,7 @@ class RunRecord:
     error: str | None = None
     version_id: int | None = None
     graph_run_id: str | None = None
+    city_fact_status: CityFactStatusName = "idle"
 
 
 class RunManager:
@@ -64,6 +67,10 @@ class RunManager:
         trip_id = int(state["trip_id"])
         scope = str(state.get("rebuild_scope", "full"))
         record = RunRecord(run_id=run_id, trip_id=trip_id, scope=scope, status="queued")
+        if scope == "full":
+            record.city_fact_status = "pending"
+        else:
+            record.city_fact_status = "skipped"
         with self._lock:
             self._runs[run_id] = record
 
@@ -80,16 +87,39 @@ class RunManager:
             record = self._runs[run_id]
             record.status = "running"
 
+        scope = str(state.get("rebuild_scope", "full"))
+        city = str(state.get("city", ""))
+        trip_id = int(state["trip_id"])
+        version_event = threading.Event()
+        version_holder: dict[str, int | None] = {"version_id": None}
+
+        if scope == "full":
+            schedule_city_fact_generation(
+                trip_id=trip_id,
+                city=city,
+                version_id=None,
+                llm_config=llm_config,
+                version_event=version_event,
+                version_holder=version_holder,
+            )
+
         try:
             with run_with_llm_config(llm_config):
                 result: GraphRunResult = self._service.run_graph(state)
+            version_holder["version_id"] = result.version_id
+            version_event.set()
             with self._lock:
                 record = self._runs[run_id]
                 record.status = "completed"
                 record.version_id = result.version_id
                 record.graph_run_id = result.run_id
+                if scope == "full":
+                    record.city_fact_status = "pending"
         except Exception as exc:
+            version_event.set()
             with self._lock:
                 record = self._runs[run_id]
                 record.status = "failed"
                 record.error = format_runtime_error(exc)
+                if scope == "full":
+                    record.city_fact_status = "failed"

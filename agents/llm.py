@@ -15,7 +15,7 @@ from config.settings import (
     get_llm_base_url,
     get_llm_extra_body,
 )
-from models.schemas import ProgramDraft
+from models.schemas import RoutesDraft
 from search.tools import TOOLS
 
 
@@ -70,8 +70,8 @@ def get_llm_with_tools():
 def get_llm_final():
     return (
         get_llm()
-        .bind(max_tokens=12_288)
-        .with_structured_output(ProgramDraft, method="json_schema")
+        .bind(max_tokens=10_240)
+        .with_structured_output(RoutesDraft, method="json_schema")
     )
 
 

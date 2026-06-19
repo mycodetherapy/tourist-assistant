@@ -367,3 +367,26 @@ def fetch_wikidata_leisure(
         )
 
     return collected
+
+
+def fetch_top_landmark_names(wikidata_id: str, *, limit: int = 5) -> list[str]:
+    """Топ достопримечательностей по числу sitelinks (для блока «О городе»)."""
+    qid = wikidata_id if wikidata_id.startswith("Q") else f"Q{wikidata_id}"
+    if not qid or qid == "Q":
+        return []
+    rows = _fetch_city_rows(qid)
+    names: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        label_block = row.get("itemLabel") or {}
+        name = str(label_block.get("value") or "").strip()
+        if not name or not is_acceptable_place_name(name):
+            continue
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+        if len(names) >= limit:
+            break
+    return names

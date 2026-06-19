@@ -17,5 +17,15 @@ export function useTripProgram(tripId: number, enabled = true) {
     retry: false,
     staleTime: 0,
     refetchOnMount: "always",
+    refetchInterval: (query) => {
+      if (query.state.status === "error") {
+        return false;
+      }
+      const status = query.state.data?.city_fact_status;
+      if (status === "pending") {
+        return 2500;
+      }
+      return false;
+    },
   });
 }

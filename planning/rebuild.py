@@ -87,8 +87,8 @@ def planner_tools_hint(scope: str) -> str:
             "и не вызывай новый поиск источников. Ответь без tool_calls."
         )
     return (
-        "Режим глубокого пересбора. Сначала вызови search_route_materials для обновления пула POI, "
-        "затем ответь без новых tool_calls."
+        "Режим глубокого пересбора. Вызови search_route_materials один раз "
+        "для обновления пула POI."
     )
 
 

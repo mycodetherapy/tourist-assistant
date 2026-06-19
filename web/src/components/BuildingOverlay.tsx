@@ -16,8 +16,8 @@ export function BuildingOverlay({ visible, runStatus, runScope = "full" }: Build
       <div className="flex flex-col items-center gap-4 py-6">
         <Spin size="large" />
         <p className="text-neutral-600 text-center max-w-md">
-          Обновляем пул мест и формируем три варианта маршрута (A / B / C), затем
-          пересобираем лайфхаки. Обычно 1–2 минуты.
+          Обновляем пул мест и формируем три варианта маршрута (A / B / C). Факт о
+          городе подгрузится параллельно. Обычно 1–2 минуты.
         </p>
         <Steps
           current={step}
@@ -25,7 +25,7 @@ export function BuildingOverlay({ visible, runStatus, runScope = "full" }: Build
           items={[
             { title: "Пул мест (POI)" },
             { title: "Маршруты A/B/C" },
-            { title: "Лайфхаки и проверка" },
+            { title: "Проверка маршрутов" },
           ]}
         />
       </div>

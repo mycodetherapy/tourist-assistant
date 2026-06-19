@@ -13,6 +13,7 @@ ItemVote = Literal[1, -1]
 from onboarding.preferences import TripPreferences
 
 RunStatusName = Literal["queued", "running", "completed", "failed"]
+CityFactStatusName = Literal["pending", "ready", "failed", "skipped", "idle"]
 
 
 class TripSummaryResponse(BaseModel):
@@ -60,6 +61,8 @@ class ProgramResponse(BaseModel):
     approved: bool
     program: FinalProgram
     sections: StructuredProgramResponse
+    data_warnings: list[str] = Field(default_factory=list)
+    city_fact_status: CityFactStatusName = "idle"
 
 
 class RunStatusResponse(BaseModel):
@@ -68,6 +71,7 @@ class RunStatusResponse(BaseModel):
     status: RunStatusName
     error: str | None = None
     version_id: int | None = None
+    city_fact_status: CityFactStatusName = "idle"
 
 
 class ProfileResponse(BaseModel):

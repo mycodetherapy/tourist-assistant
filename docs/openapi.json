@@ -1212,7 +1212,8 @@
           "lifehacks": {
             "type": "string",
             "title": "Lifehacks",
-            "description": "Полезные лайфхаки для туриста"
+            "description": "Факт о городе (legacy ключ API; async при city_fact_status=pending)",
+            "default": ""
           },
           "events": {
             "type": "string",
@@ -1228,9 +1229,6 @@
           }
         },
         "type": "object",
-        "required": [
-          "lifehacks"
-        ],
         "title": "FinalProgram",
         "description": "Структурированный результат построения маршрутов поездки."
       },
@@ -1483,6 +1481,25 @@
           },
           "sections": {
             "$ref": "#/components/schemas/StructuredProgramResponse"
+          },
+          "data_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Data Warnings"
+          },
+          "city_fact_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "failed",
+              "skipped",
+              "idle"
+            ],
+            "title": "City Fact Status",
+            "default": "idle"
           }
         },
         "type": "object",
@@ -1743,6 +1760,18 @@
               }
             ],
             "title": "Version Id"
+          },
+          "city_fact_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "failed",
+              "skipped",
+              "idle"
+            ],
+            "title": "City Fact Status",
+            "default": "idle"
           }
         },
         "type": "object",

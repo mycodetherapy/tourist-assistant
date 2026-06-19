@@ -28,14 +28,19 @@ class PlannerContext(BaseModel):
     search_context: str = ""
 
 
-class ProgramDraft(BaseModel):
-    """Маршруты и лайфхаки от LLM."""
+class RoutesDraft(BaseModel):
+    """Только маршруты от LLM (факт о городе — отдельно, асинхронно)."""
 
     routes: RouteProgram = Field(
         ...,
         description="Ровно 3 варианта маршрута A/B/C из poi_id пула materials",
     )
-    lifehacks: str = Field(..., description="Полезные лайфхаки для туриста")
+
+
+class ProgramDraft(RoutesDraft):
+    """Обратная совместимость: опциональный lifehacks."""
+
+    lifehacks: str = Field(default="", description="Legacy; writer не заполняет")
 
 
 class FinalProgram(BaseModel):
@@ -50,7 +55,10 @@ class FinalProgram(BaseModel):
         description="Три варианта маршрута на всю поездку",
     )
     routes_text: str = Field(default="", description="Markdown-представление маршрутов")
-    lifehacks: str = Field(..., description="Полезные лайфхаки для туриста")
+    lifehacks: str = Field(
+        default="",
+        description="Факт о городе (legacy ключ API; async при city_fact_status=pending)",
+    )
     events: str = Field(default="", description="Legacy: мероприятия")
     dining: str = Field(default="", description="Legacy: питание")
 

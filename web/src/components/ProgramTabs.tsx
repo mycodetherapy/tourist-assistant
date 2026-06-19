@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Alert, Grid, notification } from "antd";
+import { Alert, Grid, Skeleton, notification } from "antd";
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
@@ -246,8 +246,22 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
       )}
 
       <div className="rounded-lg border border-gray-100 bg-white px-3 py-3">
-        <h3 className="mb-2 text-sm font-semibold text-gray-700">Лайфхаки</h3>
-        <MarkdownBlock text={data.program.lifehacks || data.sections.lifehacks.intro} className="mb-0" />
+        <h3 className="mb-2 text-sm font-semibold text-gray-700">О городе</h3>
+        {data.city_fact_status === "pending" ? (
+          <Skeleton active paragraph={{ rows: 2 }} title={false} />
+        ) : data.city_fact_status === "failed" ? (
+          <Alert
+            type="info"
+            showIcon
+            className="mb-0"
+            title="Факт о городе временно недоступен"
+          />
+        ) : (
+          <MarkdownBlock
+            text={data.program.lifehacks || data.sections.lifehacks.intro}
+            className="mb-0"
+          />
+        )}
       </div>
     </div>
   );

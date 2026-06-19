@@ -66,9 +66,10 @@ class TestSectionQuality(unittest.TestCase):
                 "lifehacks": "x",
             },
         }
-        passed, notes = run_critic(state)
-        self.assertFalse(passed)
-        self.assertIn("сохранённого пула", notes)
+        result = run_critic(state)
+        self.assertFalse(result.passed)
+        self.assertIn("сохранённого пула", result.notes)
+        self.assertEqual(result.retry_target, "researcher")
 
     def test_critic_fails_garbage_routes_scope(self) -> None:
         state = {
@@ -83,9 +84,10 @@ class TestSectionQuality(unittest.TestCase):
                 "lifehacks": "x",
             },
         }
-        passed, notes = run_critic(state)
-        self.assertFalse(passed)
-        self.assertIn("routes", notes)
+        result = run_critic(state)
+        self.assertFalse(result.passed)
+        self.assertIn("routes", result.notes)
+        self.assertEqual(result.retry_target, "writer")
 
     def test_critic_flags_identical_routes(self) -> None:
         dup = TripRouteCase(

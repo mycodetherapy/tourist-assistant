@@ -167,5 +167,12 @@ def critic_program_issues(
             issues.extend(issues_for_section(program, "events"))
             issues.extend(issues_for_section(program, "dining"))
     if scope in ("full", "lifehacks"):
-        issues.extend(issues_for_section(program, "lifehacks"))
+        status = str(program.get("city_fact_status") or "")
+        if status != "pending":
+            issues.extend(issues_for_section(program, "lifehacks"))
+            from agents.city_fact import is_valid_city_fact
+
+            lifehacks = str(program.get("lifehacks") or "").strip()
+            if lifehacks and not is_valid_city_fact(lifehacks):
+                issues.append("раздел «lifehacks» не прошёл проверку факта о городе")
     return issues

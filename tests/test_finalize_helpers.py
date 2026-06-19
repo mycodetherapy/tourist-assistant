@@ -129,7 +129,6 @@ class TestFinalizeHelpers(unittest.TestCase):
         ]
         draft = build_fallback_program_draft(messages, city="Казань", walking_area="центр")
         self.assertEqual(len(draft.routes.cases), 3)
-        self.assertIn("музей", draft.lifehacks.lower())
 
     def test_coerce_program_draft_from_parsed_wrapper(self) -> None:
         from unittest.mock import MagicMock

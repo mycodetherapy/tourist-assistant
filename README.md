@@ -1,10 +1,10 @@
 # Туристический ассистент (LangGraph)
 
-Агент составляет **маршруты по городу**: три альтернативных варианта A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком лайфхаков внизу страницы. Центральная функция продукта — маршруты и базовая точка старта (`route_anchor`). Поездки, предпочтения и версии программы хранятся в **SQLite**.
+Агент составляет **маршруты по городу**: три альтернативных варианта A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (факт из Wikidata/Nominatim, 2 предложения на русском). Центральная функция продукта — маршруты и базовая точка старта (`route_anchor`). Поездки, предпочтения и версии программы хранятся в **SQLite**.
 
 ## Статус и планы
 
-Приложение находится **в стадии активной разработки**. Текущая версия — **routes-first MVP**: агент собирает три маршрута и лайфхаки; **веб-интерфейс и REST API** позволяют создавать поездки и пересобирать маршруты. Консольный CLI снят.
+Приложение находится **в стадии активной разработки**. Текущая версия — **routes-first MVP**: агент собирает три маршрута; **факт о городе** подгружается **параллельно** (маршруты показываются сразу, блок «О городе» — по готовности). **Веб-интерфейс и REST API** позволяют создавать поездки и пересобирать маршруты. Консольный CLI снят.
 
 **Ближайшие планы:**
 
@@ -89,11 +89,11 @@ npm run dev
 | **Настройки** | BYOK: OpenRouter API key (шифруется в SQLite) |
 | **Список поездок** | Только поездки текущего пользователя |
 | **Новая поездка** | Wizard: поездка → запуск → фоновая сборка (polling 1–2 мин) |
-| **Карточка поездки** | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; внизу лайфхаки; пересбор маршрутов одной кнопкой |
+| **Карточка поездки** | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; внизу **«О городе»** (skeleton, пока `city_fact_status=pending`); пересбор маршрутов одной кнопкой |
 
 Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
-**Оценки пунктов (👍/👎):** для **вариантов маршрута и остановок** (лайфхаки без голосования в текущем UI). Веб: клик → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` в `data/trips.db`.
+**Оценки пунктов (👍/👎):** для **вариантов маршрута и остановок** (блок «О городе» без голосования). Веб: клик → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` в `data/trips.db`.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -241,7 +241,9 @@ LLM_OPENROUTER_PROVIDERS=DeepInfra
 
 ![Схема графа агента](docs/assets/graph.png)
 
-Пунктирные рёбра — условные переходы (`lifehacks`, `tool_calls`, critic retry). Сплошные — фиксированные (`executor → researcher`, `writer → critic`).
+Пунктирные рёбра — условные переходы (`route_entry`, `tool_calls`, `route_after_executor`, critic retry). Сплошные — фиксированные (`writer → critic`).
+
+После `executor` готовность tools проверяется **кодом** ([`planning/tools_readiness.py`](planning/tools_readiness.py)): при успешном `search_route_materials` граф идёт сразу в `writer`, без второго LLM-вызова researcher. При ошибке tool — retry `researcher`.
 
 **API и БД:** `api/` вызывает `services/trip_service.py` → `app.invoke`; `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions` (SQLite). Веб: `web/` (React 19, Ant Design, TanStack Query).
 
@@ -255,8 +257,9 @@ python3 scripts/render_graph.py
 |------|------|------|
 | `researcher` | `agents/nodes.py` | LLM + tool_calls по `rebuild_scope` |
 | `executor` | `agents/nodes.py` | Выполняет tools, пишет строки в `tool_runs` |
-| `writer` | `agents/nodes.py` | Structured output → `FinalProgram`, merge с прошлой версией |
-| `critic` | `agents/critic.py` | Детерминированные проверки; при успехе граф завершается |
+| `writer` | `agents/nodes.py` | Structured output → маршруты (`RoutesDraft`), merge; факт о городе — не здесь |
+| `critic` | `agents/critic.py` | Детерминированные проверки; retry: tools → `researcher`, качество программы → `writer` |
+| *(async)* `city_fact` | `agents/city_fact.py`, `services/city_fact_job.py` | Wikidata/Nominatim → LLM-polish; патч `lifehacks` + `city_fact_status` в SQLite параллельно с графом |
 
 **Инструменты** (`search/tools.py`):
 
@@ -285,7 +288,7 @@ python3 scripts/render_graph.py
 
 ### Какую задачу решает агент?
 
-По городу, предпочтениям и базовой точке (`route_anchor`) агент **собирает пул POI**, формирует **три маршрута A/B/C** и **лайфхаки**, сохраняет версии в SQLite. Результат сразу доступен в веб-интерфейсе после фонового прогона.
+По городу, предпочтениям и базовой точке (`route_anchor`) агент **собирает пул POI**, формирует **три маршрута A/B/C** и **факт о городе** (Wikidata → короткий LLM-polish), сохраняет версии в SQLite. Маршруты доступны в UI сразу после прогона графа; факт — асинхронно (`city_fact_status`: `pending` → `ready`).
 
 ### Кто будет пользоваться агентом?
 
@@ -329,14 +332,14 @@ python3 scripts/render_graph.py
 
 | Ситуация | Обработка |
 |----------|-----------|
-| **Пустой или нерелевантный поиск** | Фильтр по `SEARCH_FILTERS` + fallback top-8; предупреждение в payload tool |
-| **Ошибка поиска / сети** | `ToolMessage` с ошибкой; граф не падает, `tool_runs` с `live_data=false` |
+| **Пустой или нерелевантный поиск** | Фильтр по `SEARCH_FILTERS` + fallback demo-POI; warning в `data_warnings` (API + баннер в UI) |
+| **Ошибка поиска / сети** | `ToolMessage` с ошибкой; `route_after_executor` → retry `researcher`; `tool_runs` с `live_data=false` |
 | **Prompt-injection во вводе** | `input_validation.sanitize_and_validate` |
 | **Галлюцинации мест** | Маршруты — только `poi_id` из пула materials |
-| **Critic не прошёл** | До 2 повторов researcher; затем сохранение текущей программы |
+| **Critic не прошёл** | До 2 повторов: проблемы tools/POI → `researcher`, проблемы маршрутов → `writer`; факт о городе critic не блокирует, пока `city_fact_status=pending` |
 | **Повторный запуск** | `user_profile` + `trip_preferences` из SQLite |
 | **Демо-точки вместо POI** | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
-| **Одинаковые маршруты A/B/C** | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → пересбор researcher |
+| **Одинаковые маршруты A/B/C** | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → retry `writer` |
 | **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
 | **Кольцевой маршрут** | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км |
 
@@ -344,7 +347,7 @@ python3 scripts/render_graph.py
 
 | Критерий | Приемлемый результат |
 |----------|----------------------|
-| **Полнота программы** | 3 варианта маршрута A/B/C + лайфхаки |
+| **Полнота программы** | 3 варианта маршрута A/B/C; факт о городе 80–520 символов, туристический угол (не админ-справка) |
 | **Опора на поиск** | Маршруты A/B/C: сложность по **протяжённости** (A ~2–3.5 км, B ~4–5.5, C ~6–8.5), до 8 плотных leisure-точек; без повторов названий; `maps_route_url` по координатам (иногда кольцевой); POI только из Wikidata/discovery-пула |
 | **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят |
 
@@ -404,7 +407,7 @@ tourist-assistant/
 ├── api/                    # FastAPI REST для веб-UI
 │   └── auth/               # register, login, Google OAuth, BYOK crypto
 ├── docs/openapi.json       # OpenAPI 3 (scripts/export_openapi.py)
-├── services/               # TripService, RunManager
+├── services/               # TripService, RunManager, city_fact_job
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
@@ -417,7 +420,7 @@ tourist-assistant/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool search_route_materials
 │   ├── osm/                # Nominatim, Overpass
-│   ├── wikidata/           # SPARQL достопримечательностей
+│   ├── wikidata/           # SPARQL достопримечательностей, city_description (факт)
 │   ├── yandex/             # materials, maps_route_url
 │   ├── context.py          # search_context сессии
 │   └── tool_logging.py     # разбор payload для tool_runs
@@ -426,6 +429,7 @@ tourist-assistant/
 │   ├── nodes.py            # researcher, executor, writer, critic
 │   ├── graph.py            # сборка LangGraph, app
 │   ├── critic.py
+│   ├── city_fact.py        # Wikidata → LLM-polish, validation
 │   └── print_program.py
 ├── planning/rebuild.py       # rebuild_scope, merge_program
 ├── program/parse_items.py  # разбор markdown-секций на пункты

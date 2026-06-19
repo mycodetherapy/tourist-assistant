@@ -50,6 +50,7 @@ from search.context import set_session
 
 ProgramSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
 VotableSectionKey = Literal["routes", "route_stops", "lifehacks", "events", "dining"]
+CityFactStatusName = Literal["pending", "ready", "failed", "skipped", "idle"]
 ItemVote = Literal[1, -1]
 
 
@@ -91,6 +92,8 @@ class ProgramView:
     approved: bool
     program: FinalProgram
     sections: dict[ProgramSectionKey, ProgramSectionView]
+    data_warnings: tuple[str, ...] = ()
+    city_fact_status: CityFactStatusName = "idle"
 
 
 @dataclass(frozen=True)
@@ -186,6 +189,8 @@ class TripService:
             "retry_count": retry_count,
             "critic_passed": False,
             "critic_notes": "",
+            "critic_retry_target": "researcher",
+            "data_warnings": [],
             "messages": [HumanMessage(content=user_message)],
         }
         if base_program is not None:
@@ -263,6 +268,8 @@ class TripService:
             "retry_count": state.get("retry_count", 0),
             "critic_passed": False,
             "critic_notes": "",
+            "critic_retry_target": "researcher",
+            "data_warnings": list(state.get("data_warnings") or []),
         }
         config = invoke_config(trip_id, rebuild_scope=rebuild_scope)
         run_id = str(uuid.uuid4())
@@ -315,9 +322,13 @@ class TripService:
         version_id: int | None = None
         program = result.get("program")
         if program:
+            program_to_save = dict(program)
+            warnings = result.get("data_warnings") or program_to_save.get("data_warnings")
+            if warnings:
+                program_to_save["data_warnings"] = list(warnings)
             version_id = save_itinerary_version(
                 trip_id,
-                program,
+                program_to_save,
                 scope=rebuild_scope,
                 approved=False,
             )
@@ -421,11 +432,16 @@ class TripService:
         approved: bool = False,
     ) -> ProgramView:
         """Программа из dict (например state графа) с оценками из БД."""
+        raw_warnings = program_data.get("data_warnings") or []
+        data_warnings = tuple(
+            str(item).strip() for item in raw_warnings if str(item).strip()
+        )
         program = self.parse_program(program_data)
         parsed = parse_program_sections(program.model_dump())
         sections = self._attach_feedback(
             parsed, trip_id=trip_id, program_data=program_data
         )
+        city_fact_status = self._resolve_city_fact_status(program_data)
         return ProgramView(
             version=version,
             version_id=version_id,
@@ -433,7 +449,18 @@ class TripService:
             approved=approved,
             program=program,
             sections=sections,
+            data_warnings=data_warnings,
+            city_fact_status=city_fact_status,
         )
+
+    @staticmethod
+    def _resolve_city_fact_status(program_data: dict[str, Any]) -> CityFactStatusName:
+        raw = program_data.get("city_fact_status")
+        if raw in ("pending", "ready", "failed", "skipped"):
+            return raw  # type: ignore[return-value]
+        if str(program_data.get("lifehacks") or "").strip():
+            return "ready"
+        return "idle"
 
     def get_program_view(
         self,

@@ -18,7 +18,8 @@ def check_program_schema(program: dict[str, Any]) -> list[str]:
     except ValidationError as exc:
         return [f"schema: {exc}"]
     if not model.lifehacks.strip():
-        issues.append("пустое поле lifehacks")
+        if program.get("city_fact_status") != "pending":
+            issues.append("пустое поле lifehacks")
     if is_legacy_program(program):
         if not model.events.strip():
             issues.append("пустое поле events")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
@@ -22,6 +22,8 @@ class AgentState(TypedDict, total=False):
     base_program: dict[str, Any]
     critic_passed: bool
     critic_notes: str
+    critic_retry_target: Literal["researcher", "writer"]
+    data_warnings: list[str]
     retry_count: int
     route_feedback_snapshot: dict[str, Any]
     messages: Annotated[list[AnyMessage], add_messages]

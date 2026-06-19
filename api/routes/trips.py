@@ -116,6 +116,8 @@ def _program_response(view: ProgramView) -> ProgramResponse:
         approved=view.approved,
         program=program,
         sections=sections,
+        data_warnings=list(view.data_warnings),
+        city_fact_status=view.city_fact_status,
     )
 
 

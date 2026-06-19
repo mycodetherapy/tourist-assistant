@@ -29,4 +29,5 @@ def get_run_status(
         status=record.status,
         error=record.error,
         version_id=record.version_id,
+        city_fact_status=record.city_fact_status,
     )

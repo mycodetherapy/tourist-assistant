@@ -603,6 +603,34 @@ def get_itinerary_version(trip_id: int, version_id: int) -> dict[str, Any] | Non
     }
 
 
+def patch_itinerary_program(version_id: int, patch: dict[str, Any]) -> bool:
+    """Частичное обновление program_json (например async city fact)."""
+    if not patch:
+        return False
+    now = _utc_now()
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT trip_id, program_json FROM itinerary_versions WHERE id = ?",
+            (version_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        program = json.loads(row["program_json"])
+        if not isinstance(program, dict):
+            program = {}
+        program.update(patch)
+        conn.execute(
+            "UPDATE itinerary_versions SET program_json = ? WHERE id = ?",
+            (json.dumps(program, ensure_ascii=False), version_id),
+        )
+        conn.execute(
+            "UPDATE trips SET updated_at = ? WHERE id = ?",
+            (now, int(row["trip_id"])),
+        )
+        conn.commit()
+    return True
+
+
 def list_item_feedback(trip_id: int) -> dict[str, int]:
     """Оценки пунктов поездки: {item_key: vote}. vote — 1 или -1."""
     with connect() as conn:

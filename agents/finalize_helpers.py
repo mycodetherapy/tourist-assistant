@@ -8,7 +8,7 @@ from typing import Any, Optional
 from langchain_core.messages import HumanMessage, ToolMessage
 
 from models.routes import RouteMaterials, RouteProgram
-from models.schemas import ProgramDraft
+from models.schemas import ProgramDraft, RoutesDraft
 from planning.rebuild import required_tools_for_scope, resolve_tool_name
 
 _FINALIZE_MAX_TOOL_CHARS = 12_000
@@ -425,7 +425,7 @@ def build_fallback_program_draft(
     walking_area: str = "",
     pace: str = "moderate",
     trip_id: int | None = None,
-) -> ProgramDraft:
+) -> RoutesDraft:
     """Сборка черновика маршрутов без LLM (если ответ обрезан по length)."""
     from agents.route_postprocess import build_fallback_route_program
     from models.routes import RouteMaterials
@@ -436,14 +436,25 @@ def build_fallback_program_draft(
     if materials is None:
         materials = RouteMaterials(city=city, dates="")
     routes = build_fallback_route_program(materials, pace=pace)
-    from agents.lifehacks_quality import build_default_lifehacks
+    return RoutesDraft(routes=routes)
 
-    lifehacks = build_default_lifehacks(
-        city=city,
-        walking_area=walking_area or "центр",
-        search_context=walking_area,
-    )
-    return ProgramDraft(routes=routes, lifehacks=lifehacks)
+
+def _coerce_routes_draft(result: Any) -> RoutesDraft:
+    """LangChain structured output → RoutesDraft."""
+    if isinstance(result, RoutesDraft):
+        return result
+    if isinstance(result, ProgramDraft):
+        return RoutesDraft(routes=result.routes)
+    parsed = getattr(result, "parsed", None)
+    if isinstance(parsed, RoutesDraft):
+        return parsed
+    if isinstance(parsed, ProgramDraft):
+        return RoutesDraft(routes=parsed.routes)
+    if isinstance(parsed, dict):
+        return RoutesDraft(**parsed)
+    if isinstance(result, dict):
+        return RoutesDraft(**result)
+    raise TypeError(f"Unexpected structured output type: {type(result)!r}")
 
 
 def _coerce_program_draft(result: Any) -> ProgramDraft:
@@ -470,21 +481,11 @@ def invoke_program_draft(
     city: str,
     walking_area: str = "",
     trip_id: int | None = None,
-) -> ProgramDraft:
-    """Вызов structured output с fallback при обрезке ответа (length)."""
-    prompt = [system, *tool_messages, human]  # tool_messages — HumanMessage, не ToolMessage
+) -> RoutesDraft:
+    """Вызов structured output (только routes) с fallback при обрезке ответа."""
+    prompt = [system, *tool_messages, human]
     try:
-        draft = _coerce_program_draft(llm_final.invoke(prompt))
-        from agents.lifehacks_quality import clean_lifehacks_display
-
-        fields = draft.model_dump()
-        fields["lifehacks"] = clean_lifehacks_display(
-            fields.get("lifehacks", ""),
-            city=city or "город",
-            walking_area=walking_area,
-            search_context=walking_area,
-        )
-        return ProgramDraft(**fields)
+        return _coerce_routes_draft(llm_final.invoke(prompt))
     except Exception as exc:
         err_name = type(exc).__name__
         err_text = str(exc).lower()

@@ -55,11 +55,28 @@ class TestCritic(unittest.TestCase):
                     ]
                 },
                 "routes_text": "Маршруты A/B/C с достаточным описанием для critic и проверки минимальной длины текста.",
-                "lifehacks": "Совет по городу: начинайте прогулку с центра.",
+                "lifehacks": "",
+                "city_fact_status": "pending",
             },
         }
-        passed, notes = run_critic(state)
-        self.assertTrue(passed, notes)
+        result = run_critic(state)
+        self.assertTrue(result.passed, result.notes)
+
+    def test_program_issues_retry_writer(self) -> None:
+        state = {
+            "rebuild_scope": "full",
+            "messages": [
+                ToolMessage(content="{}", tool_call_id="1", name="search_route_materials"),
+            ],
+            "program": {
+                "routes": {"cases": []},
+                "routes_text": "",
+                "lifehacks": "x",
+            },
+        }
+        result = run_critic(state)
+        self.assertFalse(result.passed)
+        self.assertEqual(result.retry_target, "writer")
 
 
 if __name__ == "__main__":

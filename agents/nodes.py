@@ -25,6 +25,7 @@ from models.schemas import (
     PlannerContext,
     PlannerNodeOutput,
     ProgramDraft,
+    RoutesDraft,
     normalize_stored_program,
 )
 from models.state import AgentState
@@ -35,6 +36,7 @@ from planning import (
     planner_tools_hint,
 )
 from planning.rebuild import resolve_tool_name
+from planning.tools_readiness import evaluate_tools_readiness
 from search.context import clear_route_materials
 from search.tool_logging import parse_tool_result
 from search.tools import TOOL_MAP
@@ -64,6 +66,7 @@ __all__ = [
     "finalize_node",
     "planner_node",
     "route_after_critic",
+    "route_after_executor",
     "route_after_researcher",
     "route_entry",
 ]
@@ -82,7 +85,7 @@ def _build_planner_system_prompt(ctx: PlannerContext, rebuild_scope: str) -> str
         "Инструмент: search_route_materials — единый пул мест досуга "
         "(OSM/Wikidata, poi_id + координаты).\n\n"
         "Обязанности:\n"
-        "1. Вызови search_route_materials для сбора пула POI.\n"
+        "1. В режиме full вызови search_route_materials один раз для сбора пула POI.\n"
         "2. Не выдумывай места и URL — только данные из tool JSON.\n\n"
         f"{tools_hint}\n"
         f"Материалы маршрута: city={ctx.city}, dates={ctx.dates}."
@@ -168,7 +171,18 @@ def executor_node(state: AgentState) -> dict[str, list[ToolMessage]]:
             persist_route_materials_from_tool(int(trip_id), content)
 
     ExecutorNodeOutput(tool_messages=tool_messages)
-    return {"messages": tool_messages}
+    result: dict[str, Any] = {"messages": tool_messages}
+    if tool_messages:
+        readiness = evaluate_tools_readiness(
+            {**state, "messages": [*state["messages"], *tool_messages]}
+        )
+        if readiness.warnings:
+            merged = list(state.get("data_warnings") or [])
+            for warning in readiness.warnings:
+                if warning not in merged:
+                    merged.append(warning)
+            result["data_warnings"] = merged
+    return result
 
 
 def finalize_node(state: AgentState) -> dict[str, Any]:
@@ -254,9 +268,8 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
 
     system = SystemMessage(
         content=(
-            "Составь маршруты и лайфхаки по ToolMessage.\n"
+            "Составь три пеших маршрута A/B/C по ToolMessage.\n"
             f"{routes_instruction}"
-            "- lifehacks: 4–7 коротких советов, до 800 символов, без ссылок.\n"
             f"Город: {ctx.city}. Даты: {ctx.dates}."
             f"{prefs_note}{scope_note}"
         )
@@ -270,7 +283,7 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
         rebuild_scope=rebuild_scope,
         trip_id=int(trip_id) if trip_id is not None else None,
     )
-    draft: ProgramDraft = invoke_program_draft(
+    draft: RoutesDraft = invoke_program_draft(
         llm_final,
         system=system,
         tool_messages=finalize_messages,
@@ -309,29 +322,30 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
                 persist_route_materials(int(trip_id), materials, overwrite=True)
         draft_fields["routes"] = routes_program.model_dump()
         draft_fields["routes_text"] = routes_text
-    if rebuild_scope in ("full", "lifehacks"):
-        from agents.lifehacks_quality import clean_lifehacks_display
 
-        draft_fields["lifehacks"] = clean_lifehacks_display(
-            draft_fields.get("lifehacks", ""),
-            city=ctx.city,
-            walking_area=ctx.search_context or "",
-            search_context=ctx.search_context or "",
+    if rebuild_scope == "full":
+        draft_fields["lifehacks"] = ""
+        draft_fields["city_fact_status"] = "pending"
+    elif rebuild_scope == "routes" and base_program:
+        draft_fields.setdefault(
+            "lifehacks", str(base_program.get("lifehacks") or "")
+        )
+        draft_fields.setdefault(
+            "city_fact_status",
+            str(base_program.get("city_fact_status") or "ready"),
         )
 
     full_draft = {**draft_fields, "tickets": ""}
     merged = merge_program(base_program, full_draft, rebuild_scope)
     merged["tickets"] = ""
+    if rebuild_scope == "full":
+        merged["lifehacks"] = ""
+        merged["city_fact_status"] = "pending"
     program = FinalProgram.model_validate(normalize_stored_program(merged))
-    program_dump = program.model_dump()
-    from agents.lifehacks_quality import clean_lifehacks_display
-
-    program_dump["lifehacks"] = clean_lifehacks_display(
-        program_dump.get("lifehacks", ""),
-        city=ctx.city,
-        walking_area=ctx.search_context or "",
-        search_context=ctx.search_context or "",
-    )
+    program_dump = dict(merged)
+    program_dump.update(program.model_dump())
+    status_extra = program_dump.get("city_fact_status")
+    warnings_extra = program_dump.get("data_warnings")
     if trip_id is not None:
         program_dump = repair_program_routes(
             program_dump,
@@ -343,25 +357,37 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
             transport=transport,
             pace=pace,
         )
-    program = FinalProgram.model_validate(program_dump)
+    program = FinalProgram.model_validate(normalize_stored_program(program_dump))
+    program_dump = program.model_dump()
+    if status_extra is not None:
+        program_dump["city_fact_status"] = status_extra
+    if warnings_extra is not None:
+        program_dump["data_warnings"] = warnings_extra
 
     print_final_program(program)
 
+    data_warnings = list(state.get("data_warnings") or [])
+    if data_warnings:
+        program_dump["data_warnings"] = data_warnings
+
     routes_body = program.routes_text or ""
-    summary = (
-        f"## Маршруты\n{routes_body}\n\n"
-        f"## Лайфхаки\n{program.lifehacks}"
-    )
+    summary = f"## Маршруты\n{routes_body}"
+    if program.lifehacks.strip():
+        summary += f"\n\n## О городе\n{program.lifehacks}"
     final_message = AIMessage(content=summary)
     return {"messages": [final_message], "program": program_dump}
 
 
 def critic_node(state: AgentState) -> dict[str, Any]:
     """Агент-critic: детерминированные проверки перед показом пользователю."""
-    passed, notes = run_critic(state)
-    print(f"  [critic] {notes}")
-    result: dict[str, Any] = {"critic_passed": passed, "critic_notes": notes}
-    if not passed:
+    result_obj = run_critic(state)
+    print(f"  [critic] {result_obj.notes}")
+    result: dict[str, Any] = {
+        "critic_passed": result_obj.passed,
+        "critic_notes": result_obj.notes,
+        "critic_retry_target": result_obj.retry_target,
+    }
+    if not result_obj.passed:
         result["retry_count"] = state.get("retry_count", 0) + 1
     return result
 
@@ -382,11 +408,23 @@ def route_after_researcher(state: AgentState) -> Literal["executor", "writer"]:
     return "writer"
 
 
-def route_after_critic(state: AgentState) -> Literal["__end__", "researcher"]:
-    """Critic: ok → END; иначе retry researcher (до 2 раз)."""
+def route_after_executor(state: AgentState) -> Literal["writer", "researcher"]:
+    """Executor: tools готовы → writer; иначе → researcher для дозапроса."""
+    readiness = evaluate_tools_readiness(state)
+    if readiness.ready:
+        return "writer"
+    print(f"  [executor] tools не готовы: {readiness.reason or 'unknown'}")
+    return "researcher"
+
+
+def route_after_critic(state: AgentState) -> Literal["__end__", "researcher", "writer"]:
+    """Critic: ok → END; иначе retry researcher или writer (до 2 раз)."""
     if state.get("critic_passed"):
         return "__end__"
     if state.get("retry_count", 0) >= 2:
         print("  [critic] лимит повторов — завершаем с текущей программой.")
         return "__end__"
+    target = state.get("critic_retry_target", "researcher")
+    if target == "writer":
+        return "writer"
     return "researcher"
