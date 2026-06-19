@@ -7,6 +7,8 @@ from functools import lru_cache
 
 import redis
 
+# RQ требует binary mode (decode_responses=False) — иначе задачи не попадают в очередь.
+
 
 def get_redis_url() -> str | None:
     raw = os.getenv("REDIS_URL", "").strip()
@@ -22,7 +24,7 @@ def get_redis() -> redis.Redis:
     url = get_redis_url()
     if not url:
         raise RuntimeError("REDIS_URL is not set")
-    return redis.from_url(url, decode_responses=True)
+    return redis.from_url(url, decode_responses=False)
 
 
 def clear_redis_cache() -> None:

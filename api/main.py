@@ -22,11 +22,29 @@ from db import ensure_user_profile_from_trips, init_db
 register_google_client()
 
 
+def _warn_if_no_rq_workers() -> None:
+    from db.redis_client import get_redis, is_redis_enabled
+    from db.session import is_postgres_enabled
+
+    if not (is_postgres_enabled() and is_redis_enabled()):
+        return
+    from rq.worker import Worker
+
+    if not Worker.all(connection=get_redis()):
+        import logging
+
+        logging.getLogger("uvicorn.error").warning(
+            "REDIS_URL задан, но RQ worker не запущен — прогоны зависнут в queued. "
+            "Запустите: python -m worker"
+        )
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     ensure_api_env()
     init_db()
     ensure_user_profile_from_trips()
+    _warn_if_no_rq_workers()
     yield
 
 
