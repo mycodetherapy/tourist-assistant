@@ -37,6 +37,13 @@ def _bucket_key(user_id: int, scope: str) -> str:
 def quotas_enabled() -> bool:
     from db.redis_client import is_redis_enabled
 
+    if os.getenv("RUN_QUOTAS_ENABLED", "true").strip().lower() in (
+        "0",
+        "false",
+        "no",
+        "off",
+    ):
+        return False
     return is_redis_enabled()
 
 

@@ -42,6 +42,14 @@ class RunQuotaTests(unittest.TestCase):
             check_and_consume_run_quota(user_id=self.user_id, scope="routes")
         check_and_consume_run_quota(user_id=self.user_id, scope="full")
 
+    def test_disabled_via_env(self) -> None:
+        os.environ["RUN_QUOTAS_ENABLED"] = "false"
+        clear_quota_cache()
+        for _ in range(10):
+            check_and_consume_run_quota(user_id=self.user_id, scope="full")
+        os.environ.pop("RUN_QUOTAS_ENABLED", None)
+        clear_quota_cache()
+
 
 if __name__ == "__main__":
     unittest.main()
