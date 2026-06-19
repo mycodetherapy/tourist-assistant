@@ -20,11 +20,21 @@ def _require_pg() -> None:
         raise RuntimeError("worker requires DATABASE_URL")
 
 
+def _llm_config_for_user(user_id: int) -> LlmConfig:
+    from api.auth.service import AuthError, require_user_llm_config
+
+    try:
+        return require_user_llm_config(user_id)
+    except AuthError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
 def build_routes_task(graph_run_id: str, payload: dict[str, Any]) -> None:
     """RQ: полный прогон графа для поездки."""
     _require_pg()
     run_uuid = uuid.UUID(graph_run_id)
     trip_id = int(payload["trip_id"])
+    user_id = int(payload["user_id"])
     scope = str(payload.get("scope") or "full")
     worker_id = os.getenv("HOSTNAME", "worker")
 
@@ -36,14 +46,10 @@ def build_routes_task(graph_run_id: str, payload: dict[str, Any]) -> None:
     )
     pg_runs.release_trip_build_lock(trip_id)
 
-    llm_config = LlmConfig(
-        api_key=str(payload["llm_api_key"]),
-        base_url=str(payload["llm_base_url"]),
-        model=str(payload["llm_model"]),
-    )
     service = TripService()
 
     try:
+        llm_config = _llm_config_for_user(user_id)
         state = service.prepare_continue_trip(trip_id, scope)
         with search_context_scope():
             with run_with_llm_config(llm_config):
@@ -64,12 +70,9 @@ def build_routes_task(graph_run_id: str, payload: dict[str, Any]) -> None:
                 graph_run_id=run_uuid,
                 payload={
                     "trip_id": trip_id,
-                    "user_id": int(payload["user_id"]),
+                    "user_id": user_id,
                     "version_id": version_id,
                     "city": str(state.get("city") or ""),
-                    "llm_api_key": payload["llm_api_key"],
-                    "llm_base_url": payload["llm_base_url"],
-                    "llm_model": payload["llm_model"],
                 },
             )
     except Exception as exc:
@@ -90,14 +93,11 @@ def city_fact_task(graph_run_id: str, payload: dict[str, Any]) -> None:
     from db.repository import patch_itinerary_program
 
     run_uuid = uuid.UUID(graph_run_id)
+    user_id = int(payload["user_id"])
     version_id = int(payload["version_id"])
     city = str(payload["city"])
-    llm_config = LlmConfig(
-        api_key=str(payload["llm_api_key"]),
-        base_url=str(payload["llm_base_url"]),
-        model=str(payload["llm_model"]),
-    )
     try:
+        llm_config = _llm_config_for_user(user_id)
         with run_with_llm_config(llm_config):
             fact = generate_city_fact(city=city, use_llm=True)
         patch_itinerary_program(

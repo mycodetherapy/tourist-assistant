@@ -11,6 +11,10 @@ from rq import Queue
 from db.redis_client import clear_redis_cache, get_redis
 
 
+def _noop_task() -> str:
+    return "ok"
+
+
 def _redis_configured() -> bool:
     return bool(os.getenv("REDIS_URL", "").strip())
 
@@ -28,8 +32,8 @@ class RqEnqueueTests(unittest.TestCase):
 
     def test_enqueue_puts_job_in_queue(self) -> None:
         conn = get_redis()
-        q = Queue("build_routes", connection=conn)
-        job = q.enqueue("worker.tasks.build_routes_task", "00000000-0000-0000-0000-000000000001", {"trip_id": 1})
+        q = Queue("rq_test_only", connection=conn)
+        job = q.enqueue("tests.test_rq_enqueue._noop_task")
         self.assertEqual(q.count, 1)
         self.assertIn(job.id, q.job_ids)
 

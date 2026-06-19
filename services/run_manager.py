@@ -111,12 +111,10 @@ class RunManager:
             metadata={"scope": scope},
         )
         if _use_job_queue():
-            return self._start_run_queue(trip_id, scope, llm_config)
+            return self._start_run_queue(trip_id, scope)
         return self._start_run_thread(state, trip_id, scope, llm_config)
 
-    def _start_run_queue(
-        self, trip_id: int, scope: str, llm_config: LlmConfig
-    ) -> str:
+    def _start_run_queue(self, trip_id: int, scope: str) -> str:
         from db.postgres import graph_runs as pg_runs
         from services.job_enqueue import enqueue_build_routes
 
@@ -141,9 +139,6 @@ class RunManager:
             "trip_id": trip_id,
             "user_id": int(trip["user_id"]),
             "scope": scope,
-            "llm_api_key": llm_config.api_key,
-            "llm_base_url": llm_config.base_url,
-            "llm_model": llm_config.model,
         }
         try:
             enqueue_build_routes(graph_run_id=run_uuid, payload=payload)
