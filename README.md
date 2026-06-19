@@ -130,6 +130,23 @@ docker compose run --rm api python -m eval --suite smoke
 
 Скрипт `ensure_env_file.sh` и `test -f .env || cp …` **не трогают** существующий `.env`.
 
+#### Postgres + Redis (миграция SaaS, infra)
+
+API **по умолчанию** всё ещё на SQLite (`DATABASE_PATH`). Postgres — параллельный контур для миграции.
+
+```bash
+# Инфра (порты по умолчанию 5433 / 6380 — чтобы не конфликтовать с LangFuse)
+docker compose --profile infra up -d postgres redis
+
+export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5433/tourist
+alembic upgrade head
+
+# Проверка схемы
+python3 -m unittest tests.test_postgres_schema -v
+```
+
+Бэкап prod (cron на VPS): [`scripts/pg_backup.sh`](scripts/pg_backup.sh).
+
 ### Тесты и eval (без полного прогона агента)
 
 Запускайте **по одной строке** (не копируйте `#` в конце строки — shell воспримет это как аргумент).
@@ -166,7 +183,9 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openrouter.ai/api/v1` |
 | `LLM_MODEL` | Нет | Slug модели на OpenRouter. По умолчанию `openai/gpt-4.1-mini` (см. [Модели LLM](#модели-llm)) |
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
-| `DATABASE_PATH` | Нет | SQLite, по умолчанию `data/trips.db` |
+| `DATABASE_PATH` | Нет | SQLite (legacy API), по умолчанию `data/trips.db` |
+| `DATABASE_URL` | Нет | Postgres (`postgresql+psycopg://…`); при задании — Alembic/тесты PG |
+| `REDIS_URL` | Нет | Redis для очереди и rate limits (следующие этапы миграции) |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
 | `LANGCHAIN_PROJECT` | Нет | Имя проекта (по умолчанию `tourist-assistant`) |
@@ -299,7 +318,9 @@ python3 scripts/render_graph.py
 | Система | Назначение |
 |---------|------------|
 | **OpenRouter** | Researcher, writer, опционально LLM-judge в eval (`openai/gpt-4.1-mini` через Azure) |
-| **SQLite** (`DATABASE_PATH`) | `trips`, `trip_preferences`, `user_profile`, `itinerary_versions`, `tool_runs` |
+| **SQLite** (`DATABASE_PATH`) | Legacy API: поездки, программы (до переключения на PG) |
+| **PostgreSQL** (`DATABASE_URL`) | Целевая SaaS-БД: Alembic, `graph_runs`, audit, usage (миграция) |
+| **Redis** (`REDIS_URL`) | Очередь worker, locks, rate limits (infra готова в compose) |
 | **Tavily API** (опционально) | Веб-поиск с ответом-сводкой |
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
 | **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
@@ -409,6 +430,12 @@ tourist-assistant/
 ├── docs/openapi.json       # OpenAPI 3 (scripts/export_openapi.py)
 ├── services/               # TripService, RunManager, city_fact_job
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query
+├── alembic/                # Миграции Postgres (Alembic)
+├── db/
+│   ├── models/             # SQLAlchemy models (PG)
+│   ├── session.py          # DATABASE_URL engine
+│   ├── connection.py       # SQLite (legacy API)
+│   └── repository.py
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
 │   ├── schemas.py          # FinalProgram, ProgramDraft, RouteMaterialsInput

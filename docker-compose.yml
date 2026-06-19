@@ -1,18 +1,50 @@
-# Туристический ассистент: FastAPI + React.
+# Туристический ассистент: FastAPI + React + Postgres (infra) + Redis.
 #
-# Подготовка (НЕ перезаписывайте существующий .env!):
-#   test -f .env || cp .env.example .env
-#   # затем отредактируйте .env: JWT_SECRET, SETTINGS_ENCRYPTION_KEY и др.
-#
-# Сборка и запуск:
-#   docker compose build
+# Локально (SQLite, как раньше):
 #   docker compose up api web
 #
-# Тесты / eval:
-#   docker compose run --rm api python -m unittest discover -s tests -v
-#   docker compose run --rm api python -m eval --suite smoke
+# Postgres + Redis (миграция SaaS, API пока на SQLite если DATABASE_URL пуст):
+#   docker compose up postgres redis
+#   export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5432/tourist
+#   alembic upgrade head
+#
+# Полный стек с PG (когда API переключён на DATABASE_URL):
+#   docker compose --profile pg up
 
 services:
+  postgres:
+    profiles: ["pg", "infra"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tourist
+      POSTGRES_PASSWORD: tourist
+      POSTGRES_DB: tourist
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tourist -d tourist"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    profiles: ["pg", "infra"]
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   api:
     build:
       context: .
@@ -40,3 +72,7 @@ services:
       - "5173:80"
     depends_on:
       - api
+
+volumes:
+  pg_data:
+  redis_data:
