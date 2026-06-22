@@ -107,6 +107,26 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  api-node:
+    profiles: ["pg", "node"]
+    build:
+      context: ./api-node
+      dockerfile: Dockerfile
+    ports:
+      - "${API_NODE_PORT:-8001}:8001"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://tourist:tourist@postgres:5432/tourist
+      REDIS_URL: redis://redis:6379/0
+      API_NODE_PORT: "8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pg_data:
   redis_data:

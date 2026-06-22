@@ -151,14 +151,31 @@ python3 -m unittest tests.test_db_postgres -v
 export REDIS_URL=redis://localhost:6380/0
 python3 -m unittest tests.test_graph_runs -v
 
-# Worker (очередь RQ): при DATABASE_URL + REDIS_URL API ставит задачи в worker
+# Worker (JSON Redis queue): при DATABASE_URL + REDIS_URL API ставит задачи в worker
 # Читает .env (REDIS_URL, DATABASE_URL) как и API
 python -m worker
-# macOS: worker автоматически использует SimpleWorker (без fork)
 # или docker compose --profile pg up worker
 ```
 
-При `DATABASE_URL` и `REDIS_URL` фоновые прогоны идут через **RQ** (`worker/tasks.py`, таблица `graph_runs`); без них — потоки в процессе API (SQLite).
+При `DATABASE_URL` и `REDIS_URL` фоновые прогоны идут через **JSON Redis queue** (`tourist:queue:*`, `worker/tasks.py`, таблица `graph_runs`); без них — потоки в процессе API (SQLite).
+
+#### Node.js API (миграция HTTP-слоя)
+
+Параллельный REST API на **Fastify + TypeScript** (`api-node/`): те же эндпоинты `/api/*`, Postgres, Redis, совместимые JWT и Fernet BYOK.
+
+```bash
+# Требуется Postgres + Redis (как выше)
+export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5433/tourist
+export REDIS_URL=redis://localhost:6380/0
+
+cd api-node
+npm install
+npm run dev          # порт 8001 (API_NODE_PORT)
+```
+
+Переключить фронт на Node API: в `web/vite.config.ts` proxy target `http://127.0.0.1:8001` или `API_NODE_PORT=8001 npm run dev` (см. ниже).
+
+Тесты Node: `cd api-node && npm test`. Python worker **без изменений** в задачах — только потребитель очереди.
 
 #### Полный стек Postgres (Docker, profile `pg`)
 
@@ -458,11 +475,12 @@ python3 -m scripts.metrics_report --trip-id 12
 
 ```
 tourist-assistant/
-├── api/                    # FastAPI REST для веб-UI
+├── api/                    # FastAPI REST (legacy, SQLite или Postgres)
 │   └── auth/               # register, login, Google OAuth, BYOK crypto
+├── api-node/               # Node.js FastAPI-замена (Fastify, Postgres + Redis)
 ├── docs/openapi.json       # OpenAPI 3 (scripts/export_openapi.py)
-├── services/               # TripService, RunManager, job_enqueue
-├── worker/                 # RQ worker (python -m worker)
+├── services/               # TripService, RunManager, json_job_queue
+├── worker/                 # Python worker (JSON Redis queue, python -m worker)
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query
 ├── alembic/                # Миграции Postgres (Alembic)
 ├── db/

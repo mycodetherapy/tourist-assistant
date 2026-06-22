@@ -34,7 +34,7 @@ def _warn_if_no_rq_workers() -> None:
         import logging
 
         logging.getLogger("uvicorn.error").warning(
-            "REDIS_URL задан, но RQ worker не запущен — прогоны зависнут в queued. "
+            "REDIS_URL задан, но worker не запущен — прогоны зависнут в queued. "
             "Запустите: python -m worker"
         )
 

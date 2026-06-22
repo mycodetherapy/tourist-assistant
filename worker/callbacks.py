@@ -57,3 +57,44 @@ def on_graph_job_failure(
     )
     if trip_id is not None:
         pg_runs.release_trip_build_lock(trip_id)
+
+
+def on_json_job_failure(
+    *,
+    task: str,
+    graph_run_id: str,
+    payload: dict[str, Any],
+    exc: BaseException,
+) -> None:
+    """Синхронизирует graph_runs при падении JSON worker loop."""
+    if not is_postgres_enabled():
+        return
+    try:
+        run_uuid = uuid.UUID(str(graph_run_id))
+    except (ValueError, TypeError):
+        return
+
+    from db.postgres import graph_runs as pg_runs
+
+    error = format_runtime_error(exc)
+    trip_id_raw = payload.get("trip_id")
+    trip_id = int(trip_id_raw) if trip_id_raw is not None else None
+
+    if task == "city_fact":
+        version_id = payload.get("version_id")
+        if version_id is not None:
+            from db.repository import patch_itinerary_program
+
+            patch_itinerary_program(int(version_id), {"city_fact_status": "failed"})
+        pg_runs.update_graph_run(run_uuid, city_fact_status="failed")
+        return
+
+    pg_runs.update_graph_run(
+        run_uuid,
+        status="failed",
+        error=error,
+        finished_at=utc_now(),
+        city_fact_status="failed",
+    )
+    if trip_id is not None:
+        pg_runs.release_trip_build_lock(trip_id)

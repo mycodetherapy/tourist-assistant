@@ -24,7 +24,13 @@ def get_redis() -> redis.Redis:
     url = get_redis_url()
     if not url:
         raise RuntimeError("REDIS_URL is not set")
-    return redis.from_url(url, decode_responses=False)
+    # socket_timeout=None — BLPOP в worker ждёт до timeout_sec без обрыва сокета
+    return redis.from_url(
+        url,
+        decode_responses=False,
+        socket_timeout=None,
+        socket_connect_timeout=10,
+    )
 
 
 def clear_redis_cache() -> None:
