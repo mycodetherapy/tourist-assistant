@@ -57,6 +57,29 @@ export async function getUserById(userId: number): Promise<User | null> {
   };
 }
 
+export async function getUserByGoogleSub(googleSub: string): Promise<User | null> {
+  const { rows } = await query<User>(
+    `SELECT id, email, password_hash, google_sub, created_at, updated_at
+     FROM users WHERE google_sub = $1`,
+    [googleSub],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    ...row,
+    created_at: toIso(row.created_at),
+    updated_at: toIso(row.updated_at),
+  };
+}
+
+export async function linkGoogleSub(userId: number, googleSub: string): Promise<void> {
+  const now = new Date();
+  await query(
+    `UPDATE users SET google_sub = $1, updated_at = $2 WHERE id = $3`,
+    [googleSub, now, userId],
+  );
+}
+
 export async function getUserByEmail(email: string): Promise<User | null> {
   const normalized = email.trim().toLowerCase();
   const { rows } = await query<User>(

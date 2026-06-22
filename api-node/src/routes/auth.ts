@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { config, googleOAuthConfigured } from "../config.js";
 import {
   AuthError,
   getLlmSettingsView,
@@ -8,6 +9,14 @@ import {
   removeLlmKey,
   saveLlmSettings,
 } from "../services/auth.js";
+import {
+  buildGoogleAuthorizeUrl,
+  exchangeGoogleCode,
+  loginOrLinkGoogle,
+  oauthCookieNames,
+  resolveFrontendUrl,
+  verifyOAuthState,
+} from "../services/googleOAuth.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const registerSchema = z.object({
@@ -81,6 +90,84 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/api/auth/logout", async (_request, reply) => {
     return reply.code(204).send();
+  });
+
+  app.get("/api/auth/google", async (request, reply) => {
+    if (!googleOAuthConfigured()) {
+      return reply.code(503).send({ detail: "Google OAuth не настроен" });
+    }
+    const frontend =
+      typeof request.query === "object" &&
+      request.query !== null &&
+      "frontend" in request.query
+        ? String((request.query as { frontend?: string }).frontend ?? "")
+        : "";
+    const frontendUrl = resolveFrontendUrl(frontend, undefined);
+    try {
+      const { url, state } = buildGoogleAuthorizeUrl(frontendUrl);
+      const cookies = oauthCookieNames();
+      reply
+        .setCookie(cookies.state, state, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+          maxAge: 600,
+          secure: config.port === 443,
+        })
+        .setCookie(cookies.frontend, frontendUrl, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+          maxAge: 600,
+          secure: config.port === 443,
+        });
+      return reply.redirect(url);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        return reply.code(err.statusCode).send({ detail: err.message });
+      }
+      throw err;
+    }
+  });
+
+  app.get("/api/auth/google/callback", async (request, reply) => {
+    if (!googleOAuthConfigured()) {
+      return reply.code(503).send({ detail: "Google OAuth не настроен" });
+    }
+    const query = request.query as {
+      code?: string;
+      state?: string;
+      frontend?: string;
+    };
+    const cookies = oauthCookieNames();
+    const cookieState = request.cookies?.[cookies.state];
+    if (!verifyOAuthState(query.state) || query.state !== cookieState) {
+      return reply.code(400).send({ detail: "Ошибка авторизации Google" });
+    }
+    if (!query.code) {
+      return reply.code(400).send({ detail: "Ошибка авторизации Google" });
+    }
+    try {
+      const profile = await exchangeGoogleCode(query.code);
+      const { token } = await loginOrLinkGoogle({
+        googleSub: profile.sub,
+        email: profile.email,
+      });
+      const frontend = resolveFrontendUrl(
+        query.frontend,
+        request.cookies?.[cookies.frontend],
+      );
+      reply
+        .clearCookie(cookies.state, { path: "/" })
+        .clearCookie(cookies.frontend, { path: "/" });
+      const redirectUrl = `${frontend}/auth/callback?token=${encodeURIComponent(token)}`;
+      return reply.redirect(redirectUrl);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        return reply.code(err.statusCode).send({ detail: err.message });
+      }
+      return reply.code(400).send({ detail: "Ошибка авторизации Google" });
+    }
   });
 }
 

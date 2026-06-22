@@ -1,9 +1,9 @@
-# Туристический ассистент: FastAPI + React + Postgres (infra) + Redis.
+# Туристический ассистент: Node API + React + Postgres + Redis.
 #
-# SQLite (локально, по умолчанию):
-#   docker compose up api web
+# SQLite + FastAPI (legacy):
+#   docker compose --profile legacy up api web
 #
-# Полный SaaS-стек (Postgres + Redis + worker + API):
+# Полный SaaS-стек (Postgres + Redis + worker + Node API):
 #   cp .env.example .env
 #   # в .env раскомментируйте для Docker-сети:
 #   # DATABASE_URL=postgresql+psycopg://tourist:tourist@postgres:5432/tourist
@@ -50,6 +50,7 @@ services:
     restart: unless-stopped
 
   api:
+    profiles: ["legacy"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -79,13 +80,28 @@ services:
         required: false
 
   web:
+    profiles: ["legacy"]
     build:
       context: ./web
       dockerfile: Dockerfile
+      args:
+        NGINX_CONF: nginx.conf
     ports:
       - "5173:80"
     depends_on:
       - api
+
+  web-pg:
+    profiles: ["pg"]
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NGINX_CONF: nginx.pg.conf
+    ports:
+      - "5173:80"
+    depends_on:
+      - api-node
 
   worker:
     profiles: ["pg"]
@@ -93,7 +109,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: tourist-assistant:latest
-    command: python -m worker
+    command: sh -c "alembic upgrade head && python -m worker"
     env_file:
       - .env
     environment:
@@ -108,7 +124,7 @@ services:
     restart: unless-stopped
 
   api-node:
-    profiles: ["pg", "node"]
+    profiles: ["pg"]
     build:
       context: ./api-node
       dockerfile: Dockerfile
@@ -120,6 +136,8 @@ services:
       DATABASE_URL: postgresql+psycopg://tourist:tourist@postgres:5432/tourist
       REDIS_URL: redis://redis:6379/0
       API_NODE_PORT: "8001"
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8001/api/auth/google/callback}
     depends_on:
       postgres:
         condition: service_healthy

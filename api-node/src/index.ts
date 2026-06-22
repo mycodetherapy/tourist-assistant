@@ -1,6 +1,9 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import "./loadEnv.js";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import { config } from "./config.js";
 import { closePool } from "./db/pool.js";
@@ -18,6 +21,11 @@ export async function buildApp() {
   await app.register(cors, {
     origin: config.corsOrigins.length ? config.corsOrigins : true,
     credentials: true,
+  });
+
+  await app.register(cookie, {
+    secret: config.jwtSecret(),
+    hook: "onRequest",
   });
 
   await app.register(rateLimit, {
@@ -56,7 +64,13 @@ async function main() {
   await app.listen({ port: config.port, host: "0.0.0.0" });
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+const isDirectRun =
+  Boolean(process.argv[1]) &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1]!)).href;
+
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

@@ -30,7 +30,7 @@ test -f .env || cp .env.example .env
 # JWT_SECRET, SETTINGS_ENCRYPTION_KEY — обязательны для API
 
 docker compose build
-docker compose up api web
+docker compose --profile legacy up api web
 ```
 
 UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/docs](http://localhost:8000/docs).
@@ -66,7 +66,7 @@ npm run dev
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
 5. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой».
 
-Без открытия портов: `cloudflared tunnel --url http://localhost:5173`. Через Docker: `docker compose up api web` → `http://<IP-Mac>:5173`.
+Без открытия портов: `cloudflared tunnel --url http://localhost:5173`. Через Docker: `docker compose --profile legacy up api web` → `http://<IP-Mac>:5173`.
 
 **Swagger (при запущенном API):**
 
@@ -114,7 +114,7 @@ cd tourist-assistant
 chmod 600 .env
 
 docker compose build api web
-docker compose up api web
+docker compose --profile legacy up api web
 ```
 
 UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health).
@@ -175,7 +175,9 @@ npm run dev          # порт 8001 (API_NODE_PORT)
 
 Переключить фронт на Node API: в `web/vite.config.ts` proxy target `http://127.0.0.1:8001` или `API_NODE_PORT=8001 npm run dev` (см. ниже).
 
-Тесты Node: `cd api-node && npm test`. Python worker **без изменений** в задачах — только потребитель очереди.
+Тесты Node: `cd api-node && npm test`. Интеграционные (нужен `DATABASE_URL`): `npm run test:integration`. Python worker **без изменений** в задачах — только потребитель очереди.
+
+Google OAuth в api-node: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (порт **8001**), `FRONTEND_URL`.
 
 #### Полный стек Postgres (Docker, profile `pg`)
 
@@ -189,10 +191,12 @@ API, worker, auth и CRUD переключаются на Postgres при `DATAB
 docker compose --profile pg up -d --build
 ```
 
-Сервисы: `postgres`, `redis`, `api` (entrypoint: `alembic upgrade head`), `worker`, `web`.  
-UI: [http://localhost:5173](http://localhost:5173), health: [http://localhost:8000/api/health](http://localhost:8000/api/health).
+Сервисы: `postgres`, `redis`, `api-node`, `worker` (Alembic + JSON worker), `web-pg`.  
+UI: [http://localhost:5173](http://localhost:5173), health: [http://localhost:8001/api/health](http://localhost:8001/api/health).
 
-Локально без Docker: `export DATABASE_URL=…` + `export REDIS_URL=…` + `uvicorn api.main:app` + `python -m worker`.
+Legacy SQLite + FastAPI: `docker compose --profile legacy up api web`.
+
+Локально без Docker: `export DATABASE_URL=…` + `export REDIS_URL=…` + `cd api-node && npm run dev` + `python -m worker`.
 
 Бэкап prod (cron на VPS): [`scripts/pg_backup.sh`](scripts/pg_backup.sh).
 

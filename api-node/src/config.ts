@@ -38,7 +38,23 @@ export const config = {
   ),
   graphRunStaleSec: Number(process.env.GRAPH_RUN_STALE_SEC ?? 600),
   yandexMapsApiKey: (process.env.YANDEX_MAPS_API_KEY ?? "").trim(),
+  googleClientId: (process.env.GOOGLE_CLIENT_ID ?? "").trim(),
+  googleClientSecret: (process.env.GOOGLE_CLIENT_SECRET ?? "").trim(),
+  googleRedirectUri: () => {
+    const raw =
+      process.env.GOOGLE_REDIRECT_URI?.trim() ||
+      `http://localhost:${config.port}/api/auth/google/callback`;
+    return raw;
+  },
+  frontendUrl: (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(
+    /\/$/,
+    "",
+  ),
 };
+
+export function googleOAuthConfigured(): boolean {
+  return Boolean(config.googleClientId && config.googleClientSecret);
+}
 
 export function isPlaceholderSecret(value: string): boolean {
   const v = value.trim().toLowerCase();
