@@ -6,6 +6,10 @@ import os
 import platform
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from rq import SimpleWorker, Worker
 
 from db.redis_client import get_redis
@@ -21,6 +25,13 @@ def _worker_class():
 
 
 def main() -> None:
+    if not os.getenv("REDIS_URL", "").strip():
+        print(
+            "REDIS_URL не задан. Добавьте в .env, например:\n"
+            "  REDIS_URL=redis://localhost:6380/0",
+            file=sys.stderr,
+        )
+        return 1
     conn = get_redis()
     queues = os.getenv("RQ_QUEUES", "build_routes,city_fact,default").split(",")
     queues = [q.strip() for q in queues if q.strip()]

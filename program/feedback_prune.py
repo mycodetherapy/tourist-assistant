@@ -30,25 +30,31 @@ def find_stale_feedback_keys(
     *,
     existing: list[tuple[str, str]],
     trip_id: int | None = None,
+    route_stop_votes: dict[str, int] | None = None,
     reset_route_stops: bool = False,
 ) -> list[tuple[str, str]]:
     """
     Пары (section, item_key) для удаления: пункт пересобран или исчез.
 
     existing — текущие оценки поездки: [(section, item_key), ...].
-    reset_route_stops — после пересборки маршрутов сбросить все оценки остановок.
-    """
+    reset_route_stops — сбросить лайки остановок (👎 на poi сохраняются как запрет).
+  """
     affected = affected_votable_sections(scope)
     if not affected or not existing:
         return []
 
     normalized = normalize_stored_program(program)
     parsed = parse_program_sections(normalized)
+    stop_votes = route_stop_votes or {}
     valid_by_section: dict[str, set[str]] = {}
     for section in affected:
         if section == "route_stops":
             if reset_route_stops:
-                valid_by_section[section] = set()
+                valid_by_section[section] = {
+                    key
+                    for key, vote in stop_votes.items()
+                    if vote == -1
+                }
             else:
                 valid_by_section[section] = route_stop_keys_for_program(normalized)
             continue
@@ -60,6 +66,8 @@ def find_stale_feedback_keys(
     stale: list[tuple[str, str]] = []
     for section, item_key in existing:
         if section not in affected:
+            continue
+        if section == "route_stops" and stop_votes.get(item_key) == -1:
             continue
         if item_key not in valid_by_section.get(section, set()):
             stale.append((section, item_key))

@@ -268,21 +268,24 @@ def rebuild_poi_preferences(
     trip_id: int,
     materials: RouteMaterials | None,
     preserved: list[TripRouteCase],
+    *,
+    disliked_routes: list[TripRouteCase] | None = None,
 ) -> tuple[set[str], set[str], set[str]]:
     """preferred, banned (hard), disliked (raw 👎 stops) для LLM и пост-процессора."""
     poi_liked, poi_disliked = load_poi_stop_vote_sets(trip_id)
-    expanded_ban: set[str] = set(poi_disliked)
+    seed_disliked = set(poi_disliked) | collect_leisure_poi_ids(disliked_routes or [])
+    expanded_ban: set[str] = set(seed_disliked)
     if materials is not None:
         expanded_ban = expand_similar_banned_poi(
-            materials.leisure_points, poi_disliked
+            materials.leisure_points, seed_disliked
         )
     banned = expanded_ban | collect_leisure_poi_ids(preserved)
     preferred = set(poi_liked) - banned
     if materials is not None:
         pool = {p.poi_id for p in materials.leisure_points}
         preferred &= pool
-        banned &= pool
-        expanded_ban &= pool
+        # banned не режем по пулу: дизлайкнутые poi_id должны исключаться даже если
+        # кэш materials устарел или POI выпал из leisure_points.
     return preferred, banned, poi_disliked
 
 
@@ -300,14 +303,24 @@ def expand_similar_banned_poi(
         for poi in leisure:
             if poi.poi_id in banned:
                 continue
-            if poi.tag != anchor.tag:
-                continue
-            if route_name_key(poi.name) == akey:
+            if poi.tag == anchor.tag and route_name_key(poi.name) == akey:
                 banned.add(poi.poi_id)
                 continue
             if _names_share_theme(anchor.name, poi.name):
                 banned.add(poi.poi_id)
     return banned
+
+
+def _name_tokens(name: str) -> set[str]:
+    """Значимые токены названия (для связи «Собор … Ушакова» и «Памятник Ушакову»)."""
+    tokens: set[str] = set()
+    for word in re.findall(r"[а-яёa-z]{4,}", name.lower()):
+        tokens.add(word)
+        if len(word) >= 6 and word[-1] in "ауюыиь":
+            tokens.add(word[:-1])
+        if len(word) >= 7 and word.endswith(("ова", "ева", "ина", "ова", "ёва")):
+            tokens.add(word[:-2])
+    return tokens
 
 
 def _names_share_theme(a: str, b: str) -> bool:
@@ -316,6 +329,8 @@ def _names_share_theme(a: str, b: str) -> bool:
         hits = [kw for kw in keywords if kw in al or kw in bl]
         if len(hits) >= 2 or (hits and any(kw in al and kw in bl for kw in keywords)):
             return True
+    if _name_tokens(a) & _name_tokens(b):
+        return True
     shared = {w for w in al.split() if len(w) > 4} & {w for w in bl.split() if len(w) > 4}
     return len(shared) >= 1
 
@@ -408,7 +423,7 @@ def build_route_feedback_context(
     materials = load_route_materials_for_trip(trip_id)
     preserved_for_ban = liked if rebuild_scope == "routes" else []
     preferred, banned, poi_disliked = rebuild_poi_preferences(
-        trip_id, materials, preserved_for_ban
+        trip_id, materials, preserved_for_ban, disliked_routes=disliked
     )
     preserve_liked = rebuild_scope == "routes" and bool(liked)
     forbidden_ids = sorted(

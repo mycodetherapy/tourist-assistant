@@ -1778,7 +1778,14 @@ def build_hybrid_route_program(
         avoid_extra=avoid_extra,
     )
     program = RouteProgram(cases=_cases_from_indices())
-    return finalize_route_program(program, materials, transport=transport, pace=pace)
+    return finalize_route_program(
+        program,
+        materials,
+        transport=transport,
+        pace=pace,
+        banned_poi_ids=avoid_poi_ids,
+        prefer_poi_ids=prefer_poi_ids,
+    )
 
 
 def build_fallback_route_program(
@@ -1827,7 +1834,14 @@ def build_fallback_route_program(
             for case_id in ("A", "B", "C")
         ]
     )
-    return finalize_route_program(program, materials, transport="walking", pace=pace)
+    return finalize_route_program(
+        program,
+        materials,
+        transport="walking",
+        pace=pace,
+        banned_poi_ids=avoid_poi_ids,
+        prefer_poi_ids=prefer_poi_ids,
+    )
 
 
 def leisure_overlap_ratio(a: TripRouteCase, b: TripRouteCase) -> float:

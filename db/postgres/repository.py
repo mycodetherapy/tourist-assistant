@@ -259,11 +259,13 @@ def prune_stale_item_feedback(
     from program.feedback_prune import find_stale_feedback_keys
 
     existing = list_item_feedback_pairs(trip_id)
+    route_stop_votes = list_item_feedback_by_section(trip_id, "route_stops")
     stale = find_stale_feedback_keys(
         program,
         scope,
         existing=existing,
         trip_id=trip_id,
+        route_stop_votes=route_stop_votes,
         reset_route_stops=reset_route_stops,
     )
     for section, item_key in stale:

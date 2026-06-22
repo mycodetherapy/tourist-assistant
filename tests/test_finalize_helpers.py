@@ -19,38 +19,63 @@ from agents.finalize_helpers import (
 )
 
 
-def _materials_payload() -> dict:
+def _materials_payload(*, extra: list[PoiPoint] | None = None) -> dict:
+    base = [
+        PoiPoint(
+            poi_id="l1",
+            tag="museums",
+            name="Музей",
+            coordinates=GeoPoint(lon=49.1, lat=55.8),
+            maps_url="https://yandex.ru/maps/org/l1",
+        ),
+        PoiPoint(
+            poi_id="l2",
+            tag="landmarks",
+            name="Площадь",
+            coordinates=GeoPoint(lon=49.11, lat=55.81),
+            maps_url="https://yandex.ru/maps/org/l2",
+        ),
+        PoiPoint(
+            poi_id="l3",
+            tag="parks",
+            name="Парк",
+            coordinates=GeoPoint(lon=49.12, lat=55.82),
+            maps_url="https://yandex.ru/maps/org/l3",
+        ),
+        PoiPoint(
+            poi_id="l4",
+            tag="landmarks",
+            name="Набережная",
+            coordinates=GeoPoint(lon=49.13, lat=55.83),
+            maps_url="https://yandex.ru/maps/org/l4",
+        ),
+    ]
+    if extra:
+        base.extend(extra)
     materials = RouteMaterials(
         city="Казань",
         dates="июль",
         provider="fallback",
-        leisure_points=[
-            PoiPoint(
-                poi_id="l1",
-                tag="museums",
-                name="Музей",
-                coordinates=GeoPoint(lon=49.1, lat=55.8),
-                maps_url="https://yandex.ru/maps/org/l1",
-            ),
-            PoiPoint(
-                poi_id="l2",
-                tag="landmarks",
-                name="Площадь",
-                coordinates=GeoPoint(lon=49.11, lat=55.81),
-                maps_url="https://yandex.ru/maps/org/l2",
-            ),
-            PoiPoint(
-                poi_id="l3",
-                tag="parks",
-                name="Парк",
-                coordinates=GeoPoint(lon=49.12, lat=55.82),
-                maps_url="https://yandex.ru/maps/org/l3",
-            ),
-        ],
+        leisure_points=base,
         dining_options=[],
     )
     return {
         "materials": materials.model_dump(),
+        "materials_digest": "Музей, Площадь, Парк, Набережная",
+        "leisure_count": len(base),
+        "dining_count": 0,
+    }
+
+
+def _materials_payload_legacy() -> dict:
+    """Совместимость: 3 POI как в старых тестах."""
+    payload = _materials_payload()
+    materials = RouteMaterials.model_validate(payload["materials"])
+    trimmed = materials.model_copy(
+        update={"leisure_points": materials.leisure_points[:3]}
+    )
+    return {
+        "materials": trimmed.model_dump(),
         "materials_digest": "Музей, Площадь, Парк",
         "leisure_count": 3,
         "dining_count": 0,
@@ -146,7 +171,7 @@ class TestFinalizeHelpers(unittest.TestCase):
         from agents.route_postprocess import build_fallback_route_program
         from models.routes import RouteProgram, RouteStop, TripRouteCase
 
-        materials = RouteMaterials.model_validate(_materials_payload()["materials"])
+        materials = RouteMaterials.model_validate(_materials_payload_legacy()["materials"])
         fallback = build_fallback_route_program(materials)
         draft = RouteProgram(
             cases=[
@@ -165,7 +190,7 @@ class TestFinalizeHelpers(unittest.TestCase):
         )
         messages = [
             ToolMessage(
-                content=json.dumps(_materials_payload(), ensure_ascii=False),
+                content=json.dumps(_materials_payload_legacy(), ensure_ascii=False),
                 tool_call_id="m",
                 name="search_route_materials",
             ),
@@ -174,7 +199,72 @@ class TestFinalizeHelpers(unittest.TestCase):
             messages, draft.model_dump(), base_program=None, transport="walking"
         )
         a_ids = [s.poi_id for s in program.cases[0].stops if s.kind == "leisure" and s.poi_id]
-        self.assertEqual(a_ids[0], "l2")
+        self.assertIn("l2", a_ids)
+
+    def test_resolve_excludes_banned_stops_with_maps(self) -> None:
+        from agents.route_postprocess import build_hybrid_route_program
+        from models.routes import RouteProgram, RouteStop, TripRouteCase
+
+        materials = RouteMaterials.model_validate(_materials_payload()["materials"])
+        draft = RouteProgram(
+            cases=[
+                TripRouteCase(
+                    case_id="A",
+                    title="A",
+                    summary="",
+                    stops=[
+                        RouteStop(order=1, kind="leisure", poi_id="l2", narrative=""),
+                        RouteStop(order=2, kind="leisure", poi_id="l1", narrative=""),
+                        RouteStop(order=3, kind="leisure", poi_id="l3", narrative=""),
+                    ],
+                ),
+                TripRouteCase(
+                    case_id="B",
+                    title="B",
+                    summary="",
+                    stops=[
+                        RouteStop(order=1, kind="leisure", poi_id="l2", narrative=""),
+                        RouteStop(order=2, kind="leisure", poi_id="l4", narrative=""),
+                    ],
+                ),
+                TripRouteCase(
+                    case_id="C",
+                    title="C",
+                    summary="",
+                    stops=[
+                        RouteStop(order=1, kind="leisure", poi_id="l1", narrative=""),
+                        RouteStop(order=2, kind="leisure", poi_id="l4", narrative=""),
+                        RouteStop(order=3, kind="leisure", poi_id="l3", narrative=""),
+                    ],
+                ),
+            ]
+        )
+        hybrid = build_hybrid_route_program(
+            materials, draft, avoid_poi_ids={"l2"}
+        )
+        self.assertTrue(all(c.maps_route_url for c in hybrid.cases))
+
+        messages = [
+            ToolMessage(
+                content=json.dumps(_materials_payload(), ensure_ascii=False),
+                tool_call_id="m",
+                name="search_route_materials",
+            ),
+        ]
+        program, _ = resolve_routes_program(
+            messages,
+            draft.model_dump(),
+            base_program=None,
+            transport="walking",
+            route_feedback_snapshot={"banned_poi_ids": ["l2"]},
+        )
+        all_poi = {
+            s.poi_id
+            for case in program.cases
+            for s in case.stops
+            if s.kind == "leisure" and s.poi_id
+        }
+        self.assertNotIn("l2", all_poi)
 
 
 if __name__ == "__main__":

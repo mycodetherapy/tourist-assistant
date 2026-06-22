@@ -5,8 +5,7 @@ from __future__ import annotations
 import os
 import unittest
 
-from db import create_trip, init_db, save_itinerary_version
-from db.repository import list_item_feedback_by_section
+from db.sqlite import repository as db_sqlite
 from models.routes import GeoPoint, PoiPoint
 from program.feedback_prune import find_stale_feedback_keys
 from program.item_key import make_route_stop_key
@@ -17,20 +16,22 @@ from program.route_feedback import (
 )
 from program.route_stops import collect_route_stop_poi_ids
 from services.trip_service import TripService
+from tests.db_test_helpers import use_sqlite_db
 from tests.test_item_feedback import _sample_routes_program
 
 
 class TestRouteStopFeedback(unittest.TestCase):
     def setUp(self) -> None:
         self._db_path = "/tmp/test_route_stop_feedback.db"
-        os.environ["DATABASE_PATH"] = self._db_path
-        if os.path.exists(self._db_path):
-            os.remove(self._db_path)
-        init_db()
-        self.trip_id = create_trip("Казань", "июль", "Москва", "тест")
+        self._backend = use_sqlite_db(self._db_path)
+        self._backend.__enter__()
+        self.trip_id = db_sqlite.create_trip("Казань", "июль", "Москва", "тест")
         self.program = _sample_routes_program(["A", "B", "C"])
-        save_itinerary_version(self.trip_id, self.program, scope="full")
+        db_sqlite.save_itinerary_version(self.trip_id, self.program, scope="full")
         self.service = TripService()
+
+    def tearDown(self) -> None:
+        self._backend.__exit__(None, None, None)
 
     def test_vote_stop_like_and_unlike(self) -> None:
         pois = collect_route_stop_poi_ids(self.program)
@@ -71,27 +72,29 @@ class TestRouteStopFeedback(unittest.TestCase):
         self.assertIn(poi_id, banned)
         self.assertNotIn(poi_id, preferred)
 
-    def test_route_stops_reset_after_routes_rebuild(self) -> None:
+    def test_route_stops_dislikes_persist_after_routes_rebuild(self) -> None:
         pois = collect_route_stop_poi_ids(self.program)
         poi_id = next(iter(pois))
         self.service.set_item_feedback(
             self.trip_id,
             section="route_stops",
             item_key=make_route_stop_key(poi_id),
-            vote=1,
+            vote=-1,
         )
-        liked, _ = load_poi_stop_vote_sets(self.trip_id)
-        self.assertIn(poi_id, liked)
+        _, disliked = load_poi_stop_vote_sets(self.trip_id)
+        self.assertIn(poi_id, disliked)
 
         new_program = _sample_routes_program(["N-A", "N-B", "N-C"])
-        save_itinerary_version(self.trip_id, new_program, scope="routes")
+        db_sqlite.save_itinerary_version(self.trip_id, new_program, scope="routes")
 
-        liked, disliked = load_poi_stop_vote_sets(self.trip_id)
-        self.assertEqual(liked, set())
-        self.assertEqual(disliked, set())
-        self.assertEqual(list_item_feedback_by_section(self.trip_id, "route_stops"), {})
+        _, disliked = load_poi_stop_vote_sets(self.trip_id)
+        self.assertIn(poi_id, disliked)
+        self.assertEqual(
+            db_sqlite.list_item_feedback_by_section(self.trip_id, "route_stops"),
+            {make_route_stop_key(poi_id): -1},
+        )
 
-    def test_expand_similar_banned_poi(self) -> None:
+    def test_expand_similar_banned_poi_same_tag(self) -> None:
         leisure = [
             PoiPoint(
                 poi_id="a",
@@ -120,7 +123,36 @@ class TestRouteStopFeedback(unittest.TestCase):
         self.assertIn("b", banned)
         self.assertNotIn("c", banned)
 
-    def test_stale_route_stops_on_reset_flag(self) -> None:
+    def test_expand_similar_bans_ushakov_monument_with_cathedral(self) -> None:
+        leisure = [
+            PoiPoint(
+                poi_id="cathedral",
+                tag="temples",
+                name="Собор Святого Феодора Ушакова",
+                coordinates=GeoPoint(lon=45.0, lat=54.0),
+                maps_url="https://example.com/cathedral",
+            ),
+            PoiPoint(
+                poi_id="monument",
+                tag="monuments",
+                name="Памятник Ушакову (Саранск)",
+                coordinates=GeoPoint(lon=45.1, lat=54.1),
+                maps_url="https://example.com/monument",
+            ),
+            PoiPoint(
+                poi_id="park",
+                tag="parks",
+                name="Парк культуры",
+                coordinates=GeoPoint(lon=45.2, lat=54.2),
+                maps_url="https://example.com/park",
+            ),
+        ]
+        banned = expand_similar_banned_poi(leisure, {"cathedral"})
+        self.assertIn("cathedral", banned)
+        self.assertIn("monument", banned)
+        self.assertNotIn("park", banned)
+
+    def test_stale_route_stops_on_reset_clears_likes_keeps_dislikes(self) -> None:
         pois = collect_route_stop_poi_ids(self.program)
         poi_id = next(iter(pois))
         key = make_route_stop_key(poi_id)
@@ -135,8 +167,9 @@ class TestRouteStopFeedback(unittest.TestCase):
             "routes",
             existing=[("route_stops", key)],
             reset_route_stops=True,
+            route_stop_votes={key: -1},
         )
-        self.assertEqual(stale, [("route_stops", key)])
+        self.assertEqual(stale, [])
 
     def test_get_program_view_keeps_stop_votes(self) -> None:
         pois = collect_route_stop_poi_ids(self.program)

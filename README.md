@@ -93,7 +93,7 @@ npm run dev
 
 Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
-**Оценки пунктов (👍/👎):** для **вариантов маршрута и остановок** (блок «О городе» без голосования). Веб: клик → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` в `data/trips.db`.
+**Оценки пунктов (👍/👎):** для **вариантов маршрута и остановок** (блок «О городе» без голосования). Веб: клик → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` (SQLite или Postgres). **👎 на остановку** — жёсткий запрет `poi_id` при пересборке (дизлайк сохраняется между прогонами); похожие места (тот же мотив/имя, напр. собор и памятник Ушакова) тоже исключаются. **👎 на вариант маршрута** — мягкая подсказка LLM + бан остановок этого варианта.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -152,6 +152,7 @@ export REDIS_URL=redis://localhost:6380/0
 python3 -m unittest tests.test_graph_runs -v
 
 # Worker (очередь RQ): при DATABASE_URL + REDIS_URL API ставит задачи в worker
+# Читает .env (REDIS_URL, DATABASE_URL) как и API
 python -m worker
 # macOS: worker автоматически использует SimpleWorker (без fork)
 # или docker compose --profile pg up worker
@@ -394,6 +395,7 @@ python3 scripts/render_graph.py
 | **Одинаковые маршруты A/B/C** | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → retry `writer` |
 | **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
 | **Кольцевой маршрут** | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км |
+| **Дизлайк остановки и пересборка** | 👎 на `route_stops` не сбрасывается после rebuild; `banned_poi_ids` в snapshot + `enforce_route_poi_policy` исключают POI даже при готовых `maps_route_url` |
 
 ### Как понять, что агент работает хорошо?
 

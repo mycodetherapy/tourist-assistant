@@ -315,21 +315,21 @@ def resolve_routes_program(
     if program is None:
         program = RouteProgram(cases=[])
 
-    if _routes_need_maps_finalize(program):
-        if materials is None:
-            materials = load_route_materials(
-                messages, expected_city=expected_city, trip_id=trip_id
-            )
-        if materials is None and trip_id is not None:
-            from search.route_materials_store import ensure_route_materials_for_trip
+    if materials is None:
+        materials = load_route_materials(
+            messages, expected_city=expected_city, trip_id=trip_id
+        )
+    if materials is None and trip_id is not None:
+        from search.route_materials_store import ensure_route_materials_for_trip
 
-            materials = ensure_route_materials_for_trip(
-                int(trip_id),
-                city=expected_city or "",
-                dates=dates,
-                base_program=base_program,
-            )
-        if materials:
+        materials = ensure_route_materials_for_trip(
+            int(trip_id),
+            city=expected_city or "",
+            dates=dates,
+            base_program=base_program,
+        )
+    if materials:
+        if _routes_need_maps_finalize(program):
             program = finalize_route_program(
                 program,
                 materials,
@@ -338,15 +338,15 @@ def resolve_routes_program(
                 banned_poi_ids=banned_poi,
                 prefer_poi_ids=prefer_poi,
             )
-            if banned_poi or prefer_poi:
-                program = enforce_route_poi_policy(
-                    program,
-                    materials,
-                    banned_poi_ids=banned_poi,
-                    prefer_poi_ids=prefer_poi,
-                    transport=transport,
-                    pace=pace,
-                )
+        if banned_poi or prefer_poi:
+            program = enforce_route_poi_policy(
+                program,
+                materials,
+                banned_poi_ids=banned_poi,
+                prefer_poi_ids=prefer_poi,
+                transport=transport,
+                pace=pace,
+            )
 
     if preserved:
         program = merge_preserved_with_new_routes(preserved, program)
