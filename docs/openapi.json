@@ -2,1036 +2,118 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Туристический ассистент API",
-    "description": "REST API веб-интерфейса: multi-user SaaS, SQLite или Postgres (DATABASE_URL), асинхронная сборка LangGraph, BYOK OpenRouter.",
+    "description": "REST API веб-интерфейса: multi-user SaaS, Postgres, асинхронная сборка LangGraph (worker), BYOK OpenRouter.",
     "version": "2.0.0"
   },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT из POST /api/auth/login или /api/auth/register"
+      }
+    },
+    "schemas": {
+      "RegisterRequest": {
+        "$ref": "#/components/schemas/RegisterRequest"
+      },
+      "LoginRequest": {
+        "$ref": "#/components/schemas/LoginRequest"
+      },
+      "AuthResponse": {
+        "$ref": "#/components/schemas/AuthResponse"
+      },
+      "UserResponse": {
+        "$ref": "#/components/schemas/UserResponse"
+      },
+      "ErrorDetail": {
+        "$ref": "#/components/schemas/ErrorDetail"
+      },
+      "UpdateSettingsRequest": {
+        "$ref": "#/components/schemas/UpdateSettingsRequest"
+      },
+      "CreateTripRequest": {
+        "$ref": "#/components/schemas/CreateTripRequest"
+      },
+      "CreateTripResponse": {
+        "$ref": "#/components/schemas/CreateTripResponse"
+      },
+      "TripSummary": {
+        "$ref": "#/components/schemas/TripSummary"
+      },
+      "StartRunRequest": {
+        "$ref": "#/components/schemas/StartRunRequest"
+      },
+      "RunStatusResponse": {
+        "$ref": "#/components/schemas/RunStatusResponse"
+      },
+      "GeocodeRequest": {
+        "$ref": "#/components/schemas/GeocodeRequest"
+      },
+      "GeocodeResult": {
+        "$ref": "#/components/schemas/GeocodeResult"
+      },
+      "HealthResponse": {
+        "$ref": "#/components/schemas/HealthResponse"
+      },
+      "def-0": {
+        "$ref": "#/components/schemas/RegisterRequest"
+      },
+      "def-1": {
+        "$ref": "#/components/schemas/LoginRequest"
+      },
+      "def-2": {
+        "$ref": "#/components/schemas/AuthResponse"
+      },
+      "def-3": {
+        "$ref": "#/components/schemas/UserResponse"
+      },
+      "def-4": {
+        "$ref": "#/components/schemas/ErrorDetail"
+      },
+      "def-5": {
+        "$ref": "#/components/schemas/UpdateSettingsRequest"
+      },
+      "def-6": {
+        "$ref": "#/components/schemas/CreateTripRequest"
+      },
+      "def-7": {
+        "$ref": "#/components/schemas/CreateTripResponse"
+      },
+      "def-8": {
+        "$ref": "#/components/schemas/TripSummary"
+      },
+      "def-9": {
+        "$ref": "#/components/schemas/StartRunRequest"
+      },
+      "def-10": {
+        "$ref": "#/components/schemas/RunStatusResponse"
+      },
+      "def-11": {
+        "$ref": "#/components/schemas/GeocodeRequest"
+      },
+      "def-12": {
+        "$ref": "#/components/schemas/GeocodeResult"
+      },
+      "def-13": {
+        "$ref": "#/components/schemas/HealthResponse"
+      }
+    }
+  },
   "paths": {
-    "/api/auth/register": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Register",
-        "operationId": "register_api_auth_register_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/login": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Login",
-        "operationId": "login_api_auth_login_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/me": {
-      "get": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Me",
-        "operationId": "me_api_auth_me_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/auth/logout": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Logout",
-        "description": "JWT stateless — клиент удаляет токен.",
-        "operationId": "logout_api_auth_logout_post",
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          }
-        }
-      }
-    },
-    "/api/auth/google": {
-      "get": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Google Login",
-        "operationId": "google_login_api_auth_google_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/google/callback": {
-      "get": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Google Callback",
-        "operationId": "google_callback_api_auth_google_callback_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/trips": {
-      "get": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "List Trips",
-        "operationId": "list_trips_api_trips_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/TripSummaryResponse"
-                  },
-                  "type": "array",
-                  "title": "Response List Trips Api Trips Get"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Create Trip",
-        "operationId": "create_trip_api_trips_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTripRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateTripResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/trips/geocode": {
-      "post": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Geocode Query",
-        "description": "Геокодинг адреса (мастер новой поездки, city_hint обязателен).",
-        "operationId": "geocode_query_api_trips_geocode_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GeocodeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GeocodeResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/trips/reverse-geocode": {
-      "post": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Reverse Geocode Query",
-        "description": "Обратный геокодинг для мастера новой поездки.",
-        "operationId": "reverse_geocode_query_api_trips_reverse_geocode_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReverseGeocodeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReverseGeocodeResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/trips/{trip_id}": {
-      "delete": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Delete Trip",
-        "operationId": "delete_trip_api_trips__trip_id__delete",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Get Trip",
-        "operationId": "get_trip_api_trips__trip_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TripDetailResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/trips/{trip_id}/program": {
-      "get": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Get Program",
-        "operationId": "get_program_api_trips__trip_id__program_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProgramResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/trips/{trip_id}/preferences": {
-      "put": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Update Preferences",
-        "operationId": "update_preferences_api_trips__trip_id__preferences_put",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdatePreferencesRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TripPreferences"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Get Preferences",
-        "operationId": "get_preferences_api_trips__trip_id__preferences_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/TripPreferences"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "title": "Response Get Preferences Api Trips  Trip Id  Preferences Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/trips/{trip_id}/city-center": {
-      "get": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Get City Center",
-        "operationId": "get_city_center_api_trips__trip_id__city_center_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CityCenterResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/trips/{trip_id}/geocode": {
-      "post": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Geocode Address",
-        "operationId": "geocode_address_api_trips__trip_id__geocode_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GeocodeRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GeocodeResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/trips/{trip_id}/reverse-geocode": {
-      "post": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Reverse Geocode Address",
-        "operationId": "reverse_geocode_address_api_trips__trip_id__reverse_geocode_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReverseGeocodeRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReverseGeocodeResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/trips/{trip_id}/program/feedback": {
-      "put": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Set Program Feedback",
-        "operationId": "set_program_feedback_api_trips__trip_id__program_feedback_put",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ItemFeedbackRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProgramResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/trips/{trip_id}/runs": {
-      "post": {
-        "tags": [
-          "trips"
-        ],
-        "summary": "Start Run",
-        "operationId": "start_run_api_trips__trip_id__runs_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "trip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Trip Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/StartRunRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateTripResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/runs/{run_id}": {
-      "get": {
-        "tags": [
-          "runs"
-        ],
-        "summary": "Get Run Status",
-        "operationId": "get_run_status_api_runs__run_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "run_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Run Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunStatusResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/profile": {
-      "get": {
-        "tags": [
-          "profile"
-        ],
-        "summary": "Get Profile",
-        "operationId": "get_profile_api_profile_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProfileResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/profile/settings": {
-      "get": {
-        "tags": [
-          "profile"
-        ],
-        "summary": "Get Settings",
-        "operationId": "get_settings_api_profile_settings_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SettingsResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      },
-      "put": {
-        "tags": [
-          "profile"
-        ],
-        "summary": "Update Settings",
-        "operationId": "update_settings_api_profile_settings_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateSettingsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SettingsResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/profile/settings/llm-key": {
-      "delete": {
-        "tags": [
-          "profile"
-        ],
-        "summary": "Delete Llm Key",
-        "operationId": "delete_llm_key_api_profile_settings_llm_key_delete",
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/health": {
       "get": {
         "tags": [
           "health"
         ],
-        "summary": "Health",
-        "operationId": "health_health_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object",
-                  "title": "Response Health Health Get"
+                  "$ref": "#/components/schemas/def-13"
                 }
               }
             }
@@ -1044,19 +126,633 @@
         "tags": [
           "health"
         ],
-        "summary": "Api Health",
-        "operationId": "api_health_api_health_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object",
-                  "title": "Response Api Health Api Health Get"
+                  "$ref": "#/components/schemas/def-13"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "summary": "Register",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/def-0"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-2"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/def-1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-2"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "Current user",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          }
+        }
+      }
+    },
+    "/api/auth/google": {
+      "get": {
+        "summary": "Google OAuth redirect",
+        "tags": [
+          "auth"
+        ],
+        "description": "Редирект на Google; callback — /api/auth/google/callback",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/auth/google/callback": {
+      "get": {
+        "summary": "Google OAuth callback",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/profile": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/profile/settings": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "profile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/def-5"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/profile/settings/llm-key": {
+      "delete": {
+        "tags": [
+          "profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips": {
+      "get": {
+        "summary": "List trips",
+        "tags": [
+          "trips"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/def-8"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create trip",
+        "tags": [
+          "trips"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/def-6"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-7"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/geocode": {
+      "post": {
+        "summary": "Geocode (new trip wizard)",
+        "tags": [
+          "trips"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/def-11"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/reverse-geocode": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/program": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/preferences": {
+      "put": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/city-center": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/geocode": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/reverse-geocode": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/runs": {
+      "post": {
+        "summary": "Start graph run",
+        "tags": [
+          "trips"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/def-9"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/program/feedback": {
+      "put": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}": {
+      "get": {
+        "summary": "Run status",
+        "tags": [
+          "runs"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "run_id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-10"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
                 }
               }
             }
@@ -1065,1153 +761,32 @@
       }
     }
   },
-  "components": {
-    "schemas": {
-      "AuthResponse": {
-        "properties": {
-          "access_token": {
-            "type": "string",
-            "title": "Access Token"
-          },
-          "token_type": {
-            "type": "string",
-            "title": "Token Type",
-            "default": "bearer"
-          },
-          "user": {
-            "$ref": "#/components/schemas/UserResponse"
-          }
-        },
-        "type": "object",
-        "required": [
-          "access_token",
-          "user"
-        ],
-        "title": "AuthResponse"
-      },
-      "CityCenterResponse": {
-        "properties": {
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label"
-          }
-        },
-        "type": "object",
-        "required": [
-          "lat",
-          "lon",
-          "label"
-        ],
-        "title": "CityCenterResponse"
-      },
-      "CreateTripRequest": {
-        "properties": {
-          "city": {
-            "type": "string",
-            "title": "City"
-          },
-          "route_anchor": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RouteAnchor"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "user_query": {
-            "type": "string",
-            "title": "User Query",
-            "default": "Составь три варианта маршрута по городу"
-          },
-          "preferences": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TripPreferences"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "start_run": {
-            "type": "boolean",
-            "title": "Start Run",
-            "default": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "city"
-        ],
-        "title": "CreateTripRequest"
-      },
-      "CreateTripResponse": {
-        "properties": {
-          "trip_id": {
-            "type": "integer",
-            "title": "Trip Id"
-          },
-          "run_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Run Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "trip_id"
-        ],
-        "title": "CreateTripResponse"
-      },
-      "FinalProgram": {
-        "properties": {
-          "tickets": {
-            "type": "string",
-            "title": "Tickets",
-            "description": "Legacy: билеты (не используется в routes-only MVP)",
-            "default": ""
-          },
-          "routes": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RouteProgram"
-              },
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Routes",
-            "description": "Три варианта маршрута на всю поездку"
-          },
-          "routes_text": {
-            "type": "string",
-            "title": "Routes Text",
-            "description": "Markdown-представление маршрутов",
-            "default": ""
-          },
-          "lifehacks": {
-            "type": "string",
-            "title": "Lifehacks",
-            "description": "Факт о городе (legacy ключ API; async при city_fact_status=pending)",
-            "default": ""
-          },
-          "events": {
-            "type": "string",
-            "title": "Events",
-            "description": "Legacy: мероприятия",
-            "default": ""
-          },
-          "dining": {
-            "type": "string",
-            "title": "Dining",
-            "description": "Legacy: питание",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "title": "FinalProgram",
-        "description": "Структурированный результат построения маршрутов поездки."
-      },
-      "GeocodeRequest": {
-        "properties": {
-          "query": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 2,
-            "title": "Query"
-          },
-          "city_hint": {
-            "type": "string",
-            "maxLength": 128,
-            "title": "City Hint",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "query"
-        ],
-        "title": "GeocodeRequest"
-      },
-      "GeocodeResponse": {
-        "properties": {
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/GeocodeResultResponse"
-            },
-            "type": "array",
-            "title": "Results"
-          }
-        },
-        "type": "object",
-        "title": "GeocodeResponse"
-      },
-      "GeocodeResultResponse": {
-        "properties": {
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label"
-          }
-        },
-        "type": "object",
-        "required": [
-          "lat",
-          "lon",
-          "label"
-        ],
-        "title": "GeocodeResultResponse"
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "title": "HTTPValidationError"
-      },
-      "ItemFeedbackRequest": {
-        "properties": {
-          "version_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Version Id"
-          },
-          "section": {
-            "type": "string",
-            "enum": [
-              "routes",
-              "route_stops"
-            ],
-            "title": "Section"
-          },
-          "item_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Item Key"
-          },
-          "item_index": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Item Index"
-          },
-          "vote": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "enum": [
-                  1,
-                  -1
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vote"
-          }
-        },
-        "type": "object",
-        "required": [
-          "section"
-        ],
-        "title": "ItemFeedbackRequest"
-      },
-      "LoginRequest": {
-        "properties": {
-          "email": {
-            "type": "string",
-            "maxLength": 254,
-            "minLength": 3,
-            "title": "Email"
-          },
-          "password": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Password"
-          }
-        },
-        "type": "object",
-        "required": [
-          "email",
-          "password"
-        ],
-        "title": "LoginRequest"
-      },
-      "ProfileResponse": {
-        "properties": {
-          "preferences": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TripPreferences"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "preferences"
-        ],
-        "title": "ProfileResponse"
-      },
-      "ProgramItemResponse": {
-        "properties": {
-          "index": {
-            "type": "integer",
-            "title": "Index"
-          },
-          "item_key": {
-            "type": "string",
-            "title": "Item Key"
-          },
-          "text": {
-            "type": "string",
-            "title": "Text"
-          },
-          "vote": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "enum": [
-                  1,
-                  -1
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vote"
-          },
-          "poi_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Poi Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "index",
-          "item_key",
-          "text"
-        ],
-        "title": "ProgramItemResponse"
-      },
-      "ProgramResponse": {
-        "properties": {
-          "version": {
-            "type": "integer",
-            "title": "Version"
-          },
-          "version_id": {
-            "type": "integer",
-            "title": "Version Id"
-          },
-          "scope": {
-            "type": "string",
-            "title": "Scope"
-          },
-          "approved": {
-            "type": "boolean",
-            "title": "Approved"
-          },
-          "program": {
-            "$ref": "#/components/schemas/FinalProgram"
-          },
-          "sections": {
-            "$ref": "#/components/schemas/StructuredProgramResponse"
-          },
-          "data_warnings": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Data Warnings"
-          },
-          "city_fact_status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "ready",
-              "failed",
-              "skipped",
-              "idle"
-            ],
-            "title": "City Fact Status",
-            "default": "idle"
-          }
-        },
-        "type": "object",
-        "required": [
-          "version",
-          "version_id",
-          "scope",
-          "approved",
-          "program",
-          "sections"
-        ],
-        "title": "ProgramResponse"
-      },
-      "ProgramSectionResponse": {
-        "properties": {
-          "intro": {
-            "type": "string",
-            "title": "Intro"
-          },
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ProgramItemResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "intro"
-        ],
-        "title": "ProgramSectionResponse"
-      },
-      "RegisterRequest": {
-        "properties": {
-          "email": {
-            "type": "string",
-            "maxLength": 254,
-            "minLength": 3,
-            "title": "Email"
-          },
-          "password": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 8,
-            "title": "Password"
-          }
-        },
-        "type": "object",
-        "required": [
-          "email",
-          "password"
-        ],
-        "title": "RegisterRequest"
-      },
-      "ReverseGeocodeRequest": {
-        "properties": {
-          "lat": {
-            "type": "number",
-            "maximum": 90.0,
-            "minimum": -90.0,
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "maximum": 180.0,
-            "minimum": -180.0,
-            "title": "Lon"
-          },
-          "city_hint": {
-            "type": "string",
-            "maxLength": 128,
-            "title": "City Hint",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "lat",
-          "lon"
-        ],
-        "title": "ReverseGeocodeRequest"
-      },
-      "ReverseGeocodeResponse": {
-        "properties": {
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label"
-          }
-        },
-        "type": "object",
-        "required": [
-          "lat",
-          "lon",
-          "label"
-        ],
-        "title": "ReverseGeocodeResponse"
-      },
-      "RouteAnchor": {
-        "properties": {
-          "lat": {
-            "type": "number",
-            "maximum": 90.0,
-            "minimum": -90.0,
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "maximum": 180.0,
-            "minimum": -180.0,
-            "title": "Lon"
-          },
-          "label": {
-            "type": "string",
-            "maxLength": 500,
-            "title": "Label",
-            "default": ""
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "address",
-              "coordinates",
-              "map"
-            ],
-            "title": "Source",
-            "default": "map"
-          },
-          "loop_end": {
-            "type": "boolean",
-            "title": "Loop End",
-            "description": "Конечная точка совпадает с базовой (кольцо через anchor)",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "lat",
-          "lon"
-        ],
-        "title": "RouteAnchor",
-        "description": "Базовая точка маршрута (отель, квартира, вокзал)."
-      },
-      "RouteProgram": {
-        "properties": {
-          "schema_version": {
-            "type": "integer",
-            "const": 1,
-            "title": "Schema Version",
-            "default": 1
-          },
-          "materials_summary": {
-            "type": "string",
-            "title": "Materials Summary",
-            "default": ""
-          },
-          "cases": {
-            "items": {
-              "$ref": "#/components/schemas/TripRouteCase"
-            },
-            "type": "array",
-            "title": "Cases"
-          }
-        },
-        "type": "object",
-        "title": "RouteProgram"
-      },
-      "RouteStop": {
-        "properties": {
-          "order": {
-            "type": "integer",
-            "title": "Order"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "leisure",
-              "dining",
-              "transit_note"
-            ],
-            "title": "Kind"
-          },
-          "poi_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Poi Id"
-          },
-          "time_hint": {
-            "type": "string",
-            "title": "Time Hint",
-            "default": ""
-          },
-          "narrative": {
-            "type": "string",
-            "title": "Narrative",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "order",
-          "kind"
-        ],
-        "title": "RouteStop"
-      },
-      "RunStatusResponse": {
-        "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
-          "trip_id": {
-            "type": "integer",
-            "title": "Trip Id"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "running",
-              "completed",
-              "failed"
-            ],
-            "title": "Status"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "version_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Version Id"
-          },
-          "city_fact_status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "ready",
-              "failed",
-              "skipped",
-              "idle"
-            ],
-            "title": "City Fact Status",
-            "default": "idle"
-          }
-        },
-        "type": "object",
-        "required": [
-          "run_id",
-          "trip_id",
-          "status"
-        ],
-        "title": "RunStatusResponse"
-      },
-      "SettingsResponse": {
-        "properties": {
-          "llm_key_configured": {
-            "type": "boolean",
-            "title": "Llm Key Configured"
-          },
-          "llm_key_preview": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Llm Key Preview"
-          },
-          "llm_base_url": {
-            "type": "string",
-            "title": "Llm Base Url"
-          },
-          "llm_model": {
-            "type": "string",
-            "title": "Llm Model"
-          }
-        },
-        "type": "object",
-        "required": [
-          "llm_key_configured",
-          "llm_base_url",
-          "llm_model"
-        ],
-        "title": "SettingsResponse"
-      },
-      "StartRunRequest": {
-        "properties": {
-          "scope": {
-            "type": "string",
-            "enum": [
-              "routes",
-              "full"
-            ],
-            "title": "Scope",
-            "default": "routes"
-          }
-        },
-        "type": "object",
-        "title": "StartRunRequest"
-      },
-      "StructuredProgramResponse": {
-        "properties": {
-          "routes": {
-            "$ref": "#/components/schemas/ProgramSectionResponse"
-          },
-          "route_stops": {
-            "$ref": "#/components/schemas/ProgramSectionResponse"
-          },
-          "lifehacks": {
-            "$ref": "#/components/schemas/ProgramSectionResponse"
-          }
-        },
-        "type": "object",
-        "required": [
-          "routes",
-          "route_stops",
-          "lifehacks"
-        ],
-        "title": "StructuredProgramResponse"
-      },
-      "TripDetailResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "city": {
-            "type": "string",
-            "title": "City"
-          },
-          "user_query": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Query"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "city",
-          "user_query",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "TripDetailResponse"
-      },
-      "TripPreferences": {
-        "properties": {
-          "pace": {
-            "type": "string",
-            "enum": [
-              "relaxed",
-              "moderate",
-              "packed"
-            ],
-            "title": "Pace",
-            "description": "Темп поездки (в UI скрыт, по умолчанию packed)"
-          },
-          "budget": {
-            "type": "string",
-            "enum": [
-              "economy",
-              "medium",
-              "unlimited"
-            ],
-            "title": "Budget",
-            "description": "Legacy: не используется в поиске"
-          },
-          "interests": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Interests",
-            "description": "Legacy: не влияет на пул POI"
-          },
-          "cuisine": {
-            "type": "string",
-            "title": "Cuisine",
-            "description": "Legacy: поиск ресторанов отключён",
-            "default": ""
-          },
-          "min_restaurant_rating": {
-            "type": "number",
-            "maximum": 5.0,
-            "minimum": 1.0,
-            "title": "Min Restaurant Rating",
-            "description": "Legacy: не используется",
-            "default": 4.0
-          },
-          "transport_preference": {
-            "type": "string",
-            "enum": [
-              "metro",
-              "taxi",
-              "walking",
-              "mixed"
-            ],
-            "title": "Transport Preference",
-            "description": "Передвижение (в UI скрыт, по умолчанию mixed)"
-          },
-          "travel_party": {
-            "type": "string",
-            "enum": [
-              "solo",
-              "couple",
-              "family",
-              "friends",
-              "parent_child",
-              "family_two"
-            ],
-            "title": "Travel Party",
-            "description": "Состав группы"
-          },
-          "special_notes": {
-            "type": "string",
-            "title": "Special Notes",
-            "description": "Legacy: доп. пожелания",
-            "default": ""
-          },
-          "route_anchor": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RouteAnchor"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Базовая точка маршрута; null — не задана"
-          }
-        },
-        "type": "object",
-        "required": [
-          "pace",
-          "budget",
-          "transport_preference",
-          "travel_party"
-        ],
-        "title": "TripPreferences",
-        "description": "Результат опросника перед планированием программы."
-      },
-      "TripRouteCase": {
-        "properties": {
-          "case_id": {
-            "type": "string",
-            "title": "Case Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "summary": {
-            "type": "string",
-            "title": "Summary"
-          },
-          "stops": {
-            "items": {
-              "$ref": "#/components/schemas/RouteStop"
-            },
-            "type": "array",
-            "title": "Stops"
-          },
-          "maps_route_url": {
-            "type": "string",
-            "title": "Maps Route Url",
-            "default": ""
-          },
-          "loop_route": {
-            "type": "boolean",
-            "title": "Loop Route",
-            "default": false
-          },
-          "preserved": {
-            "type": "boolean",
-            "title": "Preserved",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "case_id",
-          "title",
-          "summary"
-        ],
-        "title": "TripRouteCase"
-      },
-      "TripSummaryResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "city": {
-            "type": "string",
-            "title": "City"
-          },
-          "updated_at": {
-            "type": "string",
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "city",
-          "updated_at"
-        ],
-        "title": "TripSummaryResponse"
-      },
-      "UpdatePreferencesRequest": {
-        "properties": {
-          "travel_party": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "solo",
-                  "couple",
-                  "family",
-                  "friends",
-                  "parent_child",
-                  "family_two"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Travel Party"
-          },
-          "route_anchor": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RouteAnchor"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "null — удалить базовую точку"
-          }
-        },
-        "type": "object",
-        "title": "UpdatePreferencesRequest"
-      },
-      "UpdateSettingsRequest": {
-        "properties": {
-          "llm_api_key": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 256
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Llm Api Key"
-          },
-          "llm_base_url": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 512
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Llm Base Url"
-          },
-          "llm_model": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 128
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Llm Model"
-          }
-        },
-        "type": "object",
-        "title": "UpdateSettingsRequest"
-      },
-      "UserResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "email": {
-            "type": "string",
-            "title": "Email"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "email"
-        ],
-        "title": "UserResponse"
-      },
-      "ValidationError": {
-        "properties": {
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "type": "array",
-            "title": "Location"
-          },
-          "msg": {
-            "type": "string",
-            "title": "Message"
-          },
-          "type": {
-            "type": "string",
-            "title": "Error Type"
-          }
-        },
-        "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError"
-      }
-    },
-    "securitySchemes": {
-      "HTTPBearer": {
-        "type": "http",
-        "scheme": "bearer"
-      }
+  "servers": [
+    {
+      "url": "http://localhost:8001",
+      "description": "api-node (локально)"
     }
-  },
+  ],
   "tags": [
     {
       "name": "auth",
-      "description": "Регистрация, вход, Google OAuth."
-    },
-    {
-      "name": "trips",
-      "description": "Поездки: создание, программа, предпочтения, пересбор маршрутов."
-    },
-    {
-      "name": "runs",
-      "description": "Статус фоновых прогонов графа (polling)."
+      "description": "Регистрация, вход, Google OAuth"
     },
     {
       "name": "profile",
-      "description": "Профиль предпочтений и BYOK OpenRouter."
+      "description": "Профиль и настройки BYOK"
+    },
+    {
+      "name": "trips",
+      "description": "Поездки, программа, геокодинг"
+    },
+    {
+      "name": "runs",
+      "description": "Статус фоновых прогонов"
     },
     {
       "name": "health",
-      "description": "Проверка доступности сервиса."
+      "description": "Проверка доступности"
     }
   ]
 }

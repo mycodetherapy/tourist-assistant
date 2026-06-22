@@ -28,8 +28,14 @@ def get_current_llm_config() -> LlmConfig:
 
 @contextmanager
 def run_with_llm_config(config: LlmConfig) -> Iterator[None]:
+    from agents.llm import clear_llm_cache
+
+    if not config.api_key.strip():
+        raise ValueError("LLM API key пустой")
+    clear_llm_cache()
     token = _llm_config.set(config)
     try:
         yield
     finally:
         _llm_config.reset(token)
+        clear_llm_cache()

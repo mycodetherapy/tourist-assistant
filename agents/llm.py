@@ -15,6 +15,7 @@ from config.settings import (
     get_llm_base_url,
     get_llm_extra_body,
 )
+from db.session import is_postgres_enabled
 from models.schemas import RoutesDraft
 from search.tools import TOOLS
 
@@ -31,6 +32,11 @@ def _resolve_config() -> LlmConfig:
     try:
         return get_current_llm_config()
     except RuntimeError:
+        if is_postgres_enabled():
+            raise RuntimeError(
+                "LlmConfig не задан в контексте worker. "
+                "Оберните прогон в run_with_llm_config() с BYOK-ключом пользователя."
+            ) from None
         return _config_from_env()
 
 

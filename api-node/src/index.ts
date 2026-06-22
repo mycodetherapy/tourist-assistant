@@ -14,8 +14,14 @@ import {
 } from "./routes/auth.js";
 import { registerRunsRoutes } from "./routes/runs.js";
 import { registerTripsRoutes } from "./routes/trips.js";
+import { registerSwagger } from "./plugins/swagger.js";
 
-export async function buildApp() {
+export type BuildAppOptions = {
+  /** Swagger UI на /docs (по умолчанию включён). */
+  enableSwaggerUi?: boolean;
+};
+
+export async function buildApp(options: BuildAppOptions = {}) {
   const app = Fastify({ logger: true });
 
   await app.register(cors, {
@@ -33,8 +39,28 @@ export async function buildApp() {
     timeWindow: "1 minute",
   });
 
-  app.get("/health", async () => ({ status: "ok" }));
-  app.get("/api/health", async () => ({ status: "ok" }));
+  await registerSwagger(app, { enableUi: options.enableSwaggerUi });
+
+  app.get(
+    "/health",
+    {
+      schema: {
+        tags: ["health"],
+        response: { 200: { $ref: "HealthResponse#" } },
+      },
+    },
+    async () => ({ status: "ok" as const }),
+  );
+  app.get(
+    "/api/health",
+    {
+      schema: {
+        tags: ["health"],
+        response: { 200: { $ref: "HealthResponse#" } },
+      },
+    },
+    async () => ({ status: "ok" as const }),
+  );
 
   await registerAuthRoutes(app);
   await registerProfileRoutes(app);

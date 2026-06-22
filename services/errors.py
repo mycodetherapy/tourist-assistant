@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from db.session import is_postgres_enabled
+
 
 def format_runtime_error(exc: Exception) -> str:
     """Преобразует типичные сбои LLM API в понятный текст."""
@@ -16,6 +18,12 @@ def format_runtime_error(exc: Exception) -> str:
         marker in text
         for marker in ("401", "Invalid API Key", "AuthenticationError", "authentication")
     ):
+        if is_postgres_enabled():
+            return (
+                "Ошибка аутентификации LLM (401): OpenRouter не принял ключ из настроек профиля.\n"
+                "Откройте «Настройки» → укажите ключ с https://openrouter.ai/keys и пересоберите маршруты.\n"
+                f"Детали: {text}"
+            )
         return (
             "Ошибка аутентификации LLM (401): провайдер не принял LLM_API_KEY.\n"
             "Проверьте .env: ключ с https://openrouter.ai/keys (не sk-or-... из .env.example).\n"

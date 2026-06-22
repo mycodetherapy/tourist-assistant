@@ -1,55 +1,52 @@
----
-description: Синхронизировать docs/openapi.json перед коммитом при изменениях API
-alwaysApply: true
----
-
 # OpenAPI / Swagger перед коммитом
 
 Перед **любым** `git commit` (или когда пользователь просит закоммитить) проверь, нужно ли обновить [`docs/openapi.json`](docs/openapi.json).
 
 ## Когда обновлять
 
-Запусти `python3 scripts/export_openapi.py`, если менялись:
+Запусти экспорт, если менялись маршруты или схемы в [`api-node/`](api-node/):
 
-- [`api/`](api/) — маршруты, схемы, `main.py`
-- [`api/schemas/`](api/schemas/) — request/response DTO
-- Pydantic-модели, влияющие на `response_model` / тела запросов API
+- [`api-node/src/routes/`](api-node/src/routes/)
+- [`api-node/src/openapi/`](api-node/src/openapi/)
 
-Если `docs/openapi.json` изменился после экспорта — добавь файл в коммит (`git add docs/openapi.json`).
-
-## Команда
+## Команды
 
 ```bash
 python3 scripts/export_openapi.py
 ```
 
-Используй `.venv/bin/python`, если venv активен.
+или из `api-node`:
+
+```bash
+npm run export:openapi
+```
+
+Нужен `npm install` в `api-node` (зависимости `@fastify/swagger`).
 
 ## Swagger UI (живой)
 
-При запущенном API:
+При запущенном api-node:
 
-- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
-- ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-- JSON: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
+- Swagger UI: [http://localhost:8001/docs](http://localhost:8001/docs)
+- JSON: [http://localhost:8001/docs/json](http://localhost:8001/docs/json)
+
+Схема на `/docs` строится из тех же `schema` в маршрутах Fastify — при `npm run dev` документация всегда актуальна.
 
 ## Git hook (локально)
-
-Один раз установить автообновление перед коммитом:
 
 ```bash
 ./scripts/install_git_hooks.sh
 ```
 
-Hook перегенерирует `docs/openapi.json` и добавит в staging, если схема изменилась.
+Hook вызывает `scripts/export_openapi.py` и добавляет `docs/openapi.json` в staging, если файл изменился.
 
 ## Чеклист перед коммитом
 
-- [ ] После правок `api/` выполнен `scripts/export_openapi.py`
+- [ ] После правок `api-node/src/routes` выполнен экспорт OpenAPI
 - [ ] `docs/openapi.json` в коммите, если отличается от сгенерированного
 - [ ] README упоминает `/docs`, если менялись инструкции по API
 
 ## Запреты
 
-- Не редактировать `docs/openapi.json` вручную — только через `export_openapi.py`
+- Не редактировать `docs/openapi.json` вручную — только через экспорт
 - Не коммитить устаревшую схему вместе с новыми эндпоинтами

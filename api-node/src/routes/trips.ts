@@ -21,6 +21,7 @@ import {
   startRun,
 } from "../services/runManager.js";
 import { buildProgramView } from "../services/programView.js";
+import { repairProgramForTrip } from "../services/repairProgram.js";
 import {
   collectRouteStopPoiIds,
   parseNumberedSection,
@@ -33,22 +34,25 @@ import {
 } from "../services/geocode.js";
 import { recordAuditEvent } from "../repos/audit.js";
 import { saveUserProfile } from "../repos/users.js";
+import {
+  bearerSecurity,
+  createTripBodySchema,
+  geocodeBodySchema,
+  ref,
+  startRunBodySchema,
+} from "../openapi/components.js";
+
 import * as tripsRepo from "../repos/trips.js";
+import {
+  InputValidationError,
+  sanitizeAndValidate,
+} from "../lib/inputValidation.js";
 
 const MAX_LIKED_ROUTES = 10;
 const MAX_LIKED_ROUTE_STOPS = 40;
 
-const createTripSchema = z.object({
-  city: z.string().min(1),
-  route_anchor: routeAnchorSchema.nullable().optional(),
-  user_query: z.string().default("Составь три варианта маршрута по городу"),
-  preferences: z.record(z.unknown()).nullable().optional(),
-  start_run: z.boolean().default(true),
-});
-
-const startRunSchema = z.object({
-  scope: z.enum(["routes", "full"]).default("routes"),
-});
+const startRunSchema = startRunBodySchema;
+const createTripSchema = createTripBodySchema;
 
 const updatePrefsSchema = z
   .object({
@@ -68,10 +72,7 @@ const updatePrefsSchema = z
     message: "Нет полей для обновления",
   });
 
-const geocodeSchema = z.object({
-  query: z.string().min(2).max(500),
-  city_hint: z.string().max(128).default(""),
-});
+const geocodeSchema = geocodeBodySchema;
 
 const reverseGeocodeSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -91,18 +92,27 @@ const feedbackSchema = z
     message: "Укажите item_key или item_index",
   });
 
-function sanitizeCity(value: string): string {
-  return value.trim().slice(0, 500);
-}
-
-function sanitizeMessage(value: string): string {
-  return value.trim().slice(0, 2000);
+function validationErrorReply(
+  reply: { code: (n: number) => { send: (b: unknown) => unknown } },
+  err: InputValidationError,
+) {
+  return reply.code(400).send({ detail: err.message });
 }
 
 export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     "/api/trips",
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        tags: ["trips"],
+        summary: "List trips",
+        security: [...bearerSecurity],
+        response: {
+          200: { type: "array", items: ref("TripSummary") },
+        },
+      },
+    },
     async (request) => {
       const rows = await tripsRepo.listTrips(request.user!.id);
       return rows;
@@ -111,7 +121,15 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/api/trips/geocode",
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        tags: ["trips"],
+        summary: "Geocode (new trip wizard)",
+        security: [...bearerSecurity],
+        body: ref("GeocodeRequest"),
+      },
+    },
     async (request, reply) => {
       const body = geocodeSchema.safeParse(request.body);
       if (!body.success) {
@@ -147,7 +165,21 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/api/trips",
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        tags: ["trips"],
+        summary: "Create trip",
+        security: [...bearerSecurity],
+        body: ref("CreateTripRequest"),
+        response: {
+          201: ref("CreateTripResponse"),
+          400: ref("ErrorDetail"),
+          428: ref("ErrorDetail"),
+          429: ref("ErrorDetail"),
+        },
+      },
+    },
     async (request, reply) => {
       const body = createTripSchema.safeParse(request.body);
       if (!body.success) {
@@ -170,13 +202,23 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
           throw err;
         }
       }
-      const city = sanitizeCity(body.data.city);
+      let city: string;
+      let userQuery: string;
+      try {
+        city = sanitizeAndValidate(body.data.city, "city");
+        userQuery = sanitizeAndValidate(body.data.user_query, "message");
+      } catch (err) {
+        if (err instanceof InputValidationError) {
+          return validationErrorReply(reply, err);
+        }
+        throw err;
+      }
       const tripId = await tripsRepo.createTrip({
         userId: request.user!.id,
         city,
         dates: "Без дат",
         originCity: city,
-        userQuery: sanitizeMessage(body.data.user_query),
+        userQuery,
       });
       await tripsRepo.savePreferences(tripId, preferences);
       await saveUserProfile(request.user!.id, preferences);
@@ -266,7 +308,8 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
       if (!latest) {
         return reply.code(404).send({ detail: "Программа не найдена" });
       }
-      return buildProgramView(tripId, latest);
+      const repaired = await repairProgramForTrip(tripId, trip, latest.program);
+      return buildProgramView(tripId, { ...latest, program: repaired });
     },
   );
 
@@ -374,7 +417,15 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { trip_id: string } }>(
     "/api/trips/:trip_id/runs",
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        tags: ["trips"],
+        summary: "Start graph run",
+        security: [...bearerSecurity],
+        body: ref("StartRunRequest"),
+      },
+    },
     async (request, reply) => {
       const tripId = Number(request.params.trip_id);
       const trip = await tripsRepo.getTrip(tripId, request.user!.id);
@@ -434,7 +485,8 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
       if (!latest) {
         return reply.code(404).send({ detail: "Программа не найдена" });
       }
-      return buildProgramView(tripId, latest);
+      const repaired = await repairProgramForTrip(tripId, trip, latest.program);
+      return buildProgramView(tripId, { ...latest, program: repaired });
     },
   );
 }

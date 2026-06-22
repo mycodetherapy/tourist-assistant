@@ -1,0 +1,39 @@
+# Node API + Python repair_program_cli (parity с trip_service.get_program_view)
+FROM python:3.11-slim-bookworm
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl ca-certificates \
+  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
+
+COPY agents agents
+COPY auth auth
+COPY config config
+COPY db db
+COPY models models
+COPY onboarding onboarding
+COPY planning planning
+COPY program program
+COPY search search
+COPY services services
+COPY scripts/repair_program_cli.py scripts/repair_program_cli.py
+
+WORKDIR /app/api-node
+COPY api-node/package.json api-node/package-lock.json ./
+RUN npm ci
+COPY api-node/tsconfig.json api-node/vitest.config.ts ./
+COPY api-node/src ./src
+RUN npm run build
+
+ENV PYTHON_PATH=/usr/local/bin/python
+ENV API_NODE_PORT=8001
+EXPOSE 8001
+
+CMD ["node", "dist/index.js"]

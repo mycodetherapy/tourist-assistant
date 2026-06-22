@@ -27,6 +27,7 @@ export function TripDetailPage() {
   const [activeRunScope, setActiveRunScope] = useState<"routes" | "full">(
     searchParams.get("scope") === "routes" ? "routes" : "full",
   );
+  const [lastBuildError, setLastBuildError] = useState<string | null>(null);
   const sawRunInProgressRef = useRef(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -52,6 +53,7 @@ export function TripDetailPage() {
     mutationFn: (scope: RebuildScope) => startRun(tripId, scope),
     onSuccess: (data, scope) => {
       if (data.run_id) {
+        setLastBuildError(null);
         setActiveRunId(data.run_id);
         setSearchParams({ run: data.run_id, scope });
       }
@@ -118,6 +120,7 @@ export function TripDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
       queryClient.invalidateQueries({ queryKey: ["trips"] });
       if (status === "failed" && runQuery.data?.error) {
+        setLastBuildError(runQuery.data.error);
         notification.error({
           title: "Ошибка сборки",
           description: runQuery.data.error,
@@ -166,6 +169,22 @@ export function TripDetailPage() {
       </div>
 
       <TripMetaCard trip={trip} />
+
+      {lastBuildError && !isBuilding && !hasProgram ? (
+        <Alert
+          type="error"
+          showIcon
+          title="Сборка маршрутов не удалась"
+          description={lastBuildError}
+          action={
+            lastBuildError.includes("настройках") || lastBuildError.includes("OpenRouter") ? (
+              <Button size="small" onClick={() => navigate("/settings")}>
+                Настройки
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : null}
 
       {!isBuilding && programQuery.data?.data_warnings?.length ? (
         <Alert

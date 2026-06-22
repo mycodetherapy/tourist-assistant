@@ -89,6 +89,29 @@ export async function requireUserLlmConfigured(userId: number): Promise<void> {
       428,
     );
   }
+  try {
+    const apiKey = decryptSecret(row.llm_api_key_enc).trim();
+    if (!apiKey) {
+      throw new AuthError(
+        "Сохранённый LLM-ключ пустой — укажите ключ OpenRouter заново",
+        428,
+      );
+    }
+    if (isPlaceholderSecret(apiKey)) {
+      throw new AuthError(
+        "Сохранённый LLM-ключ недействителен — укажите реальный ключ OpenRouter",
+        428,
+      );
+    }
+  } catch (err) {
+    if (err instanceof AuthError) {
+      throw err;
+    }
+    throw new AuthError(
+      "Сохранённый LLM-ключ повреждён — укажите ключ OpenRouter заново в настройках",
+      428,
+    );
+  }
 }
 
 export async function getLlmSettingsView(userId: number) {

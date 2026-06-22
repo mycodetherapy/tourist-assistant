@@ -83,7 +83,21 @@ npm run dev
 
 Без открытия портов: `cloudflared tunnel --url http://localhost:5173`. Через Docker: `docker compose up` → `http://<IP-Mac>:5173`.
 
-**API:** Node.js Fastify на порту **8001** (`api-node/`). Статическая OpenAPI-схема: `docs/openapi.json`.
+**API:** Node.js Fastify на порту **8001** (`api-node/`).
+
+**Swagger (живой, из кода):**
+
+- Swagger UI: [http://localhost:8001/docs](http://localhost:8001/docs)
+- JSON: [http://localhost:8001/docs/json](http://localhost:8001/docs/json)
+
+Схема в репозитории (`docs/openapi.json`) генерируется из тех же маршрутов:
+
+```bash
+python3 scripts/export_openapi.py
+# или: cd api-node && npm run export:openapi
+```
+
+Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/openapi.json` автоматически.
 
 **Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
 
@@ -155,9 +169,37 @@ python -m worker
 cd api-node && npm run dev
 ```
 
+Тесты Node: `cd api-node && npm test`. Интеграционные (нужен `DATABASE_URL`): `npm run test:integration` — auth, изоляция поездок, BYOK 428, anti-injection.
+
+**Parity с бывшим FastAPI:** геокодинг с `poi_filters` и Nominatim fallback; `sanitize_and_validate` на создании поездки; `GET /api/trips/{id}/program` вызывает `scripts/repair_program_cli.py` (тот же `repair_program_routes`, что в `trip_service`). Локально нужен `.venv`; в Docker — `Dockerfile.api-node` (образ Python + Node в одном контейнере).
+
+**Repair в Docker:** образ `api-node` включает Python-код для `repair_program_cli`. После изменений в `agents/`, `search/`, `scripts/repair_program_cli.py` нужна пересборка: `docker compose build api-node`. Альтернативы — см. [Repair program в Docker](#repair-program-в-docker).
+
 Фоновые прогоны: **JSON Redis queue** (`tourist:queue:*`, `worker/tasks.py`, таблица `graph_runs`).
 
 Бэкап prod (cron на VPS): [`scripts/pg_backup.sh`](scripts/pg_backup.sh).
+
+### Repair program в Docker
+
+`GET /api/trips/{id}/program` вызывает Python `repair_program_routes` через subprocess (`scripts/repair_program_cli.py`). В production-образе `api-node` (`Dockerfile.api-node`) лежат и Node API, и нужные Python-модули (`agents/`, `search/`, …).
+
+**Что значит «нужна пересборка»:** Docker-образ — снимок файлов на момент `docker compose build`. Если вы меняете Python-логику repair локально, контейнер продолжает работать со **старым** кодом внутри образа, пока вы не пересоберёте и не перезапустите:
+
+```bash
+docker compose build api-node && docker compose up -d api-node
+```
+
+Локально (`npm run dev`) repair берёт код с диска — пересборка не нужна.
+
+| Подход | Плюсы | Минусы |
+|--------|-------|--------|
+| **Текущий: гибридный образ** (`Dockerfile.api-node`) | Полный parity с Python; один контейнер | Больший образ; rebuild при изменении Python repair |
+| **Чистый Node-образ + HTTP к worker** | Маленький api-node; repair всегда свежий в worker | Нужен внутренний endpoint на worker; сеть между сервисами |
+| **Чистый Node + volume mount Python** (только dev) | Без rebuild в dev | Не для prod; хрупко |
+| **Порт repair на TypeScript** | Один runtime в api-node | Дублирование ~1000 строк `route_postprocess` |
+| **Отдельный микросервис `repair`** | Изоляция | Ещё один деплой |
+
+Для prod сейчас оптимален гибридный образ; при частых правках repair удобнее вынести HTTP-вызов на worker (тот же код, без копии в api-node).
 
 ### Тесты и eval (без полного прогона агента)
 
@@ -437,8 +479,10 @@ python3 -m scripts.metrics_report --trip-id 12
 ```
 tourist-assistant/
 ├── api-node/               # Node.js REST API (Fastify, Postgres + Redis)
+├── Dockerfile.api-node     # Docker: Node API + Python repair_program_cli
+├── scripts/repair_program_cli.py  # repair_program_routes для GET program
 ├── auth/                   # BYOK crypto, require_user_llm_config (worker)
-├── docs/openapi.json       # OpenAPI 3 (статическая схема)
+├── docs/openapi.json       # OpenAPI 3 (npm run export:openapi)
 ├── services/               # TripService, RunManager, json_job_queue
 ├── worker/                 # Python worker (JSON Redis queue, python -m worker)
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query

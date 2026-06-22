@@ -35,4 +35,44 @@ describe("geocodePlaces", () => {
       expect.any(Object),
     );
   });
+
+  it("filters transport hubs from Yandex results", async () => {
+    process.env.YANDEX_MAPS_API_KEY = "test-key";
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("geocode-maps.yandex")) {
+        return {
+          ok: true,
+          json: async () => ({
+            response: {
+              GeoObjectCollection: {
+                featureMember: [
+                  {
+                    GeoObject: {
+                      name: "станция Кострома",
+                      Point: { pos: "41.0 57.0" },
+                      metaDataProperty: {
+                        GeocoderMetaData: {
+                          kind: "railway_station",
+                          text: "станция",
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          }),
+        };
+      }
+      if (url.includes("nominatim")) {
+        return { ok: true, json: async () => [] };
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { geocodePlaces } = await import("../src/services/geocode.js");
+    const results = await geocodePlaces("Кострома", "Кострома");
+    expect(results).toHaveLength(0);
+  });
 });

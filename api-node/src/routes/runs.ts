@@ -1,12 +1,29 @@
 import type { FastifyInstance } from "fastify";
 import { requireAuth } from "../middleware/auth.js";
+import { bearerSecurity, ref } from "../openapi/components.js";
 import { tripBelongsToUser } from "../repos/trips.js";
 import { getRunStatus } from "../services/runManager.js";
 
 export async function registerRunsRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { run_id: string } }>(
     "/api/runs/:run_id",
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        tags: ["runs"],
+        summary: "Run status",
+        security: [...bearerSecurity],
+        params: {
+          type: "object",
+          required: ["run_id"],
+          properties: { run_id: { type: "string", format: "uuid" } },
+        },
+        response: {
+          200: ref("RunStatusResponse"),
+          404: ref("ErrorDetail"),
+        },
+      },
+    },
     async (request, reply) => {
       const record = await getRunStatus(request.params.run_id);
       if (!record) {
