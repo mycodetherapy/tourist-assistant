@@ -5,7 +5,11 @@ from __future__ import annotations
 import os
 import unittest
 
-from db.sqlite import repository as db_sqlite
+from db.repository import (
+    create_trip,
+    list_item_feedback_by_section,
+    save_itinerary_version,
+)
 from models.routes import GeoPoint, PoiPoint
 from program.feedback_prune import find_stale_feedback_keys
 from program.item_key import make_route_stop_key
@@ -16,22 +20,18 @@ from program.route_feedback import (
 )
 from program.route_stops import collect_route_stop_poi_ids
 from services.trip_service import TripService
-from tests.db_test_helpers import use_sqlite_db
+from tests.db_test_helpers import skip_unless_pg, truncate_pg_tables
 from tests.test_item_feedback import _sample_routes_program
 
 
+@skip_unless_pg
 class TestRouteStopFeedback(unittest.TestCase):
     def setUp(self) -> None:
-        self._db_path = "/tmp/test_route_stop_feedback.db"
-        self._backend = use_sqlite_db(self._db_path)
-        self._backend.__enter__()
-        self.trip_id = db_sqlite.create_trip("Казань", "июль", "Москва", "тест")
+        truncate_pg_tables()
+        self.trip_id = create_trip("Казань", "июль", "Москва", "тест")
         self.program = _sample_routes_program(["A", "B", "C"])
-        db_sqlite.save_itinerary_version(self.trip_id, self.program, scope="full")
+        save_itinerary_version(self.trip_id, self.program, scope="full")
         self.service = TripService()
-
-    def tearDown(self) -> None:
-        self._backend.__exit__(None, None, None)
 
     def test_vote_stop_like_and_unlike(self) -> None:
         pois = collect_route_stop_poi_ids(self.program)
@@ -85,12 +85,12 @@ class TestRouteStopFeedback(unittest.TestCase):
         self.assertIn(poi_id, disliked)
 
         new_program = _sample_routes_program(["N-A", "N-B", "N-C"])
-        db_sqlite.save_itinerary_version(self.trip_id, new_program, scope="routes")
+        save_itinerary_version(self.trip_id, new_program, scope="routes")
 
         _, disliked = load_poi_stop_vote_sets(self.trip_id)
         self.assertIn(poi_id, disliked)
         self.assertEqual(
-            db_sqlite.list_item_feedback_by_section(self.trip_id, "route_stops"),
+            list_item_feedback_by_section(self.trip_id, "route_stops"),
             {make_route_stop_key(poi_id): -1},
         )
 

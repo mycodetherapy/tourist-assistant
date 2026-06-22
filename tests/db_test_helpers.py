@@ -1,58 +1,68 @@
-"""Изоляция SQLite в unit-тестах при DATABASE_URL в .env."""
+"""Изоляция PostgreSQL в unit-тестах."""
 
 from __future__ import annotations
 
 import os
-from contextlib import ExitStack
-from unittest.mock import patch
+import unittest
 
-from db.connection import init_db
-from db.sqlite import repository as sqlite_repo
+from sqlalchemy import text
 
-_TRIP_SERVICE_DB_NAMES = (
-    "create_trip",
-    "delete_item_feedback",
-    "delete_trip",
-    "get_itinerary_version",
-    "get_latest_itinerary",
-    "get_preferences",
-    "get_trip",
-    "get_user_profile",
-    "list_item_feedback",
-    "list_item_feedback_by_index",
-    "list_trips",
-    "log_agent_run",
-    "save_itinerary_version",
-    "save_preferences",
-    "save_user_profile",
-    "upsert_item_feedback",
-)
+from db.session import clear_engine_cache, get_engine, is_postgres_enabled
 
 
-def use_sqlite_db(db_path: str) -> ExitStack:
-    """Контекст: repository facade и TripService работают через SQLite."""
-    if os.path.exists(db_path):
-        os.remove(db_path)
-    os.environ["DATABASE_PATH"] = db_path
-    os.environ.pop("DATABASE_URL", None)
-    init_db()
-
-    stack = ExitStack()
-    stack.enter_context(
-        patch("db.backends.get_repository_backend", return_value=sqlite_repo)
+def pg_available() -> bool:
+    return bool(
+        os.getenv("DATABASE_URL", "").strip()
+        or os.getenv("TEST_DATABASE_URL", "").strip()
     )
-    import services.trip_service as trip_service_mod
-    import program.route_feedback as route_feedback_mod
 
-    for name in _TRIP_SERVICE_DB_NAMES:
-        stack.enter_context(
-            patch.object(trip_service_mod, name, getattr(sqlite_repo, name))
-        )
-    stack.enter_context(
-        patch.object(
-            route_feedback_mod,
-            "list_item_feedback",
-            sqlite_repo.list_item_feedback,
-        )
+
+def skip_unless_pg(test_item):
+    return unittest.skipUnless(pg_available(), "DATABASE_URL or TEST_DATABASE_URL not set")(
+        test_item
     )
-    return stack
+
+
+def prepare_pg_env() -> None:
+    url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    assert url
+    os.environ["DATABASE_URL"] = url
+    clear_engine_cache()
+    assert is_postgres_enabled()
+
+
+def truncate_pg_tables() -> None:
+    prepare_pg_env()
+    engine = get_engine()
+    tables = (
+        "usage_events",
+        "graph_runs",
+        "program_item_feedback",
+        "tool_runs",
+        "agent_runs",
+        "itinerary_versions",
+        "section_artifacts",
+        "trip_preferences",
+        "trips",
+        "user_profile",
+        "user_settings",
+        "audit_events",
+    )
+    with engine.begin() as conn:
+        for table in tables:
+            conn.execute(text(f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE"))
+        conn.execute(
+            text(
+                """
+                INSERT INTO users (id, email, password_hash, google_sub, created_at, updated_at)
+                VALUES (1, 'system@local', NULL, NULL, NOW(), NOW())
+                ON CONFLICT (email) DO NOTHING
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "SELECT setval(pg_get_serial_sequence('users', 'id'), "
+                "GREATEST(1, (SELECT MAX(id) FROM users)))"
+            )
+        )

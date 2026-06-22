@@ -5,12 +5,7 @@ from __future__ import annotations
 import os
 import unittest
 
-from db import (
-    create_trip,
-    init_db,
-    save_itinerary_version,
-    upsert_item_feedback,
-)
+from db import create_trip, save_itinerary_version, upsert_item_feedback
 from models.routes import GeoPoint, PoiPoint, RouteProgram, RouteStop, TripRouteCase
 from program.item_key import make_item_key
 from program.parse_items import parse_program_sections
@@ -22,6 +17,7 @@ from program.route_feedback import (
     merge_preserved_with_new_routes,
 )
 from services.trip_service import TripService
+from tests.db_test_helpers import skip_unless_pg, truncate_pg_tables
 
 
 def _sample_program() -> dict:
@@ -66,13 +62,10 @@ def _sample_program() -> dict:
     }
 
 
+@skip_unless_pg
 class TestRouteFeedback(unittest.TestCase):
     def setUp(self) -> None:
-        self._db_path = "/tmp/test_route_feedback.db"
-        os.environ["DATABASE_PATH"] = self._db_path
-        if os.path.exists(self._db_path):
-            os.remove(self._db_path)
-        init_db()
+        truncate_pg_tables()
         self.trip_id = create_trip("Казань", "июль", "Москва", "тест")
         self.program = _sample_program()
         self.version_id = save_itinerary_version(self.trip_id, self.program)

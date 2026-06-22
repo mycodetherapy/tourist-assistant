@@ -1,6 +1,6 @@
-"""SQLite-хранилище поездок и версий программы."""
+"""PostgreSQL: поездки и версии программы."""
 
-from db.connection import get_database_path, init_db
+from db.connection import init_db
 from db.repository import (
     PlannedTripSummary,
     TripSummary,
@@ -22,6 +22,7 @@ from db.repository import (
     list_agent_runs,
     log_tool_run,
     log_agent_run,
+    mark_latest_itinerary_approved,
     patch_itinerary_program,
     save_itinerary_version,
     save_preferences,
@@ -38,7 +39,6 @@ __all__ = [
     "delete_item_feedback",
     "delete_trip",
     "ensure_user_profile_from_trips",
-    "get_database_path",
     "get_itinerary_version",
     "get_latest_itinerary",
     "get_preferences",

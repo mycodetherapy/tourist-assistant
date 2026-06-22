@@ -18,59 +18,69 @@ export async function geocodePlaces(
   cityHint: string,
 ): Promise<GeocodeResult[]> {
   const key = config.yandexMapsApiKey;
-  if (!key) return [];
-  const params = new URLSearchParams({
-    apikey: key,
-    geocode: query,
-    format: "json",
-    results: "5",
-  });
-  const res = await fetch(
-    `https://geocode-maps.yandex.ru/1.x/?${params}`,
-    { signal: AbortSignal.timeout(15000) },
-  );
-  if (!res.ok) return [];
-  const data = (await res.json()) as {
-    response?: {
-      GeoObjectCollection?: {
-        featureMember?: Array<{
-          GeoObject?: {
-            Point?: { pos?: string };
-            metaDataProperty?: {
-              GeocoderMetaData?: {
-                Address?: { formatted?: string };
-                text?: string;
-              };
-            };
-            name?: string;
-          };
-        }>;
-      };
-    };
-  };
-  const members =
-    data.response?.GeoObjectCollection?.featureMember ?? [];
   const results: GeocodeResult[] = [];
-  for (const member of members) {
-    const obj = member.GeoObject;
-    const pos = obj?.Point?.pos;
-    if (!pos) continue;
-    const [lonStr, latStr] = pos.split(" ");
-    const lat = Number(latStr);
-    const lon = Number(lonStr);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-    const meta = obj.metaDataProperty?.GeocoderMetaData;
-    const label =
-      meta?.Address?.formatted ||
-      meta?.text ||
-      obj.name ||
-      query;
-    results.push({ lat, lon, label: String(label).trim() });
+
+  if (key) {
+    const params = new URLSearchParams({
+      apikey: key,
+      geocode: query,
+      format: "json",
+      results: "5",
+    });
+    const res = await fetch(
+      `https://geocode-maps.yandex.ru/1.x/?${params}`,
+      { signal: AbortSignal.timeout(15000) },
+    );
+    if (res.ok) {
+      const data = (await res.json()) as {
+        response?: {
+          GeoObjectCollection?: {
+            featureMember?: Array<{
+              GeoObject?: {
+                Point?: { pos?: string };
+                metaDataProperty?: {
+                  GeocoderMetaData?: {
+                    Address?: { formatted?: string };
+                    text?: string;
+                  };
+                };
+                name?: string;
+              };
+            }>;
+          };
+        };
+      };
+      const members =
+        data.response?.GeoObjectCollection?.featureMember ?? [];
+      for (const member of members) {
+        const obj = member.GeoObject;
+        const pos = obj?.Point?.pos;
+        if (!pos) continue;
+        const [lonStr, latStr] = pos.split(" ");
+        const lat = Number(latStr);
+        const lon = Number(lonStr);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        const meta = obj.metaDataProperty?.GeocoderMetaData;
+        const label =
+          meta?.Address?.formatted ||
+          meta?.text ||
+          obj.name ||
+          query;
+        results.push({ lat, lon, label: String(label).trim() });
+      }
+    }
   }
-  if (!results.length && cityHint) {
-    const center = await resolveCityCenter(`${query}, ${cityHint}`);
-    if (center) results.push(center);
+
+  // Как в Python API: Nominatim, если Яндекс недоступен или ничего не нашёл
+  if (!results.length) {
+    const nominatimQuery =
+      cityHint && cityHint !== query ? `${query}, ${cityHint}` : query || cityHint;
+    if (nominatimQuery) {
+      const center = await resolveCityCenter(nominatimQuery);
+      if (center) results.push(center);
+    }
   }
+
   return results;
 }
 

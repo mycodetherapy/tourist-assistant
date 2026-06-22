@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 from agents.finalize_helpers import resolve_routes_program
 from agents.route_postprocess import build_fallback_route_program
-from db.connection import init_db
 from db.repository import create_trip
 from models.routes import GeoPoint, PoiPoint, RouteMaterials, RouteProgram, RouteStop, TripRouteCase
 from search.route_materials_store import (
@@ -18,6 +17,7 @@ from search.route_materials_store import (
     load_route_materials_for_trip,
 )
 from search.yandex.route_url import build_maps_route_url, parse_maps_route_points
+from tests.db_test_helpers import skip_unless_pg, truncate_pg_tables
 
 
 def _sample_materials() -> RouteMaterials:
@@ -45,19 +45,10 @@ def _program_with_maps() -> dict:
     }
 
 
+@skip_unless_pg
 class TestRouteMapsBackfill(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self._db_path = Path(self._tmpdir.name) / "test.db"
-        self._env_patch = patch.dict(
-            "os.environ", {"DATABASE_PATH": str(self._db_path)}, clear=False
-        )
-        self._env_patch.start()
-        init_db()
-
-    def tearDown(self) -> None:
-        self._env_patch.stop()
-        self._tmpdir.cleanup()
+        truncate_pg_tables()
 
     def test_parse_maps_route_points(self) -> None:
         url = build_maps_route_url(

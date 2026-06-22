@@ -1,14 +1,8 @@
-# Туристический ассистент: Node API + React + Postgres + Redis.
+# Туристический ассистент: Node API + React + Postgres + Redis + Python worker.
 #
-# SQLite + FastAPI (legacy):
-#   docker compose --profile legacy up api web
-#
-# Полный SaaS-стек (Postgres + Redis + worker + Node API):
+# Полный стек:
 #   cp .env.example .env
-#   # в .env раскомментируйте для Docker-сети:
-#   # DATABASE_URL=postgresql+psycopg://tourist:tourist@postgres:5432/tourist
-#   # REDIS_URL=redis://redis:6379/0
-#   docker compose --profile pg up -d --build
+#   docker compose up -d --build
 #
 # Только инфра на хосте (порты 5433 / 6380):
 #   docker compose --profile infra up -d postgres redis
@@ -17,7 +11,6 @@
 
 services:
   postgres:
-    profiles: ["pg", "infra"]
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: tourist
@@ -35,7 +28,6 @@ services:
     restart: unless-stopped
 
   redis:
-    profiles: ["pg", "infra"]
     image: redis:7-alpine
     command: redis-server --appendonly yes
     ports:
@@ -49,50 +41,7 @@ services:
       retries: 10
     restart: unless-stopped
 
-  api:
-    profiles: ["legacy"]
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: tourist-assistant:latest
-    entrypoint: ["/app/scripts/docker_api_entrypoint.sh"]
-    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-    env_file:
-      - .env
-    environment:
-      DATABASE_PATH: /app/data/trips.db
-      DATABASE_URL: ${DATABASE_URL:-}
-      REDIS_URL: ${REDIS_URL:-}
-      TOURIST_ASSISTANT_IN_DOCKER: "1"
-      LANGFUSE_HOST: ${LANGFUSE_HOST_DOCKER:-http://host.docker.internal:3000}
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/app/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      postgres:
-        condition: service_healthy
-        required: false
-      redis:
-        condition: service_healthy
-        required: false
-
   web:
-    profiles: ["legacy"]
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-      args:
-        NGINX_CONF: nginx.conf
-    ports:
-      - "5173:80"
-    depends_on:
-      - api
-
-  web-pg:
-    profiles: ["pg"]
     build:
       context: ./web
       dockerfile: Dockerfile
@@ -104,7 +53,6 @@ services:
       - api-node
 
   worker:
-    profiles: ["pg"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -124,7 +72,6 @@ services:
     restart: unless-stopped
 
   api-node:
-    profiles: ["pg"]
     build:
       context: ./api-node
       dockerfile: Dockerfile

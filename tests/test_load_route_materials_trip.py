@@ -8,25 +8,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agents.finalize_helpers import load_route_materials
-from db.connection import init_db
 from db.repository import create_trip, save_section_artifact
 from models.routes import GeoPoint, PoiPoint, RouteMaterials
 from search.route_materials_store import ROUTE_MATERIALS_SECTION
+from tests.db_test_helpers import skip_unless_pg, truncate_pg_tables
 
 
+@skip_unless_pg
 class TestLoadRouteMaterialsFromTrip(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self._db_path = Path(self._tmpdir.name) / "test.db"
-        self._env_patch = patch.dict(
-            "os.environ", {"DATABASE_PATH": str(self._db_path)}, clear=False
-        )
-        self._env_patch.start()
-        init_db()
-
-    def tearDown(self) -> None:
-        self._env_patch.stop()
-        self._tmpdir.cleanup()
+        truncate_pg_tables()
 
     def test_load_from_db_without_tool_message(self) -> None:
         trip_id = create_trip("Самара", "июнь", "Москва", "тест")

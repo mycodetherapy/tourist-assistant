@@ -23,16 +23,23 @@ class RunQuotaTests(unittest.TestCase):
     user_id = 88001
 
     def setUp(self) -> None:
+        self._prev_quotas = os.environ.get("RUN_QUOTAS_ENABLED")
+        os.environ["RUN_QUOTAS_ENABLED"] = "true"
         clear_quota_cache()
         pattern = f"run_quota:{self.user_id}:*"
         for key in get_redis().scan_iter(match=pattern):
             get_redis().delete(key)
 
     def tearDown(self) -> None:
+        if self._prev_quotas is None:
+            os.environ.pop("RUN_QUOTAS_ENABLED", None)
+        else:
+            os.environ["RUN_QUOTAS_ENABLED"] = self._prev_quotas
         clear_redis_cache()
 
     def test_allows_up_to_limit(self) -> None:
-        for _ in range(5):
+        limit = int(os.getenv("RUN_QUOTA_FULL_PER_HOUR", "10"))
+        for _ in range(limit):
             check_and_consume_run_quota(user_id=self.user_id, scope="full")
         with self.assertRaises(RunQuotaError):
             check_and_consume_run_quota(user_id=self.user_id, scope="full")

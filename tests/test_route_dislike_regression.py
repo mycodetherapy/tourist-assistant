@@ -13,13 +13,20 @@ import unittest
 from langchain_core.messages import ToolMessage
 
 from agents.finalize_helpers import resolve_routes_program
-from db.sqlite import repository as db_sqlite
+from db.repository import (
+    create_trip,
+    get_latest_itinerary,
+    list_item_feedback_by_section,
+    save_itinerary_version,
+    save_section_artifact,
+    upsert_item_feedback,
+)
 from models.routes import GeoPoint, PoiPoint, RouteMaterials
 from program.item_key import make_item_key, make_route_stop_key
 from program.route_feedback import rebuild_poi_preferences, snapshot_route_feedback
 from search.route_materials_store import ROUTE_MATERIALS_SECTION
 from services.trip_service import TripService
-from tests.db_test_helpers import use_sqlite_db
+from tests.db_test_helpers import skip_unless_pg, truncate_pg_tables
 from tests.test_item_feedback import _sample_routes_program
 
 CATHEDRAL_POI_ID = "Q2328333"
@@ -72,26 +79,22 @@ def _tool_messages(materials: RouteMaterials) -> list[ToolMessage]:
     ]
 
 
+@skip_unless_pg
 class TestRouteDislikeRegression(unittest.TestCase):
     def setUp(self) -> None:
-        self._db_path = "/tmp/test_route_dislike_regression.db"
-        self._backend = use_sqlite_db(self._db_path)
-        self._backend.__enter__()
-        self.trip_id = db_sqlite.create_trip("Саранск", "июль", "Москва", "тест")
+        truncate_pg_tables()
+        self.trip_id = create_trip("Саранск", "июль", "Москва", "тест")
         self.materials = _saransk_materials()
-        db_sqlite.save_section_artifact(
+        save_section_artifact(
             self.trip_id,
             ROUTE_MATERIALS_SECTION,
             {"schema_version": 1, "materials": self.materials.model_dump()},
             digest="Саранск POI",
         )
         program = _sample_routes_program(["A", "B", "C"])
-        db_sqlite.save_itinerary_version(self.trip_id, program, scope="full")
+        save_itinerary_version(self.trip_id, program, scope="full")
         self.service = TripService()
         self.messages = _tool_messages(self.materials)
-
-    def tearDown(self) -> None:
-        self._backend.__exit__(None, None, None)
 
     def _all_route_poi_ids(self, program: dict) -> set[str]:
         from program.route_stops import collect_route_stop_poi_ids
@@ -100,8 +103,8 @@ class TestRouteDislikeRegression(unittest.TestCase):
 
     def test_double_rebuild_keeps_ban_after_poi_removed_from_routes(self) -> None:
         """Главная регрессия: второй rebuild всё ещё без дизлайкнутого POI."""
-        latest = db_sqlite.get_latest_itinerary(self.trip_id)
-        db_sqlite.upsert_item_feedback(
+        latest = get_latest_itinerary(self.trip_id)
+        upsert_item_feedback(
             self.trip_id,
             int(latest["id"]),
             "route_stops",
@@ -109,7 +112,7 @@ class TestRouteDislikeRegression(unittest.TestCase):
             make_route_stop_key(CATHEDRAL_POI_ID),
             -1,
         )
-        base = db_sqlite.get_latest_itinerary(self.trip_id)["program"]
+        base = get_latest_itinerary(self.trip_id)["program"]
 
         snap = snapshot_route_feedback(base, self.trip_id, "routes")
         assert snap is not None
@@ -125,15 +128,15 @@ class TestRouteDislikeRegression(unittest.TestCase):
             route_feedback_snapshot=snap,
         )
         prog1 = {**base, "routes": routes1.model_dump()}
-        db_sqlite.save_itinerary_version(self.trip_id, prog1, scope="routes")
+        save_itinerary_version(self.trip_id, prog1, scope="routes")
 
         self.assertNotIn(CATHEDRAL_POI_ID, self._all_route_poi_ids(prog1))
         self.assertEqual(
-            db_sqlite.list_item_feedback_by_section(self.trip_id, "route_stops"),
+            list_item_feedback_by_section(self.trip_id, "route_stops"),
             {make_route_stop_key(CATHEDRAL_POI_ID): -1},
         )
 
-        base2 = db_sqlite.get_latest_itinerary(self.trip_id)["program"]
+        base2 = get_latest_itinerary(self.trip_id)["program"]
         state = self.service.prepare_continue_trip(self.trip_id, "routes")
         snap2 = state["route_feedback_snapshot"]
         assert snap2 is not None
@@ -159,7 +162,7 @@ class TestRouteDislikeRegression(unittest.TestCase):
         from program.parse_items import parse_program_sections
         from program.route_feedback import collect_leisure_poi_ids
 
-        base = db_sqlite.get_latest_itinerary(self.trip_id)["program"]
+        base = get_latest_itinerary(self.trip_id)["program"]
         parsed = parse_program_sections(base)
         route_text = parsed.routes.items[0]
         self.service.set_item_feedback(

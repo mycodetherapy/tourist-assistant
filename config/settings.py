@@ -306,7 +306,7 @@ def ensure_api_env() -> None:
             + ", ".join(missing)
             + ".\nСм. .env.example"
         )
-    from api.auth.crypto import validate_fernet_key
+    from auth.crypto import validate_fernet_key
 
     try:
         validate_fernet_key(enc_key)

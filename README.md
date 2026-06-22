@@ -1,6 +1,6 @@
 # Туристический ассистент (LangGraph)
 
-Агент составляет **маршруты по городу**: три альтернативных варианта A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (факт из Wikidata/Nominatim, 2 предложения на русском). Центральная функция продукта — маршруты и базовая точка старта (`route_anchor`). Поездки, предпочтения и версии программы хранятся в **SQLite**.
+Агент составляет **маршруты по городу**: три альтернативных варианта A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (факт из Wikidata/Nominatim, 2 предложения на русском). Центральная функция продукта — маршруты и базовая точка старта (`route_anchor`). Поездки, предпочтения и версии программы хранятся в **PostgreSQL**.
 
 ## Статус и планы
 
@@ -11,7 +11,7 @@
 | Направление | Что планируется |
 |-------------|-----------------|
 | **Маршруты** | Базовая точка (отель/адрес) на карте Яндекс.Карт; улучшение пешеходных маршрутов по выгрузкам [Geofabrik](https://download.geofabrik.de/) |
-| **SaaS** | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (вместо локальной SQLite на одного пользователя) |
+| **SaaS** | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (Postgres + Node API) |
 
 ## Быстрый старт
 
@@ -27,28 +27,43 @@ git clone <url-репозитория>
 cd tourist-assistant
 
 test -f .env || cp .env.example .env
-# JWT_SECRET, SETTINGS_ENCRYPTION_KEY — обязательны для API
+# DATABASE_URL, REDIS_URL, JWT_SECRET, SETTINGS_ENCRYPTION_KEY — обязательны
 
-docker compose build
-docker compose --profile legacy up api web
+docker compose up -d --build
 ```
 
-UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/docs](http://localhost:8000/docs).
+UI: [http://localhost:5173](http://localhost:5173), API health: [http://localhost:8001/api/health](http://localhost:8001/api/health).
 
 ### Локальная разработка (API + React)
 
-Требования: Python 3.10+, Node.js 20+. В `.env`: `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). Ключ OpenRouter каждый пользователь задаёт в **Настройках** (BYOK). Для `python -m eval --with-llm` нужен `LLM_API_KEY` в `.env`.
+Требования: Python 3.10+, Node.js 20+, Postgres и Redis. В `.env`: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). Ключ OpenRouter каждый пользователь задаёт в **Настройках** (BYOK). Для `python -m eval --with-llm` нужен `LLM_API_KEY` в `.env`.
 
-**Терминал 1 — API:**
+**Инфра (терминал 0):**
+
+```bash
+docker compose up -d postgres redis
+export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5433/tourist
+export REDIS_URL=redis://localhost:6380/0
+alembic upgrade head
+```
+
+**Терминал 1 — worker (LangGraph):**
 
 ```bash
 source .venv/bin/activate
 pip install -r requirements.txt
-# JWT_SECRET и SETTINGS_ENCRYPTION_KEY в .env обязательны
-uvicorn api.main:app --reload --port 8000
+python -m worker
 ```
 
-**Терминал 2 — фронтенд:**
+**Терминал 2 — Node API:**
+
+```bash
+cd api-node
+npm install
+npm run dev
+```
+
+**Терминал 3 — фронтенд:**
 
 ```bash
 cd web
@@ -56,7 +71,7 @@ npm install
 npm run dev
 ```
 
-Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8000`. На главной (`/`) — лендинг с описанием сервиса; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — ключ [OpenRouter](https://openrouter.ai/keys). Список поездок — `/trips`.
+Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — ключ [OpenRouter](https://openrouter.ai/keys). Список поездок — `/trips`.
 
 **Проверка с телефона (PWA):**
 
@@ -66,14 +81,9 @@ npm run dev
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
 5. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой».
 
-Без открытия портов: `cloudflared tunnel --url http://localhost:5173`. Через Docker: `docker compose --profile legacy up api web` → `http://<IP-Mac>:5173`.
+Без открытия портов: `cloudflared tunnel --url http://localhost:5173`. Через Docker: `docker compose up` → `http://<IP-Mac>:5173`.
 
-**Swagger (при запущенном API):**
-
-- Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
-- ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-Статическая схема в репозитории: `docs/openapi.json` (обновление: `python3 scripts/export_openapi.py`).
+**API:** Node.js Fastify на порту **8001** (`api-node/`). Статическая OpenAPI-схема: `docs/openapi.json`.
 
 **Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
 
@@ -86,14 +96,14 @@ npm run dev
 | Экран | Действие |
 |-------|----------|
 | **Вход / регистрация** | Email+пароль или Google; JWT в `localStorage` |
-| **Настройки** | BYOK: OpenRouter API key (шифруется в SQLite) |
+| **Настройки** | BYOK: OpenRouter API key (шифруется в Postgres) |
 | **Список поездок** | Только поездки текущего пользователя |
 | **Новая поездка** | Wizard: поездка → запуск → фоновая сборка (polling 1–2 мин) |
 | **Карточка поездки** | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; внизу **«О городе»** (skeleton, пока `city_fact_status=pending`); пересбор маршрутов одной кнопкой |
 
 Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
-**Оценки пунктов (👍/👎):** для **вариантов маршрута и остановок** (блок «О городе» без голосования). Веб: клик → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` (SQLite или Postgres). **👎 на остановку** — жёсткий запрет `poi_id` при пересборке (дизлайк сохраняется между прогонами); похожие места (тот же мотив/имя, напр. собор и памятник Ушакова) тоже исключаются. **👎 на вариант маршрута** — мягкая подсказка LLM + бан остановок этого варианта.
+**Оценки пунктов (👍/👎):** для **вариантов маршрута и остановок** (блок «О городе» без голосования). Веб: клик → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` (Postgres). **👎 на остановку** — жёсткий запрет `poi_id` при пересборке (дизлайк сохраняется между прогонами); похожие места (тот же мотив/имя, напр. собор и памятник Ушакова) тоже исключаются. **👎 на вариант маршрута** — мягкая подсказка LLM + бан остановок этого варианта.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -113,90 +123,39 @@ cd tourist-assistant
 # Права только для вашего пользователя (рекомендуется):
 chmod 600 .env
 
-docker compose build api web
-docker compose --profile legacy up api web
+docker compose build
+docker compose up -d
 ```
 
-UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8000/api/health](http://localhost:8000/api/health).
-
-**LangFuse на хосте:** в `.env` задайте `LANGFUSE_HOST_DOCKER=http://host.docker.internal:3000` — compose подставит его в контейнер `api`.
+UI: [http://localhost:5173](http://localhost:5173), API: [http://localhost:8001/api/health](http://localhost:8001/api/health).
 
 #### Тесты в Docker
 
 ```bash
-docker compose run --rm api python -m unittest discover -s tests -v
-docker compose run --rm api python -m eval --suite smoke
+docker compose run --rm worker python -m unittest discover -s tests -v
+docker compose run --rm worker python -m eval --suite smoke
 ```
 
 Скрипт `ensure_env_file.sh` и `test -f .env || cp …` **не трогают** существующий `.env`.
 
-#### Postgres + Redis (миграция SaaS, infra)
-
-API **по умолчанию** всё ещё на SQLite (`DATABASE_PATH`). Postgres — параллельный контур для миграции.
+#### Postgres + Redis (локально без полного compose)
 
 ```bash
-# Инфра (порты по умолчанию 5433 / 6380 — чтобы не конфликтовать с LangFuse)
-docker compose --profile infra up -d postgres redis
+docker compose up -d postgres redis
 
 export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5433/tourist
+export REDIS_URL=redis://localhost:6380/0
 alembic upgrade head
 
-# Проверка схемы
 python3 -m unittest tests.test_postgres_schema -v
-
-# CRUD на Postgres (те же сценарии, что tests/test_db.py)
 python3 -m unittest tests.test_db_postgres -v
-
-# graph_runs + Redis lock (нужен REDIS_URL)
-export REDIS_URL=redis://localhost:6380/0
 python3 -m unittest tests.test_graph_runs -v
 
-# Worker (JSON Redis queue): при DATABASE_URL + REDIS_URL API ставит задачи в worker
-# Читает .env (REDIS_URL, DATABASE_URL) как и API
 python -m worker
-# или docker compose --profile pg up worker
+cd api-node && npm run dev
 ```
 
-При `DATABASE_URL` и `REDIS_URL` фоновые прогоны идут через **JSON Redis queue** (`tourist:queue:*`, `worker/tasks.py`, таблица `graph_runs`); без них — потоки в процессе API (SQLite).
-
-#### Node.js API (миграция HTTP-слоя)
-
-Параллельный REST API на **Fastify + TypeScript** (`api-node/`): те же эндпоинты `/api/*`, Postgres, Redis, совместимые JWT и Fernet BYOK.
-
-```bash
-# Требуется Postgres + Redis (как выше)
-export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5433/tourist
-export REDIS_URL=redis://localhost:6380/0
-
-cd api-node
-npm install
-npm run dev          # порт 8001 (API_NODE_PORT)
-```
-
-Переключить фронт на Node API: в `web/vite.config.ts` proxy target `http://127.0.0.1:8001` или `API_NODE_PORT=8001 npm run dev` (см. ниже).
-
-Тесты Node: `cd api-node && npm test`. Интеграционные (нужен `DATABASE_URL`): `npm run test:integration`. Python worker **без изменений** в задачах — только потребитель очереди.
-
-Google OAuth в api-node: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (порт **8001**), `FRONTEND_URL`.
-
-#### Полный стек Postgres (Docker, profile `pg`)
-
-API, worker, auth и CRUD переключаются на Postgres при `DATABASE_URL` (см. `db/backends.py`, `init_db()` → Alembic).
-
-```bash
-# В .env для контейнеров (хост postgres/redis в docker-сети):
-# DATABASE_URL=postgresql+psycopg://tourist:tourist@postgres:5432/tourist
-# REDIS_URL=redis://redis:6379/0
-
-docker compose --profile pg up -d --build
-```
-
-Сервисы: `postgres`, `redis`, `api-node`, `worker` (Alembic + JSON worker), `web-pg`.  
-UI: [http://localhost:5173](http://localhost:5173), health: [http://localhost:8001/api/health](http://localhost:8001/api/health).
-
-Legacy SQLite + FastAPI: `docker compose --profile legacy up api web`.
-
-Локально без Docker: `export DATABASE_URL=…` + `export REDIS_URL=…` + `cd api-node && npm run dev` + `python -m worker`.
+Фоновые прогоны: **JSON Redis queue** (`tourist:queue:*`, `worker/tasks.py`, таблица `graph_runs`).
 
 Бэкап prod (cron на VPS): [`scripts/pg_backup.sh`](scripts/pg_backup.sh).
 
@@ -227,18 +186,17 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | Переменная | Обязательно | Описание |
 |------------|-------------|----------|
 | `LLM_API_KEY` | Нет* | Для `python -m eval --with-llm` и dev-скриптов; веб-API использует BYOK в профиле |
-| `JWT_SECRET` | Да** | Секрет подписи JWT для `uvicorn api.main:app` |
+| `JWT_SECRET` | Да** | Секрет подписи JWT (api-node) |
 | `SETTINGS_ENCRYPTION_KEY` | Да** | Fernet-ключ шифрования BYOK в БД (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
 | `JWT_ACCESS_TTL_MINUTES` | Нет | Срок жизни access token (по умолчанию 60) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет | Google OAuth (опционально) |
-| `GOOGLE_REDIRECT_URI` | Нет | Callback OAuth, по умолчанию `http://localhost:8000/api/auth/google/callback` |
+| `GOOGLE_REDIRECT_URI` | Нет | Callback OAuth, по умолчанию `http://localhost:8001/api/auth/google/callback` |
 | `CORS_ORIGINS` | Нет | Доп. origins через запятую для прод-домена |
 | `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openrouter.ai/api/v1` |
 | `LLM_MODEL` | Нет | Slug модели на OpenRouter. По умолчанию `openai/gpt-4.1-mini` (см. [Модели LLM](#модели-llm)) |
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
-| `DATABASE_PATH` | Нет | SQLite (legacy API), по умолчанию `data/trips.db` |
-| `DATABASE_URL` | Нет | Postgres SaaS: Alembic при старте API, repository + users + audit |
-| `REDIS_URL` | Нет | Redis: RQ worker, locks, лимиты прогонов (5 full / 10 partial в час на user) |
+| `DATABASE_URL` | Да** | PostgreSQL (обязателен для API и worker) |
+| `REDIS_URL` | Да** | Redis: JSON worker queue, locks, лимиты прогонов |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
 | `LANGCHAIN_PROJECT` | Нет | Имя проекта (по умолчанию `tourist-assistant`) |
@@ -317,7 +275,7 @@ LLM_OPENROUTER_PROVIDERS=DeepInfra
 
 После `executor` готовность tools проверяется **кодом** ([`planning/tools_readiness.py`](planning/tools_readiness.py)): при успешном `search_route_materials` граф идёт сразу в `writer`, без второго LLM-вызова researcher. При ошибке tool — retry `researcher`.
 
-**API и БД:** `api/` вызывает `services/trip_service.py` → `app.invoke`; `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions` (SQLite). Веб: `web/` (React 19, Ant Design, TanStack Query).
+**API и БД:** `api-node/` (Fastify) вызывает Postgres; фоновые прогоны — `python -m worker` (LangGraph). `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions`. Веб: `web/` (React 19, Ant Design, TanStack Query).
 
 После изменения графа перегенерируйте PNG:
 
@@ -360,7 +318,7 @@ python3 scripts/render_graph.py
 
 ### Какую задачу решает агент?
 
-По городу, предпочтениям и базовой точке (`route_anchor`) агент **собирает пул POI**, формирует **три маршрута A/B/C** и **факт о городе** (Wikidata → короткий LLM-polish), сохраняет версии в SQLite. Маршруты доступны в UI сразу после прогона графа; факт — асинхронно (`city_fact_status`: `pending` → `ready`).
+По городу, предпочтениям и базовой точке (`route_anchor`) агент **собирает пул POI**, формирует **три маршрута A/B/C** и **факт о городе** (Wikidata → короткий LLM-polish), сохраняет версии в PostgreSQL.
 
 ### Кто будет пользоваться агентом?
 
@@ -371,8 +329,7 @@ python3 scripts/render_graph.py
 | Система | Назначение |
 |---------|------------|
 | **OpenRouter** | Researcher, writer, опционально LLM-judge в eval (`openai/gpt-4.1-mini` через Azure) |
-| **SQLite** (`DATABASE_PATH`) | Legacy API: поездки, программы (до переключения на PG) |
-| **PostgreSQL** (`DATABASE_URL`) | Целевая SaaS-БД: Alembic, `graph_runs`, audit, usage (миграция) |
+| **PostgreSQL** (`DATABASE_URL`) | Поездки, программы, auth, graph_runs, audit |
 | **Redis** (`REDIS_URL`) | Очередь worker, locks, per-user run quotas |
 | **Tavily API** (опционально) | Веб-поиск с ответом-сводкой |
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
@@ -389,7 +346,7 @@ python3 scripts/render_graph.py
 - **Нестабильный ввод**: даты и города в свободной форме, опросник и уточнения в запросе.
 - **Многошаговый сбор**: researcher решает, какие tools вызвать; critic и пользователь могут инициировать повтор.
 - **Синтез из шума**: LLM отбирает факты из `digest`, группирует по районам.
-- **Память и итерации**: SQLite, частичный пересбор (`routes` / `full`), автосохранение программы после critic.
+- **Память и итерации**: Postgres, частичный пересбор (`routes` / `full`), автосохранение программы после critic.
 
 Детерминированный пайплайн «3 HTTP-запроса → шаблон» не покрывает вариативность запросов и качество сниппетов.
 
@@ -398,7 +355,7 @@ python3 scripts/render_graph.py
 В этом проекте RAG **не даёт ключевой пользы**, потому что задача требует **актуальных данных** (события, цены, расписания) и **ссылок на первоисточники**. Поэтому основной подход — web-search tools + структурирование результата:
 
 - Источник знаний — **живой веб‑поиск** (`ddgs` / Tavily) и ссылки в `digest`, а не статичный корпус документов.
-- SQLite здесь — **память/версии/профиль**, а не база знаний для retrieval.
+- Postgres здесь — **память/версии/профиль**, а не база знаний для retrieval.
 - RAG усложнит систему (эмбеддинги, актуализация, качество корпуса), но не решит проблему «актуальность» — всё равно нужен web.
 Если расширять проект дальше, RAG был бы уместен для локальной базы: FAQ по визам/транспорту, чек‑листы, правила пересадок, «best practices» по городу и т.п.
 
@@ -447,7 +404,7 @@ docker compose --env-file .env -f docker-compose.yml up -d
 - `LANGFUSE_PUBLIC_KEY=...`
 - `LANGFUSE_SECRET_KEY=...`
 
-3) Запустите API (`uvicorn api.main:app`) или создайте поездку через веб — трейсинг пойдёт через LangChain callbacks.
+3) Запустите api-node (`cd api-node && npm run dev`) или создайте поездку через веб — трейсинг пойдёт через LangChain callbacks.
 
 ### LangSmith (опционально, параллельно)
 
@@ -479,10 +436,9 @@ python3 -m scripts.metrics_report --trip-id 12
 
 ```
 tourist-assistant/
-├── api/                    # FastAPI REST (legacy, SQLite или Postgres)
-│   └── auth/               # register, login, Google OAuth, BYOK crypto
-├── api-node/               # Node.js FastAPI-замена (Fastify, Postgres + Redis)
-├── docs/openapi.json       # OpenAPI 3 (scripts/export_openapi.py)
+├── api-node/               # Node.js REST API (Fastify, Postgres + Redis)
+├── auth/                   # BYOK crypto, require_user_llm_config (worker)
+├── docs/openapi.json       # OpenAPI 3 (статическая схема)
 ├── services/               # TripService, RunManager, json_job_queue
 ├── worker/                 # Python worker (JSON Redis queue, python -m worker)
 ├── web/                    # Vite + React 19, Ant Design, TanStack Query
@@ -490,13 +446,11 @@ tourist-assistant/
 ├── db/
 │   ├── models/             # SQLAlchemy models (PG)
 │   ├── session.py          # DATABASE_URL engine
-│   ├── connection.py       # SQLite (legacy API)
-│   ├── sqlite/repository.py
-│   ├── sqlite/users.py
+│   ├── connection.py       # init_db → Alembic
 │   ├── postgres/repository.py
 │   ├── postgres/users.py
-│   ├── repository.py       # facade (DATABASE_URL → PG)
-│   ├── users.py              # auth/BYOK facade
+│   ├── repository.py       # facade → Postgres
+│   ├── users.py            # auth/BYOK facade
 ├── config/settings.py      # .env, SEARCH_FILTERS, лимиты LLM/поиска
 ├── models/
 │   ├── schemas.py          # FinalProgram, ProgramDraft, RouteMaterialsInput
@@ -530,10 +484,10 @@ tourist-assistant/
 ├── scripts/render_graph.py # PNG графа → docs/assets/graph.png
 ├── docs/assets/graph.png
 ├── tests/
-├── data/                   # trips.db (в .gitignore)
+├── data/                   # локальные артефакты (в .gitignore)
 ├── requirements.txt
-├── Dockerfile              # uvicorn api.main:app
-├── docker-compose.yml      # сервисы api + web
+├── Dockerfile              # Python worker image
+├── docker-compose.yml      # postgres, redis, api-node, worker, web
 ├── .env.example
 └── README.md
 ```

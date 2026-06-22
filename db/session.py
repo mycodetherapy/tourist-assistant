@@ -1,4 +1,4 @@
-"""PostgreSQL engine and session (optional; SQLite remains default for API)."""
+"""PostgreSQL engine and session."""
 
 from __future__ import annotations
 

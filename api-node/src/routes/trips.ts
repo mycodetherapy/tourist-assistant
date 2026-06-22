@@ -35,8 +35,8 @@ import { recordAuditEvent } from "../repos/audit.js";
 import { saveUserProfile } from "../repos/users.js";
 import * as tripsRepo from "../repos/trips.js";
 
-const MAX_LIKED_ROUTES = 3;
-const MAX_LIKED_ROUTE_STOPS = 10;
+const MAX_LIKED_ROUTES = 10;
+const MAX_LIKED_ROUTE_STOPS = 40;
 
 const createTripSchema = z.object({
   city: z.string().min(1),

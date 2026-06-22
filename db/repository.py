@@ -1,4 +1,4 @@
-"""CRUD facade: SQLite (legacy) или Postgres при DATABASE_URL."""
+"""CRUD facade: PostgreSQL (DATABASE_URL обязателен)."""
 
 from __future__ import annotations
 

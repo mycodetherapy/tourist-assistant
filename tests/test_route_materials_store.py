@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import json
-import tempfile
 import unittest
-from pathlib import Path
-from unittest.mock import patch
 
-from db.connection import init_db
 from db.repository import create_trip, get_section_artifact, save_section_artifact
 from models.routes import GeoPoint, PoiPoint, RouteMaterials
 from search.route_materials_store import (
@@ -17,6 +13,7 @@ from search.route_materials_store import (
     load_route_materials_for_trip,
     persist_route_materials_from_tool,
 )
+from tests.db_test_helpers import skip_unless_pg, truncate_pg_tables
 
 
 def _sample_materials() -> RouteMaterials:
@@ -36,19 +33,10 @@ def _sample_materials() -> RouteMaterials:
     )
 
 
+@skip_unless_pg
 class TestRouteMaterialsStore(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self._db_path = Path(self._tmpdir.name) / "test.db"
-        self._env_patch = patch.dict(
-            "os.environ", {"DATABASE_PATH": str(self._db_path)}, clear=False
-        )
-        self._env_patch.start()
-        init_db()
-
-    def tearDown(self) -> None:
-        self._env_patch.stop()
-        self._tmpdir.cleanup()
+        truncate_pg_tables()
 
     def test_persist_and_load(self) -> None:
         trip_id = create_trip("Самара", "июнь", "Москва", "тест")

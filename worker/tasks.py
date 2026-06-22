@@ -21,7 +21,7 @@ def _require_pg() -> None:
 
 
 def _llm_config_for_user(user_id: int) -> LlmConfig:
-    from api.auth.service import AuthError, require_user_llm_config
+    from auth.service import AuthError, require_user_llm_config
 
     try:
         return require_user_llm_config(user_id)

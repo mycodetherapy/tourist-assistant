@@ -8,7 +8,6 @@ import unittest
 from db import (
     create_trip,
     get_itinerary_version,
-    init_db,
     list_item_feedback,
     save_itinerary_version,
     upsert_item_feedback,
@@ -16,6 +15,7 @@ from db import (
 from program.item_key import make_item_key
 from program.parse_items import parse_program_sections
 from services.trip_service import TripService
+from tests.db_test_helpers import skip_unless_pg, truncate_pg_tables
 
 
 def _sample_routes_program(case_ids: list[str]) -> dict:
@@ -48,13 +48,10 @@ def _sample_routes_program(case_ids: list[str]) -> dict:
     }
 
 
+@skip_unless_pg
 class TestItemFeedback(unittest.TestCase):
     def setUp(self) -> None:
-        self._db_path = "/tmp/test_item_feedback.db"
-        os.environ["DATABASE_PATH"] = self._db_path
-        if os.path.exists(self._db_path):
-            os.remove(self._db_path)
-        init_db()
+        truncate_pg_tables()
         self.trip_id = create_trip("Москва", "июль 2026", "СПб", "тест")
         self.program = _sample_routes_program(["A", "B", "C"])
         self.version_id = save_itinerary_version(self.trip_id, self.program)
