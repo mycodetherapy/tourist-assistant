@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import {
@@ -92,10 +92,7 @@ const feedbackSchema = z
     message: "Укажите item_key или item_index",
   });
 
-function validationErrorReply(
-  reply: { code: (n: number) => { send: (b: unknown) => unknown } },
-  err: InputValidationError,
-) {
+function validationErrorReply(reply: FastifyReply, err: InputValidationError) {
   return reply.code(400).send({ detail: err.message });
 }
 
@@ -175,6 +172,7 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
         response: {
           201: ref("CreateTripResponse"),
           400: ref("ErrorDetail"),
+          409: ref("ErrorDetail"),
           428: ref("ErrorDetail"),
           429: ref("ErrorDetail"),
         },
@@ -195,7 +193,7 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
           await requireUserLlmConfigured(request.user!.id);
         } catch (err) {
           if (err instanceof AuthError) {
-            return reply.code(err.statusCode).send({
+            return reply.code(428).send({
               detail: { code: "llm_key_required", message: err.message },
             });
           }

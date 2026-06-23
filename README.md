@@ -10,7 +10,7 @@
 
 | Направление | Что планируется |
 |-------------|-----------------|
-| **Маршруты** | Базовая точка на Яндекс.Картах; **OSRM** (Татарстан) для линии маршрута на интерактивной карте; выгрузки [Geofabrik](https://download.geofabrik.de/) — в планах |
+| **Маршруты** | City pack (OSM PBF → POI + OSRM) для Казани/Йошкар-Олы; расширение через `city_packs.yaml` и `federal_districts.yaml` |
 | **SaaS** | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (Postgres + Node API) |
 
 ## Быстрый старт
@@ -83,24 +83,31 @@ npm run dev
 6. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой» (после того как сайт открылся в Safari по IP).
 7. **Геолокация на карте маршрута:** кнопка-мишень; на интерактивной карте (OSRM) — **вкл/выкл** отслеживание в реальном времени; на iframe (старые поездки без `route_geometry`) — разовая метка. Нужны `VITE_YANDEX_MAPS_API_KEY` и HTTPS.
 
-### OSRM (линия маршрута на карте)
+### City pack (POI + OSRM из одной выжимки)
 
-Пешая геометрия маршрута строится **при сборке** worker'ом через [OSRM](https://project-osrm.org/) и сохраняется в `program.routes.cases[].route_geometry`. На фронте — `ymaps.Map` + Polyline; без геометрии — iframe Яндекс.Карт (как раньше).
+POI и пешеходная геометрия маршрута строятся из **одного** `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Wikidata — **только если pack не готов**. На фронте — `ymaps.Map` + Polyline; без геометрии — iframe Яндекс.Карт.
 
-**Первый запуск (Казань / Поволжский ФО):**
-
-Отдельного файла «Татарстан» на Geofabrik нет — скрипт качает `volga-fed-district-latest.osm.pbf` (~730 MB).
+**Первый запуск (Казань, Йошкар-Ола / Поволжский ФО):**
 
 ```bash
-bash scripts/osrm_prepare.sh          # скачать .osm.pbf + extract/partition/customize (один раз, ~15–30 мин)
-docker compose --profile routing up -d osrm
+bash scripts/fo_ensure.sh volga              # FO PBF ~730 MB (один раз)
+bash scripts/city_pack_prepare.sh kazan      # extract + poi.sqlite + OSRM (~5–15 мин)
+bash scripts/city_pack_prepare.sh yoshkar-ola
+# или все default packs:
+bash scripts/city_pack_batch.sh
+
+docker compose --profile routing up -d osrm-gateway osrm-kazan osrm-yoshkar-ola
 ```
 
-Образ: `ghcr.io/project-osrm/osrm-backend` (не устаревший `osrm/osrm-backend` с Docker Hub). В конце `osrm-extract` в логе нормально видеть `Node compression ratio` / `Edge compression ratio` — это **успех**, не ошибка. Если скрипт падает на следующем шаге (`osrm-partition`): в Docker Desktop выделите **≥ 6 GB RAM** или `DOCKER_MEMORY=8g bash scripts/osrm_prepare.sh`. Повторный запуск пропускает готовые шаги; полная пересборка: `FORCE_REBUILD=1 bash scripts/osrm_prepare.sh`. На Mac с Apple Silicon при странных падениях: `DOCKER_PLATFORM=linux/amd64 bash scripts/osrm_prepare.sh`.
+При первом `city_pack_prepare` автоматически собирается Docker-образ `local-osmium-tool` (`scripts/Dockerfile.osmium`), если нет доступа к `ghcr.io/osmcode/osmium-tool`.
 
-В `.env` worker'а: `OSRM_URL=http://127.0.0.1:5001` (локально; порт **5001**, т.к. на macOS 5000 часто занят AirPlay) или `http://osrm:5000` (worker в Docker compose). После пересборки маршрута в program появятся `route_geometry`, `route_distance_m`.
+Каталог городов: [`config/city_packs.yaml`](config/city_packs.yaml); федеральные округа (Geofabrik): [`config/federal_districts.yaml`](config/federal_districts.yaml). Новый город в default — запись в YAML + `city_pack_prepare.sh` + сервис `osrm-{slug}` в `docker-compose.yml` (или `python3 scripts/compose_osrm_city.py`).
 
-Маршруты **вне Поволжского ФО** не получат OSRM-линию до добавления другого `.osm.pbf`. Deep link `maps_route_url` остаётся для «Подробнее в Яндекс.Картах».
+В `.env` worker'а: `OSRM_GATEWAY_URL=http://127.0.0.1:8080` (локально) или `http://osrm-gateway:8080` (Docker). Gateway проксирует OSRM и **lazy** поднимает `osrm-{slug}`. После пересборки маршрута в program появятся `route_geometry`, `route_distance_m`.
+
+Города **вне default packs** — lazy prepare через worker (Redis); пока pack строится — POI из Wikidata. `pip install osmium` нужен для `build_poi_index.py`.
+
+Образ OSRM: `ghcr.io/project-osrm/osrm-backend`. На Mac с Apple Silicon: `DOCKER_PLATFORM=linux/amd64 bash scripts/city_pack_prepare.sh kazan`. OOM на partition: `DOCKER_MEMORY=8g`.
 
 Для стабильного PWA-теста без dev-сервера: `cd web && npm run build && npm run preview -- --host`.
 
@@ -173,6 +180,8 @@ docker compose run --rm worker python -m unittest discover -s tests -v
 docker compose run --rm worker python -m eval --suite smoke
 ```
 
+**Важно:** unit-тесты с Postgres делают `TRUNCATE` только в `TEST_DATABASE_URL` (БД с суффиксом `_test`, по умолчанию `tourist_test`). В `.env` должны быть обе переменные; test-БД создаётся `python3 scripts/ensure_test_database.py`. Не запускайте тесты без `TEST_DATABASE_URL` — иначе они пропускаются. Не используйте `docker compose down -v` на dev-данных.
+
 Скрипт `ensure_env_file.sh` и `test -f .env || cp …` **не трогают** существующий `.env`.
 
 #### Postgres + Redis (локально без полного compose)
@@ -226,6 +235,14 @@ docker compose build api-node && docker compose up -d api-node
 
 ### Тесты и eval (без полного прогона агента)
 
+Перед первым запуском Postgres-тестов локально:
+
+```bash
+python3 scripts/ensure_test_database.py
+```
+
+В `.env` укажите `TEST_DATABASE_URL=…/tourist_test` (отдельно от `DATABASE_URL=…/tourist`). Тесты **никогда** не делают `TRUNCATE` на dev-БД без `ALLOW_TEST_TRUNCATE=1`.
+
 Запускайте **по одной строке** (не копируйте `#` в конце строки — shell воспримет это как аргумент).
 
 ```bash
@@ -261,6 +278,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LLM_MODEL` | Нет | Slug модели на OpenRouter. По умолчанию `openai/gpt-4.1-mini` (см. [Модели LLM](#модели-llm)) |
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
 | `DATABASE_URL` | Да** | PostgreSQL (обязателен для API и worker) |
+| `TEST_DATABASE_URL` | Для тестов | Отдельная БД `tourist_test` для `unittest` (`TRUNCATE`); создаётся `scripts/ensure_test_database.py` |
 | `REDIS_URL` | Да** | Redis: JSON worker queue, locks, лимиты прогонов |
 | `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
 | `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
@@ -272,7 +290,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, карта и геолокация); `VITE_DEV_HTTPS` (`web/.env`, HTTPS dev для геолокации с телефона); `OSRM_URL`, `OSRM_TIMEOUT` (пешая маршрутизация OSM, см. [OSRM](#osrm-линия-маршрута-на-карте)); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, карта и геолокация); `VITE_DEV_HTTPS` (`web/.env`, HTTPS dev для геолокации с телефона); `OSRM_GATEWAY_URL`, `OSRM_TIMEOUT` (см. [City pack](#city-pack-poi--osrm-из-одной-выжимки)); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 ### Модели LLM
 
@@ -360,7 +378,7 @@ python3 scripts/render_graph.py
 
 | Инструмент | Что ищет |
 |------------|----------|
-| `search_route_materials` | Полный пул POI (до ~50): Wikidata — все Tier 0, затем Tier 1 по score; набережные по SPARQL; discovery; Overpass опционально (`POI_USE_OVERPASS=true`) |
+| `search_route_materials` | Пул POI: **city pack** (`poi.sqlite`) если готов; иначе Wikidata + discovery |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
@@ -401,8 +419,8 @@ python3 scripts/render_graph.py
 | **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
 | **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
 | **Яндекс.Карты (Geocoder + JS API)** | Геокодинг базовой точки; подложка карты; deep link `maps_route_url` |
-| **OSRM** (`OSRM_URL`, Docker profile `routing`) | Пешеходная геометрия `route_geometry` при сборке маршрута |
-| **OpenStreetMap** (Overpass + Nominatim) | POI с координатами |
+| **OSRM gateway** + city pack | POI из `poi.sqlite`; `route_geometry` через OSRM |
+| **OpenStreetMap** (Nominatim, Geofabrik PBF) | Центр города; выжимки city pack |
 | **Wikidata SPARQL** | Достопримечательности (P625) |
 
 Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`; базовая точка — `onboarding/preferences.py` (`route_anchor`). Пул POI: Wikidata Tier 0 + Tier 1 до ~50. LLM ранжирует `poi_id`; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C.
@@ -529,7 +547,7 @@ tourist-assistant/
 ├── search/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool search_route_materials
-│   ├── osm/                # Nominatim, Overpass, routing (OSRM)
+│   ├── osm/                # Nominatim, city pack POI, routing (OSRM gateway)
 │   ├── wikidata/           # SPARQL достопримечательностей, city_description (факт)
 │   ├── yandex/             # materials, maps_route_url
 │   ├── context.py          # ContextVar: prefs + route_materials (worker-safe)
@@ -550,7 +568,13 @@ tourist-assistant/
 ├── observability/          # LangFuse tracing
 ├── eval/                   # python3 -m eval --suite smoke
 ├── scripts/render_graph.py # PNG графа → docs/assets/graph.png
-├── scripts/osrm_prepare.sh # OSRM: volga-fed-district.osm.pbf + extract
+├── config/city_packs.yaml      # default city packs (kazan, yoshkar-ola)
+├── config/federal_districts.yaml
+├── scripts/fo_ensure.sh        # Geofabrik FO PBF
+├── scripts/city_pack_prepare.sh
+├── scripts/city_pack_batch.sh
+├── scripts/compose_osrm_city.py
+├── services/osrm_gateway/    # OSRM proxy + lazy docker start
 ├── docs/assets/graph.png
 ├── tests/
 ├── data/                   # локальные артефакты (в .gitignore)

@@ -447,7 +447,7 @@ def repair_program_routes(
         repaired, materials, route_anchor=route_anchor
     )
     if _routes_need_geometry_backfill(repaired) or _routes_need_maps_finalize(current):
-        repaired = enrich_program_route_geometry(repaired)
+        repaired = enrich_program_route_geometry(repaired, city=city or "")
     if _routes_need_maps_finalize(repaired):
         return program
     updated = dict(program)

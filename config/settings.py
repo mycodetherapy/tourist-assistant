@@ -333,6 +333,11 @@ def get_osrm_url() -> str:
     return os.getenv("OSRM_URL", "").strip().rstrip("/")
 
 
+def get_osrm_gateway_url() -> str:
+    """URL OSRM gateway (приоритет над прямым OSRM_URL)."""
+    return os.getenv("OSRM_GATEWAY_URL", "").strip().rstrip("/")
+
+
 def get_osrm_timeout() -> float:
     """Таймаут HTTP-запроса к OSRM, сек."""
     raw = os.getenv("OSRM_TIMEOUT", "15").strip()
@@ -343,4 +348,4 @@ def get_osrm_timeout() -> float:
 
 
 def is_osrm_enabled() -> bool:
-    return bool(get_osrm_url())
+    return bool(get_osrm_gateway_url() or get_osrm_url())

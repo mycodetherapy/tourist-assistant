@@ -1,4 +1,4 @@
-"""Поиск мест досуга: Wikidata + веб-discovery; Overpass опционален."""
+"""Поиск мест досуга: city pack (OSM PBF) + Wikidata fallback."""
 
 from __future__ import annotations
 
@@ -7,8 +7,9 @@ import os
 from dataclasses import dataclass
 
 from models.routes import GeoPoint, LeisureTag, PoiPoint
-from search.osm.nominatim import fetch_nominatim_embankments, resolve_city_center
-from search.osm.overpass import fetch_overpass_leisure
+from search.osm.city_pack import ensure_pack_async, is_pack_ready, resolve_city_slug
+from search.osm.nominatim import resolve_city_center
+from search.osm.poi_index import fetch_city_pack_poi
 from search.poi_collect import merge_poi_pools, rank_leisure_pool
 from search.poi_match import match_names_to_pool, strong_match_ids
 from search.wikidata.places import fetch_wikidata_leisure
@@ -21,11 +22,6 @@ def _use_wikidata() -> bool:
 
 def _use_discovery() -> bool:
     return os.getenv("POI_USE_DISCOVERY", "true").lower() in {"1", "true", "yes"}
-
-
-def _use_overpass() -> bool:
-    # Overpass отключён по умолчанию: публичные инстансы из РФ отвечают слишком долго.
-    return os.getenv("POI_USE_OVERPASS", "false").lower() in {"1", "true", "yes"}
 
 
 @dataclass
@@ -41,8 +37,8 @@ def search_leisure_points(
     categories: list[LeisureTag],
     pace: str = "moderate",
 ) -> LeisureSearchResult:
-    del categories  # теги выводятся из OSM/Wikidata, не из шаблонов Geocoder
-    del pace  # темп влияет на сборку A/B/C, не на размер поискового пула
+    del categories
+    del pace
     limit = leisure_search_pool_limit()
     center = resolve_city_center(city)
     if center is None:
@@ -51,28 +47,25 @@ def search_leisure_points(
     geo_center = GeoPoint(lon=center.lon, lat=center.lat)
     osm_points: list[PoiPoint] = []
     wikidata_points: list[PoiPoint] = []
-    embankment_points: list[PoiPoint] = []
-    fetch_osm = _use_overpass()
-    fetch_wd = _use_wikidata()
+    slug = resolve_city_slug(city)
+    pack_ready = bool(slug and is_pack_ready(slug))
 
-    if fetch_wd:
+    if pack_ready and slug:
+        osm_points = fetch_city_pack_poi(
+            slug, center, city, max_elements=max(limit * 4, 40)
+        )
+    elif _use_wikidata():
+        if slug and not is_pack_ready(slug):
+            ensure_pack_async(city)
         wikidata_points = fetch_wikidata_leisure(
             city,
             center,
             wikidata_id=center.wikidata_id,
             pool_target=limit,
         )
-    if fetch_osm:
-        osm_points = fetch_overpass_leisure(
-            city, center, max_elements=max(limit * 4, 40)
-        )
-    # Набережные уже в Wikidata SPARQL; Nominatim — только без Wikidata.
-    embankment_points: list[PoiPoint] = []
-    if not fetch_wd:
-        embankment_points = fetch_nominatim_embankments(city, center, max_items=4)
 
     pool = merge_poi_pools(
-        [osm_points, wikidata_points, embankment_points],
+        [osm_points, wikidata_points],
         center=geo_center,
         city=city,
         max_items=max(limit * 2, 80),
@@ -114,9 +107,10 @@ def search_leisure_points(
             points=_demo_leisure(city, limit, lon=center.lon, lat=center.lat),
             poi_sources={
                 "center": "nominatim",
+                "city_pack_slug": slug,
+                "city_pack_ready": pack_ready,
                 "osm_count": len(osm_points),
                 "wikidata_count": len(wikidata_points),
-                "embankment_count": len(embankment_points),
                 "pool_count": len(pool),
             },
         )
@@ -126,9 +120,10 @@ def search_leisure_points(
         landmark_discovery=discovery_trace,
         poi_sources={
             "center": "nominatim",
+            "city_pack_slug": slug,
+            "city_pack_ready": pack_ready,
             "osm_count": len(osm_points),
             "wikidata_count": len(wikidata_points),
-            "embankment_count": len(embankment_points),
             "pool_count": len(pool),
             "matched_count": len(boosted_ids),
         },
@@ -144,12 +139,10 @@ def _demo_leisure(
     spn_lon: float = 0.1,
     spn_lat: float = 0.08,
 ) -> list[PoiPoint]:
-    """Демо-POI когда open-data не вернула места."""
     from search.yandex.leisure_tags import TAG_SPECS, default_geocoder_tags
 
     categories = default_geocoder_tags()
     collected: list[PoiPoint] = []
-    seen_ids: set[str] = set()
     index = 0
     for tag in categories:
         if len(collected) >= limit:
@@ -174,6 +167,5 @@ def _demo_leisure(
                 address=city,
             )
         )
-        seen_ids.add(poi_id)
         index += 1
     return collected

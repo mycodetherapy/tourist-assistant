@@ -11,11 +11,12 @@ from sqlalchemy import text
 
 from db.postgres import graph_runs as pg_runs
 from db.redis_client import clear_redis_cache, get_redis
-from db.session import is_postgres_enabled, pg_session
+from db.session import pg_session
+from tests.db_test_helpers import prepare_pg_env, skip_unless_test_pg, test_pg_available
 
 
 def _pg_configured() -> bool:
-    return is_postgres_enabled() and bool(os.getenv("REDIS_URL", "").strip())
+    return test_pg_available() and bool(os.getenv("REDIS_URL", "").strip())
 
 
 def _truncate_graph_runs() -> None:
@@ -47,13 +48,14 @@ def _seed_trip(*, user_id: int = 1, trip_id: int = 9001) -> None:
         )
 
 
-@skipUnless(_pg_configured(), "DATABASE_URL and REDIS_URL required")
+@skipUnless(_pg_configured(), "TEST_DATABASE_URL and REDIS_URL required")
 class GraphRunsTests(unittest.TestCase):
     trip_id = 9001
     user_id = 1
 
     @classmethod
     def setUpClass(cls) -> None:
+        prepare_pg_env()
         clear_redis_cache()
         _truncate_graph_runs()
         _seed_trip(user_id=cls.user_id, trip_id=cls.trip_id)

@@ -109,3 +109,14 @@ def city_fact_task(graph_run_id: str, payload: dict[str, Any]) -> None:
         patch_itinerary_program(version_id, {"city_fact_status": "failed"})
         pg_runs.update_graph_run(run_uuid, city_fact_status="failed")
         raise
+
+
+def prepare_city_pack_task(graph_run_id: str, payload: dict[str, Any]) -> None:
+    """RQ: lazy подготовка city pack для города вне default_packs."""
+    from search.osm.city_pack import run_pack_prepare_subprocess
+
+    slug = str(payload.get("slug") or "")
+    city = str(payload.get("city") or slug)
+    if not slug:
+        raise ValueError("prepare_city_pack: slug required")
+    run_pack_prepare_subprocess(slug, city=city)

@@ -59,3 +59,7 @@ redis==6.2.0
 PyJWT==2.10.1
 bcrypt==4.3.0
 cryptography==44.0.2
+fastapi==0.115.12
+uvicorn==0.34.2
+httpx==0.28.1
+osmium==4.3.1

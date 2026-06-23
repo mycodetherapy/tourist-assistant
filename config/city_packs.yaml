@@ -1,0 +1,26 @@
+# Каталог городских пакетов: extract.osm.pbf → poi.sqlite + OSRM.
+# default_packs — prebuild (scripts/city_pack_batch.sh); остальные — lazy prepare.
+
+default_packs:
+  - slug: kazan
+    display_name: Казань
+    federal_district: volga
+    names:
+      - казань
+      - kazan
+    poi_radius_km: 4.5
+    routing_buffer_km: 1.0
+    compose_profile: routing-city-kazan
+    osrm_service: osrm-kazan
+
+  - slug: yoshkar-ola
+    display_name: Йошкар-Ола
+    federal_district: volga
+    names:
+      - йошкар-ола
+      - yoshkar-ola
+      - yoshkar ola
+    poi_radius_km: 4.5
+    routing_buffer_km: 1.0
+    compose_profile: routing-city-yoshkar-ola
+    osrm_service: osrm-yoshkar-ola

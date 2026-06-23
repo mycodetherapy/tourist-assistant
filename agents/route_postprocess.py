@@ -1101,7 +1101,11 @@ def _needs_maps_backfill(program: RouteProgram) -> bool:
     return any(not str(case.maps_route_url).strip() for case in program.cases)
 
 
-def enrich_case_route_geometry(case: TripRouteCase) -> TripRouteCase:
+def enrich_case_route_geometry(
+    case: TripRouteCase,
+    *,
+    city: str = "",
+) -> TripRouteCase:
     """Добавляет OSRM-геометрию по точкам из maps_route_url."""
     maps_url = str(case.maps_route_url).strip()
     if not maps_url:
@@ -1123,7 +1127,7 @@ def enrich_case_route_geometry(case: TripRouteCase) -> TripRouteCase:
         )
     from search.osm.routing import fetch_walk_route
 
-    result = fetch_walk_route(points)
+    result = fetch_walk_route(points, city=city)
     if result is None:
         return case.model_copy(
             update={
@@ -1141,8 +1145,12 @@ def enrich_case_route_geometry(case: TripRouteCase) -> TripRouteCase:
     )
 
 
-def enrich_program_route_geometry(program: RouteProgram) -> RouteProgram:
-    cases = [enrich_case_route_geometry(case) for case in program.cases]
+def enrich_program_route_geometry(
+    program: RouteProgram,
+    *,
+    city: str = "",
+) -> RouteProgram:
+    cases = [enrich_case_route_geometry(case, city=city) for case in program.cases]
     return program.model_copy(update={"cases": cases})
 
 
@@ -1268,7 +1276,8 @@ def backfill_route_maps_only(
                             if k != "maps_route_url"
                         },
                     }
-                )
+                ),
+                city=materials.city,
             )
         )
     return program.model_copy(update={"cases": cases})
@@ -1357,7 +1366,8 @@ def _finalize_case_from_indices(
                     close_loop=close_loop,
                 ),
             }
-        )
+        ),
+        city=materials.city,
     )
 
 

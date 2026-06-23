@@ -1,0 +1,43 @@
+# Федеральные округа РФ — источники Geofabrik для city pack extract.
+# Добавление нового ФО: запись здесь + bash scripts/fo_ensure.sh <id>
+
+districts:
+  volga:
+    pbf_name: volga-fed-district-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/russia/volga-fed-district-latest.osm.pbf
+    min_pbf_bytes: 52428800
+
+  central:
+    pbf_name: central-fed-district-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/russia/central-fed-district-latest.osm.pbf
+    min_pbf_bytes: 52428800
+
+  northwestern:
+    pbf_name: northwestern-fed-district-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/russia/northwestern-fed-district-latest.osm.pbf
+    min_pbf_bytes: 52428800
+
+  southern:
+    pbf_name: southern-fed-district-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/russia/southern-fed-district-latest.osm.pbf
+    min_pbf_bytes: 52428800
+
+  north-caucasian:
+    pbf_name: north-caucasian-fed-district-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/russia/north-caucasian-fed-district-latest.osm.pbf
+    min_pbf_bytes: 20971520
+
+  ural:
+    pbf_name: ural-fed-district-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/russia/ural-fed-district-latest.osm.pbf
+    min_pbf_bytes: 52428800
+
+  siberian:
+    pbf_name: siberian-fed-district-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/russia/siberian-fed-district-latest.osm.pbf
+    min_pbf_bytes: 52428800
+
+  far-eastern:
+    pbf_name: far-eastern-fed-district-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/russia/far-eastern-fed-district-latest.osm.pbf
+    min_pbf_bytes: 52428800

@@ -251,7 +251,7 @@ def is_foreign_destination(city: str) -> bool:
 
 
 def geocode_place_queries(city: str) -> tuple[str, ...]:
-    """Варианты запроса Nominatim/Overpass: сначала без страны, для РФ — с «Россия»."""
+    """Варианты запроса Nominatim: сначала без страны, для РФ — с «Россия»."""
     cleaned = city.strip()
     if not cleaned:
         return ()

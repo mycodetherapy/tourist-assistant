@@ -58,7 +58,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         });
       } catch (err) {
         if (err instanceof AuthError) {
-          return reply.code(err.statusCode).send({ detail: err.message });
+          const code = err.statusCode === 409 ? 409 : 400;
+          return reply.code(code).send({ detail: err.message });
         }
         throw err;
       }
@@ -74,6 +75,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         body: ref("LoginRequest"),
         response: {
           200: ref("AuthResponse"),
+          400: ref("ErrorDetail"),
           401: ref("ErrorDetail"),
         },
       },
@@ -95,7 +97,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         };
       } catch (err) {
         if (err instanceof AuthError) {
-          return reply.code(err.statusCode).send({ detail: err.message });
+          return reply.code(401).send({ detail: err.message });
         }
         throw err;
       }

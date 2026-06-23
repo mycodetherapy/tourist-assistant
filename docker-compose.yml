@@ -4,6 +4,10 @@
 #   cp .env.example .env
 #   docker compose up -d --build
 #
+# City pack + OSRM:
+#   bash scripts/city_pack_batch.sh
+#   docker compose --profile routing up -d osrm-gateway osrm-kazan osrm-yoshkar-ola
+#
 # Только инфра на хосте (порты 5433 / 6380):
 #   docker compose --profile infra up -d postgres redis
 #   export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5433/tourist
@@ -20,6 +24,7 @@ services:
       - "${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-test-db.sh:/docker-entrypoint-initdb.d/02-create-test-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tourist -d tourist"]
       interval: 5s
@@ -62,14 +67,20 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+psycopg://tourist:tourist@postgres:5432/tourist
+      TEST_DATABASE_URL: postgresql+psycopg://tourist:tourist@postgres:5432/tourist_test
       REDIS_URL: redis://redis:6379/0
       TOURIST_ASSISTANT_IN_DOCKER: "1"
-      OSRM_URL: ${OSRM_URL:-http://osrm:5000}
+      # Внутри compose — имя сервиса, не 127.0.0.1 из .env хоста
+      OSRM_GATEWAY_URL: http://osrm-gateway:8080
+      OSRM_URL: ""
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config:ro
     restart: unless-stopped
 
   api-node:
@@ -86,7 +97,6 @@ services:
       API_NODE_PORT: "8001"
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8001/api/auth/google/callback}
-      OSRM_URL: ${OSRM_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,16 +104,45 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Пешая маршрутизация OSM (Поволжский ФО). Перед запуском: bash scripts/osrm_prepare.sh
-  # Только OSRM (без пересборки web/api): docker compose --profile routing up -d osrm
-  osrm:
+  # OSRM gateway: прокси + lazy start osrm-{city}
+  osrm-gateway:
     profiles: [routing]
-    image: ghcr.io/project-osrm/osrm-backend:latest
-    command: osrm-routed --algorithm mld /data/volga-fed-district-latest.osrm
+    image: tourist-assistant:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m services.osrm_gateway
     volumes:
-      - ./data/osrm:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      - ./config:/app/config:ro
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
     ports:
-      - "${OSRM_HOST_PORT:-5001}:5000"
+      - "${OSRM_GATEWAY_PORT:-8080}:8080"
+    environment:
+      TOURIST_ASSISTANT_IN_DOCKER: "1"
+      OSRM_GATEWAY_DOCKER: "1"
+      COMPOSE_FILE: /app/docker-compose.yml
+    restart: unless-stopped
+
+  osrm-kazan:
+    profiles: [routing, routing-city-kazan]
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    command: osrm-routed --algorithm mld /data/kazan.osrm
+    volumes:
+      - ./data/cities/kazan/osrm:/data
+    ports:
+      - "${OSRM_KAZAN_HOST_PORT:-5002}:5000"
+    restart: unless-stopped
+
+  osrm-yoshkar-ola:
+    profiles: [routing, routing-city-yoshkar-ola]
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    command: osrm-routed --algorithm mld /data/yoshkar-ola.osrm
+    volumes:
+      - ./data/cities/yoshkar-ola/osrm:/data
+    ports:
+      - "${OSRM_YOSHKAR_OLA_HOST_PORT:-5003}:5000"
     restart: unless-stopped
 
 volumes:

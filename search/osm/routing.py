@@ -1,4 +1,4 @@
-"""Пешеходная маршрутизация через OSRM."""
+# Пешая маршрутизация через OSRM.
 
 from __future__ import annotations
 
@@ -7,8 +7,9 @@ from dataclasses import dataclass
 
 import requests
 
-from config.settings import get_osrm_timeout, get_osrm_url, is_osrm_enabled
+from config.settings import get_osrm_gateway_url, get_osrm_timeout, get_osrm_url, is_osrm_enabled
 from models.routes import GeoPoint, RouteGeometry
+from search.osm.city_pack import resolve_city_slug
 
 logger = logging.getLogger(__name__)
 
@@ -24,23 +25,45 @@ def _format_waypoints(points: list[GeoPoint]) -> str:
     return ";".join(f"{point.lon},{point.lat}" for point in points)
 
 
-def fetch_walk_route(points: list[GeoPoint]) -> WalkRouteResult | None:
+def _routing_base_url() -> str | None:
+    gateway = get_osrm_gateway_url()
+    if gateway:
+        return gateway
+    if is_osrm_enabled():
+        return get_osrm_url()
+    return None
+
+
+def fetch_walk_route(
+    points: list[GeoPoint],
+    *,
+    city: str | None = None,
+    city_slug: str | None = None,
+) -> WalkRouteResult | None:
     """Строит пеший маршрут по waypoints; при ошибке возвращает None."""
-    if not is_osrm_enabled():
+    base = _routing_base_url()
+    if not base:
         return None
     if len(points) < 2:
         return None
 
-    base = get_osrm_url()
+    slug = city_slug or (resolve_city_slug(city) if city else None)
     waypoints = _format_waypoints(points)
     url = f"{base}/route/v1/foot/{waypoints}"
-    params = {
+    params: dict[str, str] = {
         "overview": "full",
         "geometries": "geojson",
         "steps": "false",
     }
+    headers: dict[str, str] = {}
+    if slug and get_osrm_gateway_url():
+        params["city_slug"] = slug
+        headers["X-City-Slug"] = slug
+
     try:
-        response = requests.get(url, params=params, timeout=get_osrm_timeout())
+        response = requests.get(
+            url, params=params, headers=headers, timeout=get_osrm_timeout()
+        )
         response.raise_for_status()
         payload = response.json()
     except (requests.RequestException, ValueError) as exc:

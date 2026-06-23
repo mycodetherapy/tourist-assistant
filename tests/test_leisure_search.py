@@ -1,4 +1,4 @@
-"""Тесты поиска leisure через Overpass + discovery match."""
+"""Тесты поиска leisure: city pack + Wikidata fallback."""
 
 from __future__ import annotations
 
@@ -9,19 +9,19 @@ from models.routes import GeoPoint, PoiPoint
 from search.yandex.leisure_search import search_leisure_points
 
 
-def _samara_center():
+def _kazan_center():
     from search.osm.nominatim import CityCenter
 
     return CityCenter(
-        city="Самара",
-        lon=50.15,
-        lat=53.20,
-        bbox=(49.95, 53.05, 50.35, 53.35),
-        wikidata_id="Q894",
+        city="Казань",
+        lon=49.12,
+        lat=55.79,
+        bbox=(48.9, 55.6, 49.3, 56.0),
+        wikidata_id="Q4247",
     )
 
 
-def _sample_osm_poi(name: str, poi_id: str, lon: float, lat: float) -> PoiPoint:
+def _sample_poi(name: str, poi_id: str, lon: float, lat: float) -> PoiPoint:
     return PoiPoint(
         poi_id=poi_id,
         tag="landmarks",
@@ -32,111 +32,59 @@ def _sample_osm_poi(name: str, poi_id: str, lon: float, lat: float) -> PoiPoint:
 
 
 class TestLeisureSearch(unittest.TestCase):
-    @patch.dict("os.environ", {"POI_USE_OVERPASS": "true"}, clear=False)
     @patch("search.yandex.landmark_discovery.run_landmark_discovery")
     @patch("search.yandex.leisure_search.fetch_wikidata_leisure")
-    @patch("search.yandex.leisure_search.fetch_overpass_leisure")
+    @patch("search.yandex.leisure_search.fetch_city_pack_poi")
+    @patch("search.yandex.leisure_search.is_pack_ready", return_value=True)
+    @patch("search.yandex.leisure_search.resolve_city_slug", return_value="kazan")
     @patch("search.yandex.leisure_search.resolve_city_center")
-    def test_collects_osm_pool_with_discovery_boost(
+    def test_uses_city_pack_when_ready(
         self,
         resolve_city_center,
-        fetch_overpass,
+        _resolve_slug,
+        _pack_ready,
+        fetch_city_pack,
         fetch_wikidata,
         run_landmark_discovery,
     ) -> None:
         from search.yandex.landmark_discovery import LandmarkDiscoveryTrace
 
-        resolve_city_center.return_value = _samara_center()
-        fetch_overpass.return_value = [
-            _sample_osm_poi("Музей модерна", "osm_node_1", 50.11, 53.19),
-            _sample_osm_poi("Стела «Ладья»", "osm_node_2", 50.12, 53.20),
-            _sample_osm_poi("Самарская набережная", "osm_node_3", 50.13, 53.21),
-        ]
-        fetch_wikidata.return_value = []
-        run_landmark_discovery.return_value = (
-            ["Музей модерна", "Стела Ладья"],
-            LandmarkDiscoveryTrace(
-                provider="ddgs",
-                landmark_names=["Музей модерна", "Стела Ладья"],
-            ),
-        )
-        result = search_leisure_points(city="Самара", categories=["landmarks"], pace="relaxed")
-        names = [p.name for p in result.points]
-        self.assertGreaterEqual(len(names), 2)
-        self.assertTrue(any("Музей" in n for n in names))
-        self.assertIsNotNone(result.landmark_discovery)
-        self.assertGreaterEqual(len(result.landmark_discovery.get("matched_pois") or []), 1)
-        fetch_overpass.assert_called_once()
-        fetch_wikidata.assert_called_once()
-        run_landmark_discovery.assert_called_once_with("Самара")
-
-    @patch("search.yandex.landmark_discovery.run_landmark_discovery")
-    @patch("search.yandex.leisure_search.fetch_wikidata_leisure")
-    @patch("search.yandex.leisure_search.fetch_overpass_leisure")
-    @patch("search.yandex.leisure_search.resolve_city_center")
-    def test_overpass_skipped_by_default(
-        self,
-        resolve_city_center,
-        fetch_overpass,
-        fetch_wikidata,
-        run_landmark_discovery,
-    ) -> None:
-        from search.yandex.landmark_discovery import LandmarkDiscoveryTrace
-
-        resolve_city_center.return_value = _samara_center()
-        fetch_wikidata.return_value = [
-            _sample_osm_poi("Музей", "Q123", 50.11, 53.19),
+        center = _kazan_center()
+        resolve_city_center.return_value = center
+        fetch_city_pack.return_value = [
+            _sample_poi("Кремль", "osm_node_1", 49.10, 55.80),
         ]
         run_landmark_discovery.return_value = (
             [],
             LandmarkDiscoveryTrace(provider="ddgs", landmark_names=[]),
         )
-        result = search_leisure_points(city="Самара", categories=["landmarks"])
+        result = search_leisure_points(city="Казань", categories=["landmarks"])
         self.assertGreaterEqual(len(result.points), 1)
-        fetch_overpass.assert_not_called()
+        fetch_city_pack.assert_called_once()
+        fetch_wikidata.assert_not_called()
 
-    @patch("search.yandex.leisure_search.fetch_nominatim_embankments")
-    @patch("search.yandex.landmark_discovery.run_landmark_discovery")
+    @patch("search.yandex.leisure_search.ensure_pack_async")
     @patch("search.yandex.leisure_search.fetch_wikidata_leisure")
-    @patch("search.yandex.leisure_search.fetch_overpass_leisure")
+    @patch("search.yandex.leisure_search.fetch_city_pack_poi")
+    @patch("search.yandex.leisure_search.is_pack_ready", return_value=False)
+    @patch("search.yandex.leisure_search.resolve_city_slug", return_value="kazan")
     @patch("search.yandex.leisure_search.resolve_city_center")
-    def test_embankments_skipped_when_wikidata_enabled(
+    def test_wikidata_when_pack_missing(
         self,
         resolve_city_center,
-        fetch_overpass,
+        _resolve_slug,
+        _pack_ready,
+        fetch_city_pack,
         fetch_wikidata,
-        run_landmark_discovery,
-        fetch_embankments,
+        ensure_pack_async,
     ) -> None:
-        from search.yandex.landmark_discovery import LandmarkDiscoveryTrace
-
-        resolve_city_center.return_value = _samara_center()
-        fetch_wikidata.return_value = [_sample_osm_poi("Музей", "Q1", 50.13, 53.21)]
-        fetch_overpass.return_value = []
-        run_landmark_discovery.return_value = (
-            [],
-            LandmarkDiscoveryTrace(provider="ddgs", landmark_names=[]),
-        )
-        search_leisure_points(city="Самара", categories=["landmarks"])
-        fetch_embankments.assert_not_called()
-
-    @patch.dict("os.environ", {"POI_USE_WIKIDATA": "false"}, clear=False)
-    @patch("search.yandex.leisure_search.fetch_nominatim_embankments")
-    @patch("search.yandex.leisure_search.fetch_overpass_leisure")
-    @patch("search.yandex.leisure_search.resolve_city_center")
-    def test_embankments_from_nominatim_without_wikidata(
-        self,
-        resolve_city_center,
-        fetch_overpass,
-        fetch_embankments,
-    ) -> None:
-        resolve_city_center.return_value = _samara_center()
-        fetch_overpass.return_value = []
-        emb = _sample_osm_poi("Волжская набережная", "osm_way_9", 50.13, 53.21)
-        fetch_embankments.return_value = [emb.model_copy(update={"tag": "embankments"})]
-        result = search_leisure_points(city="Самара", categories=["landmarks"])
-        fetch_embankments.assert_called_once_with("Самара", _samara_center(), max_items=4)
-        self.assertTrue(any(p.tag == "embankments" for p in result.points))
+        resolve_city_center.return_value = _kazan_center()
+        fetch_wikidata.return_value = [_sample_poi("Музей", "Q1", 49.11, 55.79)]
+        result = search_leisure_points(city="Казань", categories=["landmarks"])
+        self.assertGreaterEqual(len(result.points), 1)
+        fetch_city_pack.assert_not_called()
+        fetch_wikidata.assert_called_once()
+        ensure_pack_async.assert_called_once_with("Казань")
 
     @patch("search.yandex.leisure_search.resolve_city_center", return_value=None)
     def test_demo_when_city_not_found(self, _resolve) -> None:

@@ -118,10 +118,10 @@ class TestFinalizeHelpers(unittest.TestCase):
     def test_prepare_routes_uses_db_cache_without_tools(self) -> None:
         from db.repository import create_trip, save_section_artifact
         from search.route_materials_store import ROUTE_MATERIALS_SECTION
-        from tests.db_test_helpers import pg_available, truncate_pg_tables
+        from tests.db_test_helpers import test_pg_available, truncate_pg_tables
 
-        if not pg_available():
-            self.skipTest("DATABASE_URL not set")
+        if not test_pg_available():
+            self.skipTest("TEST_DATABASE_URL not set")
         truncate_pg_tables()
         trip_id = create_trip("Самара", "июнь", "Москва", "тест")
         save_section_artifact(

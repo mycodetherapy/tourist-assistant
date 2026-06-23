@@ -1,6 +1,6 @@
-"""OpenStreetMap: Nominatim (центр города) и Overpass (POI)."""
+"""OpenStreetMap: Nominatim, city pack POI, OSRM routing."""
 
 from search.osm.nominatim import CityCenter, resolve_city_center
-from search.osm.overpass import fetch_overpass_leisure
+from search.osm.poi_index import fetch_city_pack_poi
 
-__all__ = ["CityCenter", "resolve_city_center", "fetch_overpass_leisure"]
+__all__ = ["CityCenter", "resolve_city_center", "fetch_city_pack_poi"]

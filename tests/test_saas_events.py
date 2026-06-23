@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import os
 import unittest
-from unittest import skipUnless
 
 from sqlalchemy import select, text
 
 from db.postgres import audit as pg_audit
 from db.postgres import usage as pg_usage
 from db.models.schema import AuditEvent, UsageEvent
-from db.session import is_postgres_enabled, pg_session
-
-
-def _pg_configured() -> bool:
-    return is_postgres_enabled()
+from db.session import pg_session
+from tests.db_test_helpers import prepare_pg_env, skip_unless_test_pg
 
 
 def _truncate() -> None:
@@ -37,12 +32,13 @@ def _seed_user(user_id: int = 7701) -> None:
         )
 
 
-@skipUnless(_pg_configured(), "DATABASE_URL required")
+@skip_unless_test_pg
 class SaasEventsTests(unittest.TestCase):
     user_id = 7701
 
     @classmethod
     def setUpClass(cls) -> None:
+        prepare_pg_env()
         _truncate()
         _seed_user(cls.user_id)
 
