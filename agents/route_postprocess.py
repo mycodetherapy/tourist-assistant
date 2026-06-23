@@ -24,7 +24,12 @@ from search.yandex.poi_filters import (
     poi_name_conflict,
     route_name_key,
 )
-from search.yandex.route_url import build_maps_route_url
+from search.yandex.route_url import (
+    build_maps_route_url,
+    build_maps_route_open_url_for_case,
+    compute_route_map_markers,
+    parse_maps_route_points,
+)
 
 _WALK_FACTOR = 1.35
 _SPAN_SMALL_CITY_KM = 3.0
@@ -48,6 +53,39 @@ def _route_anchor_kwargs(route_anchor: Any | None = None) -> dict[str, float | b
         "anchor_lat": float(route_anchor.lat),
         "anchor_lon": float(route_anchor.lon),
         "anchor_loop_end": bool(route_anchor.loop_end),
+    }
+
+
+def _maps_route_fields(
+    points: list[GeoPoint],
+    *,
+    labels: list[str] | None,
+    city: str,
+    transport: str,
+    max_stops: int,
+    close_loop: bool,
+    route_anchor: Any | None = None,
+) -> dict[str, Any]:
+    """maps_route_url и метаданные меток для карты."""
+    anchor_kw = _route_anchor_kwargs(route_anchor)
+    maps_url = build_maps_route_url(
+        points,
+        labels=labels,
+        city=city,
+        transport=transport,
+        max_stops=max_stops,
+        close_loop=close_loop,
+        **anchor_kw,
+    )
+    anchor_pt, leisure_pts = compute_route_map_markers(
+        points,
+        anchor_lat=anchor_kw.get("anchor_lat"),  # type: ignore[arg-type]
+        anchor_lon=anchor_kw.get("anchor_lon"),  # type: ignore[arg-type]
+    )
+    return {
+        "maps_route_url": maps_url,
+        "route_map_anchor": anchor_pt,
+        "route_map_leisure_coords": leisure_pts,
     }
 
 
@@ -1063,6 +1101,96 @@ def _needs_maps_backfill(program: RouteProgram) -> bool:
     return any(not str(case.maps_route_url).strip() for case in program.cases)
 
 
+def enrich_case_route_geometry(case: TripRouteCase) -> TripRouteCase:
+    """Добавляет OSRM-геометрию по точкам из maps_route_url."""
+    maps_url = str(case.maps_route_url).strip()
+    if not maps_url:
+        return case.model_copy(
+            update={
+                "route_geometry": None,
+                "route_distance_m": None,
+                "route_duration_s": None,
+            }
+        )
+    points = parse_maps_route_points(maps_url)
+    if len(points) < 2:
+        return case.model_copy(
+            update={
+                "route_geometry": None,
+                "route_distance_m": None,
+                "route_duration_s": None,
+            }
+        )
+    from search.osm.routing import fetch_walk_route
+
+    result = fetch_walk_route(points)
+    if result is None:
+        return case.model_copy(
+            update={
+                "route_geometry": None,
+                "route_distance_m": None,
+                "route_duration_s": None,
+            }
+        )
+    return case.model_copy(
+        update={
+            "route_geometry": result.geometry,
+            "route_distance_m": result.distance_m,
+            "route_duration_s": result.duration_s,
+        }
+    )
+
+
+def enrich_program_route_geometry(program: RouteProgram) -> RouteProgram:
+    cases = [enrich_case_route_geometry(case) for case in program.cases]
+    return program.model_copy(update={"cases": cases})
+
+
+def backfill_route_map_markers(
+    program: RouteProgram,
+    materials: RouteMaterials,
+    *,
+    route_anchor: Any | None = None,
+) -> RouteProgram:
+    """Дополняет route_map_* по остановкам (для старых программ без метаданных)."""
+    index = _poi_index(materials)
+    cases: list[TripRouteCase] = []
+    for case in program.cases:
+        leisure_count = sum(1 for s in case.stops if s.kind == "leisure")
+        if (
+            case.route_map_leisure_coords
+            and len(case.route_map_leisure_coords) == leisure_count
+        ):
+            cases.append(case)
+            continue
+        points: list[GeoPoint] = []
+        for stop in sorted(case.stops, key=lambda s: s.order):
+            if stop.kind != "leisure":
+                continue
+            coord = _coords_for_stop(stop, index)
+            if coord is None:
+                continue
+            points.append(coord)
+        if not points:
+            cases.append(case)
+            continue
+        anchor_kw = _route_anchor_kwargs(route_anchor)
+        anchor_pt, leisure_pts = compute_route_map_markers(
+            points,
+            anchor_lat=anchor_kw.get("anchor_lat"),  # type: ignore[arg-type]
+            anchor_lon=anchor_kw.get("anchor_lon"),  # type: ignore[arg-type]
+        )
+        cases.append(
+            case.model_copy(
+                update={
+                    "route_map_anchor": anchor_pt,
+                    "route_map_leisure_coords": leisure_pts,
+                }
+            )
+        )
+    return program.model_copy(update={"cases": cases})
+
+
 def backfill_route_maps_only(
     program: RouteProgram,
     materials: RouteMaterials,
@@ -1116,22 +1244,31 @@ def backfill_route_maps_only(
             points = [leisure[i].coordinates for i in indices]
             labels = [leisure[i].name for i in indices]
         maps_url = ""
+        map_fields: dict[str, Any] = {}
         if points:
-            maps_url = build_maps_route_url(
+            map_fields = _maps_route_fields(
                 points,
                 labels=labels,
                 city=materials.city,
                 transport=transport,
                 max_stops=profile.max_stops + (1 if close_loop else 0),
                 close_loop=close_loop,
-                **_route_anchor_kwargs(route_anchor),
+                route_anchor=route_anchor,
             )
+            maps_url = str(map_fields.get("maps_route_url", ""))
         cases.append(
-            case.model_copy(
-                update={
-                    "maps_route_url": maps_url,
-                    "loop_route": close_loop,
-                }
+            enrich_case_route_geometry(
+                case.model_copy(
+                    update={
+                        "maps_route_url": maps_url,
+                        "loop_route": close_loop,
+                        **{
+                            k: v
+                            for k, v in map_fields.items()
+                            if k != "maps_route_url"
+                        },
+                    }
+                )
             )
         )
     return program.model_copy(update={"cases": cases})
@@ -1204,22 +1341,23 @@ def _finalize_case_from_indices(
     )
     points = [leisure[i].coordinates for i in indices]
     labels = [leisure[i].name for i in indices]
-    return case.model_copy(
-        update={
-            "title": public_route_title(profile.title),
-            "stops": _stops_from_indices(leisure, indices),
-            "summary": _route_summary(materials.city, len(indices), loop=close_loop),
-            "loop_route": close_loop,
-            "maps_route_url": build_maps_route_url(
-                points,
-                labels=labels,
-                city=materials.city,
-                transport=transport,
-                max_stops=profile.max_stops + (1 if close_loop else 0),
-                close_loop=close_loop,
-                **_route_anchor_kwargs(),
-            ),
-        }
+    return enrich_case_route_geometry(
+        case.model_copy(
+            update={
+                "title": public_route_title(profile.title),
+                "stops": _stops_from_indices(leisure, indices),
+                "summary": _route_summary(materials.city, len(indices), loop=close_loop),
+                "loop_route": close_loop,
+                **_maps_route_fields(
+                    points,
+                    labels=labels,
+                    city=materials.city,
+                    transport=transport,
+                    max_stops=profile.max_stops + (1 if close_loop else 0),
+                    close_loop=close_loop,
+                ),
+            }
+        )
     )
 
 
@@ -1339,7 +1477,11 @@ def format_routes_text(program: RouteProgram) -> str:
         lines.append(f"## Вариант {case.case_id}: {public_route_title(case.title)}")
         lines.append(public_route_summary(case.summary) or case.summary)
         if case.maps_route_url:
-            lines.append(f"[Маршрут на Яндекс.Картах]({case.maps_route_url})")
+            open_url = build_maps_route_open_url_for_case(case)
+            if open_url:
+                lines.append(f"[Маршрут на Яндекс.Картах]({open_url})")
+            else:
+                lines.append(f"[Маршрут на Яндекс.Картах]({case.maps_route_url})")
         for stop in sorted(case.stops, key=lambda s: s.order):
             hint = f" ({stop.time_hint})" if stop.time_hint else ""
             if stop.kind == "transit_note":

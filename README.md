@@ -10,7 +10,7 @@
 
 | Направление | Что планируется |
 |-------------|-----------------|
-| **Маршруты** | Базовая точка (отель/адрес) на карте Яндекс.Карт; улучшение пешеходных маршрутов по выгрузкам [Geofabrik](https://download.geofabrik.de/) |
+| **Маршруты** | Базовая точка на Яндекс.Картах; **OSRM** (Татарстан) для линии маршрута на интерактивной карте; выгрузки [Geofabrik](https://download.geofabrik.de/) — в планах |
 | **SaaS** | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (Postgres + Node API) |
 
 ## Быстрый старт
@@ -81,7 +81,26 @@ npm run dev
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
 5. **Чёрный экран:** перезапустите `npm run dev` (Vite прописывает HMR на IP Mac). На iPhone: Настройки → Safari → «Дополнения» → «Данные веб-сайтов» → удалите сайт `192.168.x.x`. Не используйте гостевую Wi‑Fi (изоляция клиентов).
 6. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой» (после того как сайт открылся в Safari по IP).
-7. **Геолокация на карте маршрута:** кнопка-мишень на встроенной карте; разовое определение позиции (нужен `VITE_YANDEX_MAPS_API_KEY` в `web/.env`).
+7. **Геолокация на карте маршрута:** кнопка-мишень; на интерактивной карте (OSRM) — **вкл/выкл** отслеживание в реальном времени; на iframe (старые поездки без `route_geometry`) — разовая метка. Нужны `VITE_YANDEX_MAPS_API_KEY` и HTTPS.
+
+### OSRM (линия маршрута на карте)
+
+Пешая геометрия маршрута строится **при сборке** worker'ом через [OSRM](https://project-osrm.org/) и сохраняется в `program.routes.cases[].route_geometry`. На фронте — `ymaps.Map` + Polyline; без геометрии — iframe Яндекс.Карт (как раньше).
+
+**Первый запуск (Казань / Поволжский ФО):**
+
+Отдельного файла «Татарстан» на Geofabrik нет — скрипт качает `volga-fed-district-latest.osm.pbf` (~730 MB).
+
+```bash
+bash scripts/osrm_prepare.sh          # скачать .osm.pbf + extract/partition/customize (один раз, ~15–30 мин)
+docker compose --profile routing up -d osrm
+```
+
+Образ: `ghcr.io/project-osrm/osrm-backend` (не устаревший `osrm/osrm-backend` с Docker Hub). В конце `osrm-extract` в логе нормально видеть `Node compression ratio` / `Edge compression ratio` — это **успех**, не ошибка. Если скрипт падает на следующем шаге (`osrm-partition`): в Docker Desktop выделите **≥ 6 GB RAM** или `DOCKER_MEMORY=8g bash scripts/osrm_prepare.sh`. Повторный запуск пропускает готовые шаги; полная пересборка: `FORCE_REBUILD=1 bash scripts/osrm_prepare.sh`. На Mac с Apple Silicon при странных падениях: `DOCKER_PLATFORM=linux/amd64 bash scripts/osrm_prepare.sh`.
+
+В `.env` worker'а: `OSRM_URL=http://127.0.0.1:5001` (локально; порт **5001**, т.к. на macOS 5000 часто занят AirPlay) или `http://osrm:5000` (worker в Docker compose). После пересборки маршрута в program появятся `route_geometry`, `route_distance_m`.
+
+Маршруты **вне Поволжского ФО** не получат OSRM-линию до добавления другого `.osm.pbf`. Deep link `maps_route_url` остаётся для «Подробнее в Яндекс.Картах».
 
 Для стабильного PWA-теста без dev-сервера: `cd web && npm run build && npm run preview -- --host`.
 
@@ -253,7 +272,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, карта и геолокация); `VITE_DEV_HTTPS` (`web/.env`, HTTPS dev для геолокации с телефона, по умолчанию вкл. при LAN IP); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, карта и геолокация); `VITE_DEV_HTTPS` (`web/.env`, HTTPS dev для геолокации с телефона); `OSRM_URL`, `OSRM_TIMEOUT` (пешая маршрутизация OSM, см. [OSRM](#osrm-линия-маршрута-на-карте)); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 ### Модели LLM
 
@@ -351,7 +370,7 @@ python3 scripts/render_graph.py
 
 | Уровень | Модуль | Что проверяет |
 |---------|--------|----------------|
-| 1 | `eval/checks/deterministic.py` | JSON-схема `FinalProgram`, `maps_route_url` в маршрутах |
+| 1 | `eval/checks/deterministic.py` | JSON-схема `FinalProgram`, `maps_route_url`, валидность `route_geometry` |
 | 2 | `eval/checks/tools.py` | Вызовы tools, `live_data`, `results_count` |
 | 3 | `eval/checks/llm_judge.py` | Опционально: цены со ссылками, город (`--with-llm`) |
 | 4 | `eval/checks/regression.py` | Метрики vs `eval/golden/*.json` |
@@ -381,7 +400,8 @@ python3 scripts/render_graph.py
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
 | **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
 | **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
-| **Яндекс.Карты (Geocoder + JS API)** | Геокодинг базовой точки; deep link `maps_route_url` |
+| **Яндекс.Карты (Geocoder + JS API)** | Геокодинг базовой точки; подложка карты; deep link `maps_route_url` |
+| **OSRM** (`OSRM_URL`, Docker profile `routing`) | Пешеходная геометрия `route_geometry` при сборке маршрута |
 | **OpenStreetMap** (Overpass + Nominatim) | POI с координатами |
 | **Wikidata SPARQL** | Достопримечательности (P625) |
 
@@ -509,7 +529,7 @@ tourist-assistant/
 ├── search/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool search_route_materials
-│   ├── osm/                # Nominatim, Overpass
+│   ├── osm/                # Nominatim, Overpass, routing (OSRM)
 │   ├── wikidata/           # SPARQL достопримечательностей, city_description (факт)
 │   ├── yandex/             # materials, maps_route_url
 │   ├── context.py          # ContextVar: prefs + route_materials (worker-safe)
@@ -530,6 +550,7 @@ tourist-assistant/
 ├── observability/          # LangFuse tracing
 ├── eval/                   # python3 -m eval --suite smoke
 ├── scripts/render_graph.py # PNG графа → docs/assets/graph.png
+├── scripts/osrm_prepare.sh # OSRM: volga-fed-district.osm.pbf + extract
 ├── docs/assets/graph.png
 ├── tests/
 ├── data/                   # локальные артефакты (в .gitignore)

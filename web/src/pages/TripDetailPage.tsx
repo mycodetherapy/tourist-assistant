@@ -306,6 +306,7 @@ export function TripDetailPage() {
         >
           <ProgramTabs
             tripId={tripId}
+            city={trip.city}
             data={programQuery.data}
             votingDisabled={isBuilding}
           />

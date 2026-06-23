@@ -211,6 +211,29 @@ def _routes_need_maps_finalize(program: RouteProgram) -> bool:
     return any(not str(case.maps_route_url).strip() for case in program.cases)
 
 
+def _routes_need_geometry_backfill(program: RouteProgram) -> bool:
+    if not program.cases:
+        return False
+    return any(
+        str(case.maps_route_url).strip() and case.route_geometry is None
+        for case in program.cases
+    )
+
+
+def _routes_need_map_markers_backfill(program: RouteProgram) -> bool:
+    if not program.cases:
+        return False
+    for case in program.cases:
+        if not str(case.maps_route_url).strip():
+            continue
+        leisure_count = sum(1 for s in case.stops if s.kind == "leisure")
+        if not case.route_map_leisure_coords:
+            return True
+        if len(case.route_map_leisure_coords) != leisure_count:
+            return True
+    return False
+
+
 def resolve_routes_program(
     messages: list[Any],
     draft_routes: dict[str, Any] | None,
@@ -373,7 +396,11 @@ def repair_program_routes(
         current = RouteProgram.model_validate(routes)
     except Exception:
         return program
-    if not _routes_need_maps_finalize(current):
+    if (
+        not _routes_need_maps_finalize(current)
+        and not _routes_need_geometry_backfill(current)
+        and not _routes_need_map_markers_backfill(current)
+    ):
         return program
 
     materials = load_route_materials(
@@ -391,7 +418,12 @@ def repair_program_routes(
     if materials is None:
         return program
 
-    from agents.route_postprocess import backfill_route_maps_only, format_routes_text
+    from agents.route_postprocess import (
+        backfill_route_map_markers,
+        backfill_route_maps_only,
+        enrich_program_route_geometry,
+        format_routes_text,
+    )
     from onboarding.preferences import RouteAnchor
 
     route_anchor: RouteAnchor | None = None
@@ -406,9 +438,16 @@ def repair_program_routes(
             except Exception:
                 route_anchor = None
 
-    repaired = backfill_route_maps_only(
-        current, materials, transport=transport, route_anchor=route_anchor
+    repaired = current
+    if _routes_need_maps_finalize(current):
+        repaired = backfill_route_maps_only(
+            current, materials, transport=transport, route_anchor=route_anchor
+        )
+    repaired = backfill_route_map_markers(
+        repaired, materials, route_anchor=route_anchor
     )
+    if _routes_need_geometry_backfill(repaired) or _routes_need_maps_finalize(current):
+        repaired = enrich_program_route_geometry(repaired)
     if _routes_need_maps_finalize(repaired):
         return program
     updated = dict(program)

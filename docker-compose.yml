@@ -64,6 +64,7 @@ services:
       DATABASE_URL: postgresql+psycopg://tourist:tourist@postgres:5432/tourist
       REDIS_URL: redis://redis:6379/0
       TOURIST_ASSISTANT_IN_DOCKER: "1"
+      OSRM_URL: ${OSRM_URL:-http://osrm:5000}
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,11 +86,24 @@ services:
       API_NODE_PORT: "8001"
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8001/api/auth/google/callback}
+      OSRM_URL: ${OSRM_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
+
+  # Пешая маршрутизация OSM (Поволжский ФО). Перед запуском: bash scripts/osrm_prepare.sh
+  # Только OSRM (без пересборки web/api): docker compose --profile routing up -d osrm
+  osrm:
+    profiles: [routing]
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    command: osrm-routed --algorithm mld /data/volga-fed-district-latest.osrm
+    volumes:
+      - ./data/osrm:/data
+    ports:
+      - "${OSRM_HOST_PORT:-5001}:5000"
     restart: unless-stopped
 
 volumes:

@@ -116,3 +116,93 @@ export async function requestUserLocation(): Promise<{ lat: number; lon: number 
 
   throw lastError ?? new GeolocationError("Не удалось определить местоположение");
 }
+
+export interface GpsReading {
+  lat: number;
+  lon: number;
+  accuracy?: number;
+}
+
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const earthRadius = 6_371_000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * earthRadius * Math.asin(Math.sqrt(a));
+}
+
+function createGpsPositionSmoother(
+  onUpdate: (point: { lat: number; lon: number }) => void,
+): (reading: GpsReading) => void {
+  const minMoveMeters = 4;
+  const emaAlpha = 0.3;
+  const maxAccuracyMeters = 60;
+
+  let smoothed: { lat: number; lon: number } | null = null;
+  let lastEmitted: { lat: number; lon: number } | null = null;
+
+  return (reading) => {
+    if (reading.accuracy !== undefined && reading.accuracy > maxAccuracyMeters && smoothed !== null) {
+      return;
+    }
+
+    if (!smoothed) {
+      smoothed = { lat: reading.lat, lon: reading.lon };
+      lastEmitted = { ...smoothed };
+      onUpdate(lastEmitted);
+      return;
+    }
+
+    smoothed = {
+      lat: smoothed.lat + emaAlpha * (reading.lat - smoothed.lat),
+      lon: smoothed.lon + emaAlpha * (reading.lon - smoothed.lon),
+    };
+
+    const moved = haversineMeters(
+      lastEmitted!.lat,
+      lastEmitted!.lon,
+      smoothed.lat,
+      smoothed.lon,
+    );
+    if (moved < minMoveMeters) {
+      return;
+    }
+
+    lastEmitted = { ...smoothed };
+    onUpdate(lastEmitted);
+  };
+}
+
+/** Непрерывное отслеживание GPS; возвращает функцию остановки. */
+export function watchUserLocation(
+  onUpdate: (point: { lat: number; lon: number }) => void,
+  onError: (error: GeolocationError) => void,
+): () => void {
+  const unavailable = geolocationUnavailableMessage();
+  if (unavailable) {
+    onError(new GeolocationError(unavailable, "insecure"));
+    return () => {};
+  }
+
+  const emit = createGpsPositionSmoother(onUpdate);
+  const watchId = navigator.geolocation.watchPosition(
+    (position) => {
+      emit({
+        lat: position.coords.latitude,
+        lon: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      });
+    },
+    (error) => {
+      onError(mapGeolocationError(error));
+    },
+    { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 },
+  );
+
+  return () => {
+    navigator.geolocation.clearWatch(watchId);
+  };
+}

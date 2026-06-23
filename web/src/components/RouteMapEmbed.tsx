@@ -5,26 +5,39 @@ import {
   geolocationUnavailableMessage,
   requestUserLocation,
 } from "../utils/userGeolocation";
-import { mapsUrlToWidgetUrl, widgetUrlWithUserLocation } from "../utils/yandexMap";
+import {
+  buildMarkerWidgetUrl,
+  mapsUrlToWidgetUrl,
+  widgetUrlWithUserLocation,
+} from "../utils/yandexMap";
+import type { MapRoutePoint } from "../utils/mapsRoutePoints";
 import { isYandexMapsConfigured } from "../utils/yandexMapsLoader";
 import { MapGeolocationButton } from "./MapGeolocationButton";
+import { RouteMapYandexOpenChrome } from "./RouteMapYandexOpenChrome";
 
 interface RouteMapEmbedProps {
   mapsRouteUrl: string;
+  city?: string;
   caseId?: string;
   title?: string;
-  /** Ссылка «Подробнее» под картой — обход бага iframe на мобильных. */
-  showMobileLink?: boolean;
+  /** Только метки — без сплошной линии маршрута Яндекса во iframe. */
+  markerPoints?: MapRoutePoint[];
 }
 
 export function RouteMapEmbed({
   mapsRouteUrl,
+  city = "",
   caseId,
   title,
-  showMobileLink = false,
+  markerPoints,
 }: RouteMapEmbedProps) {
   const iframeTitle = title?.trim() || (caseId ? `Маршрут ${caseId}` : "Маршрут на карте");
-  const baseWidgetUrl = useMemo(() => mapsUrlToWidgetUrl(mapsRouteUrl), [mapsRouteUrl]);
+  const baseWidgetUrl = useMemo(() => {
+    if (markerPoints && markerPoints.length > 0) {
+      return buildMarkerWidgetUrl(markerPoints) ?? mapsUrlToWidgetUrl(mapsRouteUrl);
+    }
+    return mapsUrlToWidgetUrl(mapsRouteUrl);
+  }, [mapsRouteUrl, markerPoints]);
 
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [locatingUser, setLocatingUser] = useState(false);
@@ -101,9 +114,15 @@ export function RouteMapEmbed({
           src={iframeSrc}
           title={iframeTitle}
           className="route-map-iframe w-full border-0"
-          loading={showMobileLink ? "eager" : "lazy"}
+          loading="lazy"
           allowFullScreen
           referrerPolicy="no-referrer-when-downgrade"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms"
+        />
+        <RouteMapYandexOpenChrome
+          mapsRouteUrl={mapsRouteUrl}
+          city={city}
+          maskWidgetFooter
         />
         {isYandexMapsConfigured() ? (
           <MapGeolocationButton
@@ -112,16 +131,6 @@ export function RouteMapEmbed({
           />
         ) : null}
       </div>
-      {showMobileLink ? (
-        <a
-          href={mapsRouteUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="route-map-mobile-link"
-        >
-          Подробнее в Яндекс.Картах
-        </a>
-      ) : null}
     </div>
   );
 }

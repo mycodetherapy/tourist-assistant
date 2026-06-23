@@ -66,6 +66,35 @@ def check_links_and_markers(
             issues.append(
                 f"routes: {url_count} maps_route_url (ожидалось ≥{min_route_urls})"
             )
+        issues.extend(_check_route_geometry(routes))
+    return issues
+
+
+def _check_route_geometry(routes: Any) -> list[str]:
+    issues: list[str] = []
+    if not isinstance(routes, dict):
+        return issues
+    cases = routes.get("cases")
+    if not isinstance(cases, list):
+        return issues
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        geom = case.get("route_geometry")
+        if geom is None:
+            continue
+        if not isinstance(geom, dict):
+            issues.append(f"routes: route_geometry не объект (case {case.get('case_id')})")
+            continue
+        if geom.get("type") != "LineString":
+            issues.append(
+                f"routes: route_geometry.type должен быть LineString (case {case.get('case_id')})"
+            )
+        coords = geom.get("coordinates")
+        if not isinstance(coords, list) or len(coords) < 2:
+            issues.append(
+                f"routes: route_geometry.coordinates < 2 точек (case {case.get('case_id')})"
+            )
     return issues
 
 

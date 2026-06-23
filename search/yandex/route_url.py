@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
 from urllib.parse import quote, urlencode
 
 from models.routes import GeoPoint
+from search.yandex.maps_frame import build_maps_frame_route_url, maps_frame_route_url_from_maps_url
 from search.yandex.poi_filters import haversine_km
 
 
@@ -19,6 +21,23 @@ def _dedupe_points(points: list[GeoPoint]) -> list[GeoPoint]:
             continue
         out.append(point)
     return out
+
+
+def compute_route_map_markers(
+    points: list[GeoPoint],
+    *,
+    anchor_lat: float | None = None,
+    anchor_lon: float | None = None,
+) -> tuple[GeoPoint | None, list[GeoPoint]]:
+    """
+    Метки на карте: базовая точка + по одной координате на каждую leisure-остановку.
+    Без дедупа — число меток совпадает с описанием маршрута.
+    """
+    has_anchor = anchor_lat is not None and anchor_lon is not None
+    anchor_pt = None
+    if has_anchor:
+        anchor_pt = GeoPoint(lat=float(anchor_lat), lon=float(anchor_lon))
+    return anchor_pt, list(points)
 
 
 def build_maps_route_url(
@@ -67,15 +86,29 @@ def build_maps_route_url(
         return ""
 
     parts = [f"{p.lat},{p.lon}" for p in route_points]
-    params: dict[str, str] = {
-        "mode": "routes",
-        "rtext": "~".join(parts),
-        "rtt": "pd",
-    }
-    first = route_points[0]
-    params["ll"] = f"{first.lon},{first.lat}"
-    params["z"] = "14"
-    return f"https://yandex.ru/maps/?{urlencode(params)}"
+    rtext = "~".join(parts)
+    lons = [p.lon for p in route_points]
+    lats = [p.lat for p in route_points]
+    ll_lon = sum(lons) / len(lons)
+    ll_lat = sum(lats) / len(lats)
+    return build_maps_frame_route_url(
+        rtext,
+        ll_lon=ll_lon,
+        ll_lat=ll_lat,
+        city=city,
+        z="15",
+    )
+
+
+def build_maps_route_open_url(maps_route_url: str, *, mobile: bool = False) -> str:
+    """Прямая ссылка на маршрут в Яндекс.Картах (from=mapframe)."""
+    _ = mobile
+    return maps_frame_route_url_from_maps_url(maps_route_url)
+
+
+def build_maps_route_open_url_for_case(case: Any, *, mobile: bool = False) -> str:
+    maps_url = str(getattr(case, "maps_route_url", ""))
+    return build_maps_route_open_url(maps_url, mobile=mobile)
 
 
 def parse_maps_route_points(url: str) -> list[GeoPoint]:

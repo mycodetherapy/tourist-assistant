@@ -10,6 +10,16 @@ export interface RouteStop {
   narrative?: string;
 }
 
+export interface RouteGeometry {
+  type: "LineString";
+  coordinates: [number, number][];
+}
+
+export interface GeoPoint {
+  lat: number;
+  lon: number;
+}
+
 export interface TripRouteCase {
   case_id: RouteCaseId | string;
   title: string;
@@ -17,6 +27,11 @@ export interface TripRouteCase {
   stops: RouteStop[];
   maps_route_url: string;
   preserved?: boolean;
+  route_geometry?: RouteGeometry | null;
+  route_distance_m?: number | null;
+  route_duration_s?: number | null;
+  route_map_anchor?: GeoPoint | null;
+  route_map_leisure_coords?: GeoPoint[];
 }
 
 export interface RouteProgram {

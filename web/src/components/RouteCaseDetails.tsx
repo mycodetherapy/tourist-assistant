@@ -35,18 +35,6 @@ export function RouteCaseDetails({
       {leisureStops.length > 0 ? (
         <p className="my-0.5 text-gray-600">{leisureStops.length} остановок</p>
       ) : null}
-      {routeCase.maps_route_url ? (
-        <p className="my-1">
-          <a
-            href={routeCase.maps_route_url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-600 underline"
-          >
-            Открыть маршрут в Яндекс.Картах
-          </a>
-        </p>
-      ) : null}
       {leisureStops.length > 0 ? (
         <ul className="my-1 list-none space-y-0.5 pl-0">
           {leisureStops.map((stop) => {

@@ -10,12 +10,13 @@ import { pickPreferredCaseId } from "../utils/routeVotes";
 import { ItemVoteButtons } from "./ItemVoteButtons";
 import { RouteCaseDetails } from "./RouteCaseDetails";
 import { RouteCaseSwitcher } from "./RouteCaseSwitcher";
-import { RouteMapEmbed } from "./RouteMapEmbed";
+import { RouteMapView } from "./RouteMapView";
 
 const { useBreakpoint } = Grid;
 
 interface ProgramTabsProps {
   tripId: number;
+  city: string;
   data: ProgramResponse;
   votingDisabled?: boolean;
 }
@@ -44,7 +45,7 @@ function MarkdownBlock({
   );
 }
 
-export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) {
+export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsProps) {
   const queryClient = useQueryClient();
   const screens = useBreakpoint();
   const isMobile = screens.md === false;
@@ -208,12 +209,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
                     key={`routes-${item.item_key}`}
                     className="route-item--with-map flex flex-col rounded-lg border border-gray-100 bg-white"
                   >
-                    <RouteMapEmbed
-                      mapsRouteUrl={routeCase!.maps_route_url}
-                      caseId={routeCase!.case_id}
-                      title={routeCase!.title}
-                      showMobileLink
-                    />
+                    <RouteMapView routeCase={routeCase!} city={city} />
                     <div className="route-item-body flex flex-col gap-2">
                       <div className="min-w-0 flex-1">{detailsBlock}</div>
                       {voteButtons}
@@ -230,11 +226,7 @@ export function ProgramTabs({ tripId, data, votingDisabled }: ProgramTabsProps) 
                 >
                   <div className="min-w-0 flex-1">
                     {routeCase?.maps_route_url ? (
-                      <RouteMapEmbed
-                        mapsRouteUrl={routeCase.maps_route_url}
-                        caseId={routeCase.case_id}
-                        title={routeCase.title}
-                      />
+                      <RouteMapView routeCase={routeCase} city={city} />
                     ) : null}
                     {detailsBlock}
                   </div>

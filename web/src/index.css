@@ -108,7 +108,50 @@ body {
   line-height: 1.35;
 }
 
+.yandex-map-open-overlay {
+  position: absolute;
+  bottom: 7px;
+  left: 4px;
+  z-index: 30;
+  display: inline-flex;
+  max-width: calc(100% - 8px);
+  align-items: center;
+  border-radius: 6px;
+  background: #fff;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.2;
+  color: #212121;
+  text-decoration: none;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 12%);
+  white-space: nowrap;
+}
+
+.yandex-map-footer-mask {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 25;
+  width: 178px;
+  height: 50px;
+  pointer-events: auto;
+  background: transparent;
+}
+
+.yandex-map-open-overlay:hover {
+  color: #212121;
+  background: #f9fafb;
+}
+
+.yandex-map-open-overlay:active {
+  background: #f3f4f6;
+}
+
 @media (max-width: 767px) {
+  .yandex-map-open-overlay {
+    padding: 6px;
+  }
+
   .program-card .ant-card-body {
     padding-inline: 0;
     padding-bottom: 12px;
@@ -156,28 +199,8 @@ body {
     border-radius: 0.5rem 0.5rem 0 0;
   }
 
-  .route-map-mobile-link {
-    display: block;
-    border-top: 1px solid rgb(243 244 246);
-    background: rgb(249 250 251);
-    padding: 10px 12px;
-    text-align: center;
-    font-size: 14px;
-    line-height: 1.25;
-    color: rgb(37 99 235);
-    text-decoration: none;
-  }
-
-  .route-map-mobile-link:active {
-    background: rgb(243 244 246);
-  }
-
   .route-item--with-map .route-map-embed .route-map-scroll {
     border-radius: 0.5rem 0.5rem 0 0;
-  }
-
-  .route-item--with-map .route-map-embed .route-map-mobile-link {
-    border-radius: 0;
   }
 
   .route-map-iframe {
@@ -185,6 +208,13 @@ body {
     height: min(62dvh, 480px);
     min-height: 100%;
     pointer-events: auto;
+  }
+
+  .route-map-canvas {
+    display: block;
+    height: min(62dvh, 480px);
+    min-height: 100%;
+    width: 100%;
   }
 
   .route-item--with-map .route-item-body {
@@ -199,6 +229,11 @@ body {
   }
 
   .route-map-iframe {
+    height: min(360px, 50vh);
+    min-height: unset;
+  }
+
+  .route-map-canvas {
     height: min(360px, 50vh);
     min-height: unset;
   }

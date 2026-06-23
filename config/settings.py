@@ -326,3 +326,21 @@ def cors_origins() -> list[str]:
         return defaults
     extra = [part.strip() for part in raw.split(",") if part.strip()]
     return list(dict.fromkeys(defaults + extra))
+
+
+def get_osrm_url() -> str:
+    """Base URL OSRM (без завершающего /). Пусто — маршрутизация отключена."""
+    return os.getenv("OSRM_URL", "").strip().rstrip("/")
+
+
+def get_osrm_timeout() -> float:
+    """Таймаут HTTP-запроса к OSRM, сек."""
+    raw = os.getenv("OSRM_TIMEOUT", "15").strip()
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return 15.0
+
+
+def is_osrm_enabled() -> bool:
+    return bool(get_osrm_url())

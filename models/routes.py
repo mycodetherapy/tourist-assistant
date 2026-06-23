@@ -71,6 +71,14 @@ class RouteStop(BaseModel):
     narrative: str = ""
 
 
+class RouteGeometry(BaseModel):
+    type: Literal["LineString"] = "LineString"
+    coordinates: list[list[float]] = Field(
+        default_factory=list,
+        description="GeoJSON: [[lon, lat], ...]",
+    )
+
+
 class TripRouteCase(BaseModel):
     case_id: RouteCaseId
     title: str
@@ -79,6 +87,17 @@ class TripRouteCase(BaseModel):
     maps_route_url: str = ""
     loop_route: bool = False
     preserved: bool = False
+    route_geometry: RouteGeometry | None = None
+    route_distance_m: float | None = None
+    route_duration_s: float | None = None
+    route_map_anchor: GeoPoint | None = Field(
+        default=None,
+        description="Базовая точка на карте (без номера); задаётся при сборке maps_route_url",
+    )
+    route_map_leisure_coords: list[GeoPoint] = Field(
+        default_factory=list,
+        description="Координаты leisure-остановок для нумерации на карте",
+    )
 
 
 class RouteProgram(BaseModel):

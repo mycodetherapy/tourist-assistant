@@ -10,6 +10,11 @@ type YMapsApi = {
     properties?: Record<string, unknown>,
     options?: Record<string, unknown>,
   ) => unknown;
+  Polyline: new (
+    coords: number[][],
+    properties?: Record<string, unknown>,
+    options?: Record<string, unknown>,
+  ) => unknown;
 };
 
 type YMapInstance = {
@@ -17,6 +22,8 @@ type YMapInstance = {
   geoObjects: { add: (obj: unknown) => void; remove: (obj: unknown) => void };
   setCenter: (center: number[], zoom?: number) => void;
   setBounds: (bounds: number[][], options?: Record<string, unknown>) => void;
+  setZoom: (zoom: number) => void;
+  getZoom: () => number;
   destroy: () => void;
 };
 
