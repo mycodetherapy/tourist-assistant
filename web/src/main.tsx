@@ -4,12 +4,14 @@ import ruRU from "antd/locale/ru_RU";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import { AuthProvider } from "./auth/AuthContext";
 import "./index.css";
 
-registerSW({ immediate: true });
+if (import.meta.env.PROD) {
+  const { registerSW } = await import("virtual:pwa-register");
+  registerSW({ immediate: true });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

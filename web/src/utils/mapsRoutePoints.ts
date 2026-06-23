@@ -31,3 +31,27 @@ export function parseMapsRoutePoints(url: string): MapRoutePoint[] {
     return [];
   }
 }
+
+export type MapsRoutingMode = "pedestrian" | "auto" | "masstransit" | "bicycle";
+
+/** Режим маршрута из rtt в deep link (по умолчанию — пеший, как в route_url.py). */
+export function parseMapsRoutingMode(url: string): MapsRoutingMode {
+  try {
+    const rtt = new URL(url.trim()).searchParams.get("rtt");
+    if (rtt === "pd") {
+      return "pedestrian";
+    }
+    if (rtt === "mt") {
+      return "masstransit";
+    }
+    if (rtt === "bc") {
+      return "bicycle";
+    }
+    if (rtt === "auto") {
+      return "auto";
+    }
+    return "pedestrian";
+  } catch {
+    return "pedestrian";
+  }
+}

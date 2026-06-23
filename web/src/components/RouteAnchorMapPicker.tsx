@@ -1,11 +1,14 @@
 import { Alert, AutoComplete, Button, Spin } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useYandexMapGeolocation } from "../hooks/useYandexMapGeolocation";
 import { parseCoordinateQuery } from "../utils/parseCoordinateQuery";
+import { geolocationUnavailableMessage } from "../utils/userGeolocation";
 import {
   isYandexMapsConfigured,
   loadYandexMaps,
   type YMapInstance,
 } from "../utils/yandexMapsLoader";
+import { MapGeolocationButton } from "./MapGeolocationButton";
 
 export interface MapPoint {
   lat: number;
@@ -67,9 +70,21 @@ export function RouteAnchorMapPicker({
     [],
   );
 
+  const {
+    locatingUser,
+    geoError,
+    setGeoError,
+    handleGeolocationClick,
+    clearUserLocationPlacemark,
+  } = useYandexMapGeolocation(mapRef, mapReadyRef);
+
   useEffect(() => {
     setSearchQuery(label);
   }, [label]);
+
+  useEffect(() => {
+    setGeoError(geolocationUnavailableMessage());
+  }, [setGeoError]);
 
   const updatePlacemark = useCallback(async (point: MapPoint, labelText: string) => {
     const map = mapRef.current;
@@ -221,7 +236,7 @@ export function RouteAnchorMapPicker({
           {
             center: [start.lat, start.lon],
             zoom: valueRef.current ? 16 : 13,
-            controls: ["zoomControl", "geolocationControl"],
+            controls: ["zoomControl"],
           },
           { suppressMapOpenBlock: true },
         );
@@ -252,8 +267,9 @@ export function RouteAnchorMapPicker({
       mapRef.current?.destroy();
       mapRef.current = null;
       placemarkRef.current = null;
+      clearUserLocationPlacemark();
     };
-  }, [center.lat, center.lon, handleMapClick, label, updatePlacemark]);
+  }, [center.lat, center.lon, clearUserLocationPlacemark, handleMapClick, label, updatePlacemark]);
 
   useEffect(() => {
     if (!mapReadyRef.current || value) {
@@ -309,6 +325,17 @@ export function RouteAnchorMapPicker({
           Найти
         </Button>
       </div>
+      {geoError && isYandexMapsConfigured() && (
+        <Alert
+          type="warning"
+          showIcon
+          className="!mb-0"
+          title="Геолокация недоступна"
+          description={geoError}
+          closable
+          onClose={() => setGeoError(null)}
+        />
+      )}
       {error && isYandexMapsConfigured() && (
         <Alert type="warning" showIcon className="!mb-0" title={error} closable onClose={() => setError(null)} />
       )}
@@ -322,6 +349,12 @@ export function RouteAnchorMapPicker({
           </div>
         )}
         <div ref={containerRef} style={{ height, width: "100%" }} />
+        {!loading && (
+          <MapGeolocationButton
+            locating={locatingUser}
+            onClick={() => void handleGeolocationClick()}
+          />
+        )}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ type YMapInstance = {
   events: { add: (event: string, handler: (event: YMapClickEvent) => void) => void };
   geoObjects: { add: (obj: unknown) => void; remove: (obj: unknown) => void };
   setCenter: (center: number[], zoom?: number) => void;
+  setBounds: (bounds: number[][], options?: Record<string, unknown>) => void;
   destroy: () => void;
 };
 

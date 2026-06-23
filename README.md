@@ -76,10 +76,14 @@ npm run dev
 **Проверка с телефона (PWA):**
 
 1. Mac и телефон в одной Wi‑Fi; запустите API и `npm run dev` (как выше).
-2. В выводе Vite найдите строку **Network** (`http://192.168.x.x:5173`) или узнайте IP: `ipconfig getifaddr en0`.
-3. Откройте этот адрес в Safari/Chrome на телефоне.
+2. В выводе Vite найдите строку **Phone / PWA dev URL** (`https://192.168.x.x:5173`) или узнайте IP: `ipconfig getifaddr en0`.
+3. Откройте **HTTPS**-адрес **в Safari/Chrome** (не через иконку «На экран Домой», если раньше добавляли `localhost`). При первом заходе браузер попросит доверять dev-сертификату — без HTTPS геолокация на карте маршрута не работает.
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
-5. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой».
+5. **Чёрный экран:** перезапустите `npm run dev` (Vite прописывает HMR на IP Mac). На iPhone: Настройки → Safari → «Дополнения» → «Данные веб-сайтов» → удалите сайт `192.168.x.x`. Не используйте гостевую Wi‑Fi (изоляция клиентов).
+6. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой» (после того как сайт открылся в Safari по IP).
+7. **Геолокация на карте маршрута:** кнопка-мишень на встроенной карте; разовое определение позиции (нужен `VITE_YANDEX_MAPS_API_KEY` в `web/.env`).
+
+Для стабильного PWA-теста без dev-сервера: `cd web && npm run build && npm run preview -- --host`.
 
 Без открытия портов: `cloudflared tunnel --url http://localhost:5173`. Через Docker: `docker compose up` → `http://<IP-Mac>:5173`.
 
@@ -249,7 +253,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, выбор точки на карте); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, карта и геолокация); `VITE_DEV_HTTPS` (`web/.env`, HTTPS dev для геолокации с телефона, по умолчанию вкл. при LAN IP); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`, `POI_USE_OVERPASS`; `OVERPASS_URL`, `OVERPASS_URLS`, `OVERPASS_TIMEOUT`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 ### Модели LLM
 

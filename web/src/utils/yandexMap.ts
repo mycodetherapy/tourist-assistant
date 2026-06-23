@@ -33,3 +33,10 @@ export function mapsUrlToWidgetUrl(mapsRouteUrl: string): string | null {
     return null;
   }
 }
+
+/** Добавляет метку «вы здесь» к URL виджета (pt: lon,lat). */
+export function widgetUrlWithUserLocation(widgetUrl: string, lat: number, lon: number): string {
+  const url = new URL(widgetUrl);
+  url.searchParams.set("pt", `${lon},${lat},pm2rdm`);
+  return url.toString();
+}
