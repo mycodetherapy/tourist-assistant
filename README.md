@@ -85,7 +85,7 @@ npm run dev
 
 ### City pack (POI + OSRM из одной выжимки)
 
-POI и пешеходная геометрия маршрута строятся из **одного** `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Wikidata — **только если pack не готов**. На фронте — `ymaps.Map` + Polyline; без геометрии — iframe Яндекс.Карт.
+POI и пешеходная геометрия маршрута строятся из **одного** `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Wikidata — **только если pack не готов**. На фронте — `ymaps.Map` + Polyline (OSRM); без `route_geometry` — **ограниченный режим**: виджет Яндекс.Карт с пешим маршрутом и сворачиваемым пояснением.
 
 **Первый запуск (Казань, Йошкар-Ола / Поволжский ФО):**
 

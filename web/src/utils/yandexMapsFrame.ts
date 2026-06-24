@@ -17,6 +17,8 @@ const CITY_YANDEX_PATH: Record<string, string> = {
   "nizhny novgorod": "47/nizhny-novgorod",
   самара: "51/samara",
   samara: "51/samara",
+  тольятти: "240/tolyatti",
+  tolyatti: "240/tolyatti",
   ижевск: "44/izhevsk",
   izhevsk: "44/izhevsk",
 };
