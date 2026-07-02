@@ -1,5 +1,6 @@
 import {
   CompassOutlined,
+  EnvironmentOutlined,
   KeyOutlined,
   LoginOutlined,
   SafetyOutlined,
@@ -10,39 +11,39 @@ import { Link } from "react-router-dom";
 
 const STEPS = [
   {
-    title: "Расскажите о поездке",
-    text: "Город, даты, бюджет и ваши интересы — как если бы вы писали другу, куда хотите поехать.",
+    title: "Создайте поездку",
+    text: "Укажите город, даты и пожелания — спокойный темп, музеи, прогулки у воды или что важно именно вам.",
   },
   {
-    title: "Ассистент собирает план",
-    text: "Он ищет актуальную информацию в интернете и составляет маршрут: что посмотреть, где поесть, как добраться.",
+    title: "Получите три маршрута",
+    text: "Ассистент подбирает места из открытых данных (OSM, Wikidata) и собирает варианты A, B и C — разная длина и набор остановок.",
   },
   {
-    title: "Вы правите и утверждаете",
-    text: "Программу можно доработать: попросить больше музеев, убрать лишнее или пересобрать отдельный день.",
+    title: "Сравните на карте",
+    text: "Откройте варианты на интерактивной карте, задайте базовую точку старта (отель или адрес) и при необходимости пересоберите маршрут.",
   },
   {
-    title: "Берёте с собой",
-    text: "Готовый план с картой, ссылками и подсказками — открываете на телефоне в дороге.",
+    title: "Идите по маршруту",
+    text: "Линия прогулки, метки остановок и геолокация в реальном времени — плюс ссылка «Открыть в Яндекс.Картах» для навигации.",
   },
 ] as const;
 
 const FEATURES = [
   {
-    title: "Маршрут по дням",
-    text: "Утро, день и вечер — без спешки и «галочек ради галочек».",
+    title: "Три варианта A / B / C",
+    text: "Не один «идеальный» маршрут, а три пеших прогулки на выбор — от короткой до более насыщенной.",
   },
   {
-    title: "Билеты и отели",
-    text: "Подсказки, где искать жильё и транспорт, с ориентирами по цене.",
+    title: "Карта и геолокация",
+    text: "Маршрут на карте с линией по улицам; на телефоне можно включить отслеживание и смотреть расстояние до следующей остановки.",
   },
   {
-    title: "Карта и адреса",
-    text: "Места на карте, чтобы не теряться в незнакомом городе.",
+    title: "Базовая точка старта",
+    text: "Отель или адрес проживания — маршруты строятся от вашей точки, а не от центра города «в вакууме».",
   },
   {
-    title: "Ваш стиль отдыха",
-    text: "Спокойная прогулка, музеи, еда или актив — ассистент подстраивается под вас.",
+    title: "Пересбор и оценки",
+    text: "Не понравилась остановка — отметьте и пересоберите; понравившийся вариант можно сохранить при следующей сборке.",
   },
 ] as const;
 
@@ -71,14 +72,17 @@ export function LandingPage() {
       <section className="landing-hero relative overflow-hidden px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-20">
         <div className="landing-hero-glow pointer-events-none absolute inset-0" aria-hidden />
         <div className="relative mx-auto max-w-6xl">
-          <p className="mb-3 text-sm font-medium uppercase tracking-wider text-sky-700">Планировщик путешествий</p>
+          <p className="mb-3 text-sm font-medium uppercase tracking-wider text-sky-700">
+            Маршруты по городу
+          </p>
           <h1 className="mb-5 max-w-3xl text-3xl font-bold leading-tight text-[#001529] sm:text-4xl lg:text-5xl">
-            Персональный маршрут поездки — без бесконечных вкладок и таблиц
+            Три пеших маршрута на поездку — с картой и геолокацией в пути
           </h1>
           <p className="mb-8 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-            Tourist Assistant помогает спланировать поездку: описываете пожелания — получаете понятную программу с
-            местами, картой и практичными советами. Для самостоятельных путешественников, которые хотят готовый план,
-            а не сухой список достопримечательностей.
+            Tourist Assistant — ассистент для самостоятельных путешественников: выбираете город и
+            интересы, получаете варианты прогулок A, B и C по реальным местам, смотрите их на карте и
+            идёте по маршруту с телефоном. Не агрегатор билетов и не «план на каждый час» — фокус на
+            продуманных маршрутах по городу.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link to="/register">
@@ -97,9 +101,10 @@ export function LandingPage() {
 
       <section className="border-y border-slate-200 bg-white px-4 py-14 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-6xl">
-          <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Что вы получите</h2>
+          <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Что внутри</h2>
           <p className="mb-10 max-w-2xl text-slate-600">
-            Не замена гиду и не бронирование «под ключ» — умный помощник, который экономит часы на подготовку.
+            Сервис в активной разработке (routes-first MVP): ядро — маршруты и карта; блок «О городе»
+            подгружается параллельно после сборки.
           </p>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {FEATURES.map((item) => (
@@ -119,7 +124,7 @@ export function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Как это работает</h2>
           <p className="mb-10 max-w-2xl text-slate-600">
-            Без сложных настроек: несколько шагов от идеи до готового плана на экране телефона.
+            Регистрация, ключ OpenRouter в настройках — и можно собирать первую поездку.
           </p>
           <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step, index) => (
@@ -154,7 +159,14 @@ export function LandingPage() {
                 </li>
                 <li className="flex gap-2">
                   <span className="text-sky-600">•</span>
-                  <span>Ваши поездки хранятся отдельно — только у вас в личном кабинете.</span>
+                  <span>Поездки и версии маршрутов хранятся в вашем личном кабинете.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-sky-600">•</span>
+                  <span>
+                    <EnvironmentOutlined className="mr-1 text-sky-600" />
+                    Для геолокации на карте в дороге удобнее открывать сайт по HTTPS (в т.ч. с телефона).
+                  </span>
                 </li>
               </ul>
               <div className="mt-6">
@@ -170,7 +182,7 @@ export function LandingPage() {
                 Ключ OpenRouter
               </h3>
               <p className="mb-4 text-sm leading-relaxed text-slate-700">
-                Для работы ассистента нужен API-ключ от{" "}
+                Для сборки маршрутов нужен API-ключ от{" "}
                 <a
                   href="https://openrouter.ai/keys"
                   target="_blank"
@@ -179,35 +191,35 @@ export function LandingPage() {
                 >
                   OpenRouter
                 </a>
-                . Это сервис, через который запускается «мозг» планировщика — языковая модель, которая читает ваши
-                пожелания и собирает маршрут.
+                . Через него работает языковая модель: она читает ваши пожелания и формирует варианты
+                A/B/C по пулу мест в городе.
               </p>
               <ul className="m-0 list-none space-y-3 p-0 text-sm text-slate-700">
                 <li className="flex gap-2">
                   <span className="text-amber-600">•</span>
                   <span>
-                    <strong>Зачем:</strong> без ключа ассистент не сможет составить программу. Вы платите OpenRouter
-                    напрямую за использование модели — мы не продаём «пакеты запросов».
+                    <strong>Зачем:</strong> без ключа ассистент не соберёт маршруты. Оплата модели —
+                    напрямую в OpenRouter (BYOK).
                   </span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-amber-600">•</span>
                   <span>
-                    <strong>Где взять:</strong> зарегистрируйтесь на openrouter.ai, пополните баланс (обычно хватает
-                    небольшой суммы на одну-две поездки) и создайте ключ в разделе Keys.
+                    <strong>Где взять:</strong> регистрация на openrouter.ai, ключ в разделе Keys,
+                    небольшого баланса обычно хватает на несколько пересборов.
                   </span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-amber-600">•</span>
                   <span>
-                    <strong>Куда вставить:</strong> после входа откройте «Настройки» в шапке сайта и сохраните ключ
-                    там. Он хранится в зашифрованном виде и используется только для ваших поездок.
+                    <strong>Куда вставить:</strong> «Настройки» после входа. Ключ хранится в
+                    зашифрованном виде.
                   </span>
                 </li>
               </ul>
               <p className="mt-4 flex items-start gap-2 text-xs text-slate-600">
                 <SafetyOutlined className="mt-0.5 shrink-0 text-slate-500" />
-                Ключ не показывается повторно целиком — как пароль. Его можно заменить или удалить в любой момент.
+                Ключ не показывается целиком повторно — как пароль. Его можно заменить или удалить.
               </p>
             </div>
           </div>
@@ -221,7 +233,9 @@ export function LandingPage() {
               <CompassOutlined className="text-sky-400" />
               Tourist Assistant
             </p>
-            <p className="m-0 text-sm text-slate-400">Планируйте поездку спокойно — мы поможем собрать маршрут.</p>
+            <p className="m-0 text-sm text-slate-400">
+              Три маршрута по городу — выберите свой и идите с картой в руках.
+            </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link to="/login">
