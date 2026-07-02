@@ -1,4 +1,4 @@
-"""OpenStreetMap: Nominatim, city pack POI, OSRM routing."""
+"""OpenStreetMap: Nominatim, city pack POI."""
 
 from search.osm.nominatim import CityCenter, resolve_city_center
 from search.osm.poi_index import fetch_city_pack_poi

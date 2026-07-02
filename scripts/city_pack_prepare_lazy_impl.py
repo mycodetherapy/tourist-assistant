@@ -19,7 +19,7 @@ from search.osm.nominatim import resolve_city_center
 def _bbox_around(lon: float, lat: float, half_km: float) -> tuple[float, float, float, float]:
     dlat = half_km / 111.0
     dlon = half_km / (111.0 * max(0.35, abs(math.cos(math.radians(lat)))))
-    return lon - dlon, lat - dlat, lon + dlon, lat + dlat
+    return lon - dlon, lat - dlat, lon + dlon, lat + dlon
 
 
 def main() -> int:
@@ -42,8 +42,6 @@ def main() -> int:
 
     pack_dir = ROOT / "data" / "cities" / slug
     pack_dir.mkdir(parents=True, exist_ok=True)
-    osrm_dir = pack_dir / "osrm"
-    osrm_dir.mkdir(parents=True, exist_ok=True)
 
     subprocess.run(["bash", str(ROOT / "scripts" / "fo_ensure.sh"), fo_id], check=True, cwd=str(ROOT))
 
@@ -56,13 +54,10 @@ def main() -> int:
         "FEDERAL_DISTRICT": fo_id,
         "FO_PBF_NAME": fo.pbf_name,
         "PACK_DIR": str(pack_dir),
-        "OSRM_DIR": str(osrm_dir),
         "EXTRACT_PBF": str(pack_dir / "extract.osm.pbf"),
         "POI_DB": str(pack_dir / "poi.sqlite"),
-        "OSRM_BASE": slug,
         "POI_BBOX": ",".join(str(x) for x in poi_bbox),
         "ROUTE_BBOX": ",".join(str(x) for x in route_bbox),
-        "COMPOSE_PROFILE": f"routing-city-{slug}",
     }
     subprocess.run(
         ["bash", str(ROOT / "scripts" / "city_pack_prepare_core.sh")],

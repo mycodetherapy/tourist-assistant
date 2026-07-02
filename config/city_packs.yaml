@@ -1,4 +1,4 @@
-# Каталог городских пакетов: extract.osm.pbf → poi.sqlite + OSRM.
+# Каталог городских пакетов: FO PBF → extract.osm.pbf → poi.sqlite.
 # default_packs — prebuild (scripts/city_pack_batch.sh); остальные — lazy prepare.
 
 default_packs:
@@ -9,9 +9,7 @@ default_packs:
       - казань
       - kazan
     poi_radius_km: 4.5
-    routing_buffer_km: 1.0
-    compose_profile: routing-city-kazan
-    osrm_service: osrm-kazan
+    extract_buffer_km: 1.0
 
   - slug: yoshkar-ola
     display_name: Йошкар-Ола
@@ -21,6 +19,59 @@ default_packs:
       - yoshkar-ola
       - yoshkar ola
     poi_radius_km: 4.5
-    routing_buffer_km: 1.0
-    compose_profile: routing-city-yoshkar-ola
-    osrm_service: osrm-yoshkar-ola
+    extract_buffer_km: 1.0
+
+  - slug: samara
+    display_name: Самара
+    federal_district: volga
+    names:
+      - самара
+      - samara
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: nizhny-novgorod
+    display_name: Нижний Новгород
+    federal_district: volga
+    names:
+      - нижний новгород
+      - nizhny novgorod
+      - nizhny-novgorod
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: izhevsk
+    display_name: Ижевск
+    federal_district: volga
+    names:
+      - ижевск
+      - izhevsk
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: tolyatti
+    display_name: Тольятти
+    federal_district: volga
+    names:
+      - тольятти
+      - tolyatti
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: kostroma
+    display_name: Кострома
+    federal_district: volga
+    names:
+      - кострома
+      - kostroma
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: ulyanovsk
+    display_name: Ульяновск
+    federal_district: volga
+    names:
+      - ульяновск
+      - ulyanovsk
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0

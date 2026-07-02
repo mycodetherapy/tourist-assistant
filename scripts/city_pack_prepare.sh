@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# City pack: FO extract → extract.osm.pbf → poi.sqlite + OSRM.
+# City pack: FO extract → extract.osm.pbf → poi.sqlite.
 # Использование: bash scripts/city_pack_prepare.sh kazan
 set -euo pipefail
 
@@ -47,10 +47,9 @@ def bbox_around(lon, lat, half_km):
     return lon - dlon, lat - dlat, lon + dlon, lat + dlat
 
 poi_bbox = bbox_around(center.lon, center.lat, spec.poi_radius_km)
-route_bbox = bbox_around(center.lon, center.lat, spec.poi_radius_km + spec.routing_buffer_km)
+route_bbox = bbox_around(center.lon, center.lat, spec.poi_radius_km + spec.extract_buffer_km)
 
 spec.pack_dir.mkdir(parents=True, exist_ok=True)
-spec.osrm_dir.mkdir(parents=True, exist_ok=True)
 
 def emit(key, val):
     if isinstance(val, tuple):
@@ -63,11 +62,8 @@ emit("DISPLAY_NAME", spec.display_name)
 emit("FEDERAL_DISTRICT", spec.federal_district)
 emit("FO_PBF_NAME", fo.pbf_name)
 emit("PACK_DIR", str(spec.pack_dir))
-emit("OSRM_DIR", str(spec.osrm_dir))
 emit("EXTRACT_PBF", str(spec.extract_pbf_path))
 emit("POI_DB", str(spec.poi_db_path))
-emit("OSRM_BASE", spec.osrm_base_name)
-emit("COMPOSE_PROFILE", spec.compose_profile)
 emit("POI_BBOX", poi_bbox)
 emit("ROUTE_BBOX", route_bbox)
 PY
@@ -75,7 +71,7 @@ PY
 
 echo "=== City pack: $SLUG ($DISPLAY_NAME) ==="
 bash "$ROOT/scripts/fo_ensure.sh" "$FEDERAL_DISTRICT"
-export SLUG DISPLAY_NAME FEDERAL_DISTRICT PACK_DIR OSRM_DIR EXTRACT_PBF POI_DB OSRM_BASE POI_BBOX ROUTE_BBOX FO_PBF_NAME
+export SLUG DISPLAY_NAME FEDERAL_DISTRICT PACK_DIR EXTRACT_PBF POI_DB POI_BBOX ROUTE_BBOX FO_PBF_NAME
 bash "$ROOT/scripts/city_pack_prepare_core.sh"
 
 "$PYTHON" - "$SLUG" "$PACK_DIR/meta.json" <<'PY'
@@ -103,9 +99,7 @@ meta = {
     "prepared_at": datetime.now(timezone.utc).isoformat(),
     "center": {"lon": center.lon, "lat": center.lat},
     "poi_radius_km": spec.poi_radius_km,
-    "routing_buffer_km": spec.routing_buffer_km,
-    "compose_profile": spec.compose_profile,
-    "osrm_service": spec.osrm_service,
+    "extract_buffer_km": spec.extract_buffer_km,
     "lazy": False,
 }
 meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -113,4 +107,20 @@ PY
 
 echo ""
 echo "Готово: $PACK_DIR"
-echo "Запуск OSRM: docker compose --profile routing --profile $COMPOSE_PROFILE up -d"
+
+"$PYTHON" - <<'PY' || true
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path.cwd()))
+slug = os.environ.get("SLUG", "")
+if not slug:
+    raise SystemExit(0)
+try:
+    from db.postgres.city_packs import mark_city_pack_ready
+
+    mark_city_pack_ready(slug)
+except Exception as exc:
+    print(f"city_packs sync skipped: {exc}", file=sys.stderr)
+PY

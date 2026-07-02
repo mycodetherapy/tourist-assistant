@@ -19,14 +19,17 @@ function shouldSwapGeoJsonCoords(coords: [number, number][]): boolean {
   }
   const avg0 = sample.reduce((sum, [a]) => sum + a, 0) / sample.length;
   const avg1 = sample.reduce((sum, [, b]) => sum + b, 0) / sample.length;
-  // GeoJSON: [lon, lat]. Для РФ обычно lat > lon. Если avg0 > avg1 — вероятно [lat, lon] в файле.
   return avg0 > 40 && avg1 > 40 && avg0 > avg1;
 }
 
 /** GeoJSON → ymaps [lat, lon]. */
 export function geometryToYandexCoords(geometry: RouteGeometry): number[][] {
-  const swap = shouldSwapGeoJsonCoords(geometry.coordinates);
-  return geometry.coordinates
+  const pairs = geometry.coordinates.filter(
+    (pair): pair is [number, number] =>
+      Array.isArray(pair) && pair.length >= 2 && Number.isFinite(pair[0]) && Number.isFinite(pair[1]),
+  );
+  const swap = shouldSwapGeoJsonCoords(pairs);
+  return pairs
     .map(([a, b]) => (swap ? [a, b] : [b, a]) as [number, number])
     .filter(([lat, lon]) => isValidCoord(lat, lon));
 }
@@ -55,7 +58,7 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return 2 * earthRadius * Math.asin(Math.sqrt(a));
 }
 
-/** Убирает выбросы OSRM-линии далеко от остановок. */
+/** Убирает выбросы линии далеко от остановок. */
 export function filterLineNearStops(
   lineCoords: number[][],
   stops: MapRoutePoint[],

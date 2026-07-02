@@ -1,12 +1,14 @@
 # Туристический ассистент: Node API + React + Postgres + Redis + Python worker.
 #
-# Полный стек:
-#   cp .env.example .env
-#   docker compose up -d --build
+# Полный стек (UI в Docker на :5173):
+#   docker compose --profile docker-web up -d --build
 #
-# City pack + OSRM:
+# Бэкенд в Docker + фронт локально (npm run dev в web/):
+#   docker compose up -d --build
+#   cd web && npm run dev
+#
+# City pack (POI):
 #   bash scripts/city_pack_batch.sh
-#   docker compose --profile routing up -d osrm-gateway osrm-kazan osrm-yoshkar-ola
 #
 # Только инфра на хосте (порты 5433 / 6380):
 #   docker compose --profile infra up -d postgres redis
@@ -47,6 +49,8 @@ services:
     restart: unless-stopped
 
   web:
+    profiles:
+      - docker-web
     build:
       context: ./web
       dockerfile: Dockerfile
@@ -70,9 +74,6 @@ services:
       TEST_DATABASE_URL: postgresql+psycopg://tourist:tourist@postgres:5432/tourist_test
       REDIS_URL: redis://redis:6379/0
       TOURIST_ASSISTANT_IN_DOCKER: "1"
-      # Внутри compose — имя сервиса, не 127.0.0.1 из .env хоста
-      OSRM_GATEWAY_URL: http://osrm-gateway:8080
-      OSRM_URL: ""
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,47 +103,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
-
-  # OSRM gateway: прокси + lazy start osrm-{city}
-  osrm-gateway:
-    profiles: [routing]
-    image: tourist-assistant:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: python -m services.osrm_gateway
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./data:/app/data
-      - ./config:/app/config:ro
-      - ./docker-compose.yml:/app/docker-compose.yml:ro
-    ports:
-      - "${OSRM_GATEWAY_PORT:-8080}:8080"
-    environment:
-      TOURIST_ASSISTANT_IN_DOCKER: "1"
-      OSRM_GATEWAY_DOCKER: "1"
-      COMPOSE_FILE: /app/docker-compose.yml
-    restart: unless-stopped
-
-  osrm-kazan:
-    profiles: [routing, routing-city-kazan]
-    image: ghcr.io/project-osrm/osrm-backend:latest
-    command: osrm-routed --algorithm mld /data/kazan.osrm
-    volumes:
-      - ./data/cities/kazan/osrm:/data
-    ports:
-      - "${OSRM_KAZAN_HOST_PORT:-5002}:5000"
-    restart: unless-stopped
-
-  osrm-yoshkar-ola:
-    profiles: [routing, routing-city-yoshkar-ola]
-    image: ghcr.io/project-osrm/osrm-backend:latest
-    command: osrm-routed --algorithm mld /data/yoshkar-ola.osrm
-    volumes:
-      - ./data/cities/yoshkar-ola/osrm:/data
-    ports:
-      - "${OSRM_YOSHKAR_OLA_HOST_PORT:-5003}:5000"
     restart: unless-stopped
 
 volumes:

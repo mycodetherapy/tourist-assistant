@@ -10,7 +10,7 @@
 
 | Направление | Что планируется |
 |-------------|-----------------|
-| **Маршруты** | City pack (OSM PBF → POI + OSRM) для Казани/Йошкар-Олы; расширение через `city_packs.yaml` и `federal_districts.yaml` |
+| **Маршруты** | City pack (OSM PBF → `poi.sqlite`) для 8 городов Поволжья; карта — `ymaps` + Polyline из `route_geometry` |
 | **SaaS** | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (Postgres + Node API) |
 
 ## Быстрый старт
@@ -30,15 +30,23 @@ test -f .env || cp .env.example .env
 # DATABASE_URL, REDIS_URL, JWT_SECRET, SETTINGS_ENCRYPTION_KEY — обязательны
 
 docker compose up -d --build
+# UI в Docker (без npm run dev): docker compose --profile docker-web up -d --build
 ```
 
-UI: [http://localhost:5173](http://localhost:5173), API health: [http://localhost:8001/api/health](http://localhost:8001/api/health).
+UI: [http://localhost:5173](http://localhost:5173) — **локальный** `npm run dev` в `web/` (см. ниже) или контейнер `web` с профилем `docker-web`. API health: [http://localhost:8001/api/health](http://localhost:8001/api/health).
 
 ### Локальная разработка (API + React)
 
 Требования: Python 3.10+, Node.js 20+, Postgres и Redis. В `.env`: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). Ключ OpenRouter каждый пользователь задаёт в **Настройках** (BYOK). Для `python -m eval --with-llm` нужен `LLM_API_KEY` в `.env`.
 
-**Инфра (терминал 0):**
+**Инфра + API + worker в Docker, фронт локально (рекомендуется для разработки UI):**
+
+```bash
+docker compose up -d --build   # без web — порт 5173 свободен для Vite
+cd web && npm install && npm run dev
+```
+
+**Инфра (терминал 0) — если всё на хосте без Docker API/worker:**
 
 ```bash
 docker compose up -d postgres redis
@@ -81,33 +89,27 @@ npm run dev
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
 5. **Чёрный экран:** перезапустите `npm run dev` (Vite прописывает HMR на IP Mac). На iPhone: Настройки → Safari → «Дополнения» → «Данные веб-сайтов» → удалите сайт `192.168.x.x`. Не используйте гостевую Wi‑Fi (изоляция клиентов).
 6. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой» (после того как сайт открылся в Safari по IP).
-7. **Геолокация на карте маршрута:** кнопка-мишень; на интерактивной карте (OSRM) — **вкл/выкл** отслеживание в реальном времени; на iframe (старые поездки без `route_geometry`) — разовая метка. Нужны `VITE_YANDEX_MAPS_API_KEY` и HTTPS.
+7. **Геолокация на карте маршрута:** кнопка-мишень — **вкл/выкл** отслеживание в реальном времени (follow + расстояние до следующей остановки). Нужны `VITE_YANDEX_MAPS_API_KEY` и HTTPS. Линия маршрута рисуется из сохранённой `route_geometry` (Yandex Router API при пересборе); без геометрии — iframe-виджет Яндекса.
 
-### City pack (POI + OSRM из одной выжимки)
+### City pack (POI из OSM-выжимки)
 
-POI и пешеходная геометрия маршрута строятся из **одного** `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Wikidata — **только если pack не готов**. На фронте — `ymaps.Map` + Polyline (OSRM); без `route_geometry` — **ограниченный режим**: виджет Яндекс.Карт с пешим маршрутом и сворачиваемым пояснением.
+POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Статусы каталога — таблица `city_packs` в Postgres. **Wikidata** — только для городов **вне** каталога; для городов каталога — ждём pack (lazy prepare через worker). При пересборе worker запрашивает **Yandex Router API** (пеший режим) и сохраняет `route_geometry` в программу. На фронте — `ymaps.Map` + **Polyline** по этой геометрии; без неё — iframe-виджет Яндекса.
 
-**Первый запуск (Казань, Йошкар-Ола / Поволжский ФО):**
+**Первый запуск (Поволжский ФО, 8 городов):**
 
 ```bash
 bash scripts/fo_ensure.sh volga              # FO PBF ~730 MB (один раз)
-bash scripts/city_pack_prepare.sh kazan      # extract + poi.sqlite + OSRM (~5–15 мин)
+bash scripts/city_pack_prepare.sh kazan      # extract + poi.sqlite (~2–4 мин)
 bash scripts/city_pack_prepare.sh yoshkar-ola
 # или все default packs:
 bash scripts/city_pack_batch.sh
-
-docker compose --profile routing up -d osrm-gateway osrm-kazan osrm-yoshkar-ola
 ```
 
 При первом `city_pack_prepare` автоматически собирается Docker-образ `local-osmium-tool` (`scripts/Dockerfile.osmium`), если нет доступа к `ghcr.io/osmcode/osmium-tool`.
 
-Каталог городов: [`config/city_packs.yaml`](config/city_packs.yaml); федеральные округа (Geofabrik): [`config/federal_districts.yaml`](config/federal_districts.yaml). Новый город в default — запись в YAML + `city_pack_prepare.sh` + сервис `osrm-{slug}` в `docker-compose.yml` (или `python3 scripts/compose_osrm_city.py`).
+Каталог городов: [`config/city_packs.yaml`](config/city_packs.yaml); федеральные округа (Geofabrik): [`config/federal_districts.yaml`](config/federal_districts.yaml). Новый город — запись в YAML + `city_pack_prepare.sh` + `alembic upgrade head` (синхронизация `city_packs`).
 
-В `.env` worker'а: `OSRM_GATEWAY_URL=http://127.0.0.1:8080` (локально) или `http://osrm-gateway:8080` (Docker). Gateway проксирует OSRM и **lazy** поднимает `osrm-{slug}`. После пересборки маршрута в program появятся `route_geometry`, `route_distance_m`.
-
-Города **вне default packs** — lazy prepare через worker (Redis); пока pack строится — POI из Wikidata. `pip install osmium` нужен для `build_poi_index.py`.
-
-Образ OSRM: `ghcr.io/project-osrm/osrm-backend`. На Mac с Apple Silicon: `DOCKER_PLATFORM=linux/amd64 bash scripts/city_pack_prepare.sh kazan`. OOM на partition: `DOCKER_MEMORY=8g`.
+Города **в каталоге** без готового pack — worker ставит prepare в очередь; POI из Wikidata **не** подмешиваются. Города **вне каталога** — Wikidata. `pip install osmium` нужен для `build_poi_index.py`.
 
 Для стабильного PWA-теста без dev-сервера: `cd web && npm run build && npm run preview -- --host`.
 
@@ -129,7 +131,7 @@ python3 scripts/export_openapi.py
 
 Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/openapi.json` автоматически.
 
-**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
+**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
 
 Один раз установить автообновление схемы перед коммитом:
 
@@ -290,7 +292,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (`web/.env`, карта и геолокация); `VITE_DEV_HTTPS` (`web/.env`, HTTPS dev для геолокации с телефона); `OSRM_GATEWAY_URL`, `OSRM_TIMEOUT` (см. [City pack](#city-pack-poi--osrm-из-одной-выжимки)); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта и геолокация); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder и **Router API** на бэкенде — геометрия `route_geometry` при пересборе).
 
 ### Модели LLM
 
@@ -388,7 +390,7 @@ python3 scripts/render_graph.py
 
 | Уровень | Модуль | Что проверяет |
 |---------|--------|----------------|
-| 1 | `eval/checks/deterministic.py` | JSON-схема `FinalProgram`, `maps_route_url`, валидность `route_geometry` |
+| 1 | `eval/checks/deterministic.py` | JSON-схема `FinalProgram`, `maps_route_url` |
 | 2 | `eval/checks/tools.py` | Вызовы tools, `live_data`, `results_count` |
 | 3 | `eval/checks/llm_judge.py` | Опционально: цены со ссылками, город (`--with-llm`) |
 | 4 | `eval/checks/regression.py` | Метрики vs `eval/golden/*.json` |
@@ -418,8 +420,8 @@ python3 scripts/render_graph.py
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
 | **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
 | **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
-| **Яндекс.Карты (Geocoder + JS API)** | Геокодинг базовой точки; подложка карты; deep link `maps_route_url` |
-| **OSRM gateway** + city pack | POI из `poi.sqlite`; `route_geometry` через OSRM |
+| **Яндекс.Карты (Geocoder + Router + JS API)** | Геокодинг базовой точки; пешая геометрия маршрута (Router API → `route_geometry`); карта — Polyline; deep link `maps_route_url` |
+| **City pack** | POI из `poi.sqlite`; каталог `city_packs` в Postgres |
 | **OpenStreetMap** (Nominatim, Geofabrik PBF) | Центр города; выжимки city pack |
 | **Wikidata SPARQL** | Достопримечательности (P625) |
 
@@ -453,6 +455,7 @@ python3 scripts/render_graph.py
 | **Галлюцинации мест** | Маршруты — только `poi_id` из пула materials |
 | **Critic не прошёл** | До 2 повторов: проблемы tools/POI → `researcher`, проблемы маршрутов → `writer`; факт о городе critic не блокирует, пока `city_fact_status=pending` |
 | **Повторный запуск** | `user_profile` + `trip_preferences` из SQLite |
+| **Город в каталоге, pack не готов** | Wikidata не подмешивается; worker ставит `prepare_city_pack`; пока пустой пул — demo-POI + предупреждение |
 | **Демо-точки вместо POI** | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
 | **Одинаковые маршруты A/B/C** | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → retry `writer` |
 | **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
@@ -547,7 +550,7 @@ tourist-assistant/
 ├── search/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool search_route_materials
-│   ├── osm/                # Nominatim, city pack POI, routing (OSRM gateway)
+│   ├── osm/                # Nominatim, city pack POI
 │   ├── wikidata/           # SPARQL достопримечательностей, city_description (факт)
 │   ├── yandex/             # materials, maps_route_url
 │   ├── context.py          # ContextVar: prefs + route_materials (worker-safe)
@@ -568,13 +571,12 @@ tourist-assistant/
 ├── observability/          # LangFuse tracing
 ├── eval/                   # python3 -m eval --suite smoke
 ├── scripts/render_graph.py # PNG графа → docs/assets/graph.png
-├── config/city_packs.yaml      # default city packs (kazan, yoshkar-ola)
+├── config/city_packs.yaml      # каталог городов (8 × Поволжье)
 ├── config/federal_districts.yaml
 ├── scripts/fo_ensure.sh        # Geofabrik FO PBF
 ├── scripts/city_pack_prepare.sh
 ├── scripts/city_pack_batch.sh
-├── scripts/compose_osrm_city.py
-├── services/osrm_gateway/    # OSRM proxy + lazy docker start
+├── db/postgres/city_packs.py   # статусы pack в Postgres
 ├── docs/assets/graph.png
 ├── tests/
 ├── data/                   # локальные артефакты (в .gitignore)

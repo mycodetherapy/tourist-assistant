@@ -1,21 +1,21 @@
 import type { TripRouteCase } from "../api/routeTypes";
 import { hasInteractiveRouteGeometry } from "../utils/routeMapGeometry";
 import { RouteMapEmbed } from "./RouteMapEmbed";
-import { RouteMapInteractive } from "./RouteMapInteractive";
+import { RouteMapYandex } from "./RouteMapYandex";
 
 interface RouteMapViewProps {
   routeCase: TripRouteCase;
   city?: string;
 }
 
-/** OSRM-линия на ymaps.Map; без OSRM — iframe-виджет Яндекса с пешим маршрутом. */
+/** Сохранённая геометрия → ymaps + Polyline; иначе iframe-виджет Яндекса. */
 export function RouteMapView({ routeCase, city = "" }: RouteMapViewProps) {
   if (!routeCase.maps_route_url) {
     return null;
   }
 
   if (hasInteractiveRouteGeometry(routeCase)) {
-    return <RouteMapInteractive routeCase={routeCase} city={city} />;
+    return <RouteMapYandex routeCase={routeCase} city={city} />;
   }
 
   return (

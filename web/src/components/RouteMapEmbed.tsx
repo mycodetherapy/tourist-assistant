@@ -21,6 +21,8 @@ interface RouteMapEmbedProps {
   city?: string;
   caseId?: string;
   title?: string;
+  /** Почему показан резервный виджет (из RouteMapYandex). */
+  fallbackReason?: string | null;
   /** Запасной вариант, если из maps_route_url не собрать виджет маршрута. */
   markerPoints?: MapRoutePoint[];
 }
@@ -30,6 +32,7 @@ export function RouteMapEmbed({
   city = "",
   caseId,
   title,
+  fallbackReason,
   markerPoints,
 }: RouteMapEmbedProps) {
   const iframeTitle = title?.trim() || (caseId ? `Маршрут ${caseId}` : "Маршрут на карте");
@@ -97,10 +100,9 @@ export function RouteMapEmbed({
     return null;
   }
 
-  const limitedModeTitle = "Ограниченный режим карты";
-  const limitedModeDescription = city.trim()
-    ? `Для «${city.trim()}» нет локальной карты улиц (OSRM). Маршрут строит виджет Яндекс.Карт — точки и путь могут отличаться от интерактивной карты в поддерживаемых городах.`
-    : "Для этого города нет локальной карты улиц (OSRM). Маршрут строит виджет Яндекс.Карт — точки и путь могут отличаться от интерактивной карты в поддерживаемых городах.";
+  const limitedModeTitle = "Резервный режим карты";
+  const limitedModeDescription =
+    "Не удалось загрузить интерактивную карту Яндекса. Показан встроенный виджет — геолокация в реальном времени недоступна.";
 
   return (
     <div className="route-map-embed mb-2 rounded-lg border border-gray-200 bg-gray-50">
@@ -128,6 +130,12 @@ export function RouteMapEmbed({
             className="border-t border-blue-200/80 px-2.5 pb-2 pt-1.5 text-xs leading-snug text-blue-900/90"
           >
             {limitedModeDescription}
+            {fallbackReason ? (
+              <>
+                {" "}
+                <span className="font-medium">Причина:</span> {fallbackReason}
+              </>
+            ) : null}
           </p>
         ) : null}
       </div>
@@ -170,7 +178,7 @@ export function RouteMapEmbed({
         ) : null}
       </div>
       <p className="route-map-attribution px-2 pb-1 text-[10px] leading-tight text-gray-400">
-        Маршрут: виджет © Яндекс.Карты · ограниченный режим (без OSM)
+        Маршрут: виджет © Яндекс.Карты · резервный режим
       </p>
     </div>
   );

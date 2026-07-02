@@ -52,9 +52,7 @@ class CityPackSpec:
     federal_district: str
     names: tuple[str, ...]
     poi_radius_km: float
-    routing_buffer_km: float
-    compose_profile: str
-    osrm_service: str
+    extract_buffer_km: float
     is_default: bool = True
 
     @property
@@ -70,16 +68,8 @@ class CityPackSpec:
         return self.pack_dir / "extract.osm.pbf"
 
     @property
-    def osrm_dir(self) -> Path:
-        return self.pack_dir / "osrm"
-
-    @property
     def meta_path(self) -> Path:
         return self.pack_dir / "meta.json"
-
-    @property
-    def osrm_base_name(self) -> str:
-        return self.slug
 
 
 def _normalize_city_name(city: str) -> str:
@@ -111,15 +101,14 @@ def load_city_pack_specs() -> dict[str, CityPackSpec]:
             continue
         slug = str(item["slug"])
         names = tuple(str(n) for n in item.get("names") or [])
+        buffer_km = item.get("extract_buffer_km", item.get("routing_buffer_km", 1.0))
         out[slug] = CityPackSpec(
             slug=slug,
             display_name=str(item.get("display_name") or slug),
             federal_district=str(item["federal_district"]),
             names=names,
             poi_radius_km=float(item.get("poi_radius_km", 4.5)),
-            routing_buffer_km=float(item.get("routing_buffer_km", 1.0)),
-            compose_profile=str(item.get("compose_profile") or f"routing-city-{slug}"),
-            osrm_service=str(item.get("osrm_service") or f"osrm-{slug}"),
+            extract_buffer_km=float(buffer_km),
             is_default=True,
         )
     return out
@@ -134,6 +123,10 @@ def resolve_city_slug(city: str) -> str | None:
             if _normalize_city_name(name) == key:
                 return spec.slug
     return None
+
+
+def is_catalog_city(city: str) -> bool:
+    return resolve_city_slug(city) is not None
 
 
 def get_city_pack_spec(slug: str) -> CityPackSpec | None:

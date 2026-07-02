@@ -16,3 +16,6 @@ def init_postgres_db() -> None:
     from db.postgres import users as pg_users
 
     pg_users.ensure_bootstrap_user()
+    from db.postgres.city_packs import sync_city_pack_catalog
+
+    sync_city_pack_catalog()

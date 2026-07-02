@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from agents.route_postprocess import (
     _resolve_route_loop,
     build_fallback_route_program,
     build_hybrid_route_program,
+    enrich_case_route_geometry,
     enforce_route_poi_policy,
     estimate_path_km,
     finalize_route_program,
@@ -21,6 +23,7 @@ from models.routes import (
     DiningOption,
     GeoPoint,
     PoiPoint,
+    RouteGeometry,
     RouteMaterials,
     RouteProgram,
     RouteStop,
@@ -507,6 +510,33 @@ class TestRoutePostprocess(unittest.TestCase):
             leisure_overlap_ratio(relaxed.cases[0], relaxed.cases[2]),
             1.0,
         )
+
+    def test_enrich_case_route_geometry_from_router(self) -> None:
+        maps_url = (
+            "https://yandex.ru/maps/?rtext=55.800000,49.100000~55.810000,49.110000&rtt=pd"
+        )
+        case = TripRouteCase(
+            case_id="A",
+            title="Тест",
+            summary="",
+            maps_route_url=maps_url,
+        )
+        from search.yandex.router import WalkRouteResult
+
+        fake = WalkRouteResult(
+            geometry=RouteGeometry(coordinates=[[49.1, 55.8], [49.11, 55.81]]),
+            distance_m=250.0,
+            duration_s=180.0,
+        )
+        with mock.patch(
+            "search.yandex.router.fetch_walk_route_for_maps_url",
+            return_value=fake,
+        ):
+            enriched = enrich_case_route_geometry(case)
+        self.assertIsNotNone(enriched.route_geometry)
+        self.assertEqual(len(enriched.route_geometry.coordinates), 2)
+        self.assertAlmostEqual(enriched.route_distance_m or 0, 250.0)
+        self.assertAlmostEqual(enriched.route_duration_s or 0, 180.0)
 
 
 if __name__ == "__main__":

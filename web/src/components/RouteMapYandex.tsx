@@ -17,7 +17,7 @@ import {
 import { MapGeolocationButton } from "./MapGeolocationButton";
 import { RouteMapYandexOpenChrome } from "./RouteMapYandexOpenChrome";
 
-interface RouteMapInteractiveProps {
+interface RouteMapYandexProps {
   routeCase: TripRouteCase;
   city?: string;
 }
@@ -29,7 +29,6 @@ const ROUTE_POLYLINE_OPTIONS = {
   strokeColor: "#2563eb",
   strokeWidth: 4,
   strokeOpacity: 0.85,
-  // «3 2» — длина штриха и пробел в px (чаще при той же длине черточки)
   strokeStyle: "3 2",
 } as const;
 
@@ -62,10 +61,15 @@ function fitRouteMapBounds(map: YMapInstance, coords: number[][]): void {
   window.setTimeout(() => clampMapZoom(map), 50);
 }
 
-export function RouteMapInteractive({
-  routeCase,
-  city = "",
-}: RouteMapInteractiveProps) {
+function formatRouteDistance(routeCase: TripRouteCase): string | null {
+  const meters = routeCase.route_distance_m;
+  if (typeof meters !== "number" || !Number.isFinite(meters) || meters <= 0) {
+    return null;
+  }
+  return ` · ~${(meters / 1000).toFixed(1)} км`;
+}
+
+export function RouteMapYandex({ routeCase, city = "" }: RouteMapYandexProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<YMapInstance | null>(null);
   const mapReadyRef = useRef(false);
@@ -104,6 +108,14 @@ export function RouteMapInteractive({
     return filterLineNearStops(raw, allStops);
   }, [geometry, markers]);
 
+  const navigationStops = useMemo(() => {
+    const ordered = [
+      ...(markers.anchor ? [markers.anchor] : []),
+      ...markers.leisureStops,
+    ];
+    return ordered.length > 0 ? ordered : routePoints;
+  }, [markers, routePoints]);
+
   const {
     tracking,
     locatingUser,
@@ -111,10 +123,14 @@ export function RouteMapInteractive({
     setGeoError,
     toggleTracking,
     stopTracking,
-  } = useRouteMapTracking(mapRef, mapReadyRef);
+    nextStopDistanceM,
+    nextStopIndex,
+  } = useRouteMapTracking(mapRef, mapReadyRef, navigationStops);
 
   const stopTrackingRef = useRef(stopTracking);
   stopTrackingRef.current = stopTracking;
+
+  const mapInitKey = `${routeCase.case_id}|${routeCase.maps_route_url}|${lineCoords.length}`;
 
   useEffect(() => {
     setGeoError(geolocationUnavailableMessage());
@@ -147,8 +163,7 @@ export function RouteMapInteractive({
           ...(markers.anchor ? [[markers.anchor.lat, markers.anchor.lon]] : []),
           ...markers.leisureStops.map((p) => [p.lat, p.lon]),
         ];
-        const flatLine = lineCoords;
-        const center = focusCoords[0] ?? flatLine[0] ?? [55.79, 49.12];
+        const center = focusCoords[0] ?? lineCoords[0] ?? [55.79, 49.12];
 
         const map = new ymaps.Map(
           containerRef.current,
@@ -162,13 +177,11 @@ export function RouteMapInteractive({
         mapRef.current = map;
         mapReadyRef.current = true;
 
-        const polyline = new ymaps.Polyline(
-          lineCoords,
-          {},
-          ROUTE_POLYLINE_OPTIONS,
-        );
-        map.geoObjects.add(polyline);
-        routeObjectsRef.current.push(polyline);
+        if (typeof ymaps.Polyline === "function") {
+          const polyline = new ymaps.Polyline(lineCoords, {}, ROUTE_POLYLINE_OPTIONS);
+          map.geoObjects.add(polyline);
+          routeObjectsRef.current.push(polyline);
+        }
 
         if (markers.anchor) {
           const anchorMark = new ymaps.Placemark(
@@ -196,14 +209,15 @@ export function RouteMapInteractive({
           routeObjectsRef.current.push(mark);
         });
 
-        const boundsCoords = [...flatLine, ...focusCoords];
-        fitRouteMapBounds(map, boundsCoords);
-
-        setLoading(false);
+        fitRouteMapBounds(map, [...lineCoords, ...focusCoords]);
       })
       .catch((err: Error) => {
         if (!cancelled) {
           setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
           setLoading(false);
         }
       });
@@ -216,13 +230,14 @@ export function RouteMapInteractive({
       mapRef.current = null;
       routeObjectsRef.current = [];
     };
-  }, [geometry, lineCoords, markers, routeCase.case_id]);
+  }, [mapInitKey, geometry, lineCoords, markers]);
 
-  if (!geometry || lineCoords.length < 2) {
+  if (!routeCase.maps_route_url) {
     return null;
   }
 
   const iframeTitle = routeCase.title?.trim() || `Маршрут ${routeCase.case_id}`;
+  const distanceLabel = formatRouteDistance(routeCase);
 
   return (
     <div className="route-map-embed mb-2 rounded-lg border border-gray-200 bg-gray-50">
@@ -239,6 +254,11 @@ export function RouteMapInteractive({
       ) : null}
       {error ? (
         <Alert type="error" showIcon className="!m-2 !mb-0" title="Карта" description={error} />
+      ) : null}
+      {tracking && nextStopDistanceM !== null && nextStopIndex !== null ? (
+        <p className="mx-2 mt-2 text-xs text-gray-600">
+          До остановки {nextStopIndex + 1}: ~{nextStopDistanceM} м
+        </p>
       ) : null}
       <div
         className="route-map-scroll relative"
@@ -270,10 +290,8 @@ export function RouteMapInteractive({
         />
       </div>
       <p className="route-map-attribution px-2 pb-1 text-[10px] leading-tight text-gray-400">
-        Маршрут: © OpenStreetMap contributors (ODbL)
-        {routeCase.route_distance_m
-          ? ` · ~${(routeCase.route_distance_m / 1000).toFixed(1)} км`
-          : ""}
+        Маршрут: © Яндекс.Карты
+        {distanceLabel ?? ""}
       </p>
     </div>
   );

@@ -1,4 +1,4 @@
-"""Поиск мест досуга: city pack (OSM PBF) + Wikidata fallback."""
+"""Поиск мест досуга: city pack (OSM PBF) + Wikidata вне каталога."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ import math
 import os
 from dataclasses import dataclass
 
+from config.city_catalog import is_catalog_city, resolve_city_slug
 from models.routes import GeoPoint, LeisureTag, PoiPoint
-from search.osm.city_pack import ensure_pack_async, is_pack_ready, resolve_city_slug
+from search.osm.city_pack import ensure_pack_async, is_pack_ready
 from search.osm.nominatim import resolve_city_center
 from search.osm.poi_index import fetch_city_pack_poi
 from search.poi_collect import merge_poi_pools, rank_leisure_pool
@@ -29,6 +30,7 @@ class LeisureSearchResult:
     points: list[PoiPoint]
     landmark_discovery: dict | None = None
     poi_sources: dict | None = None
+    pack_status: str | None = None
 
 
 def search_leisure_points(
@@ -48,15 +50,19 @@ def search_leisure_points(
     osm_points: list[PoiPoint] = []
     wikidata_points: list[PoiPoint] = []
     slug = resolve_city_slug(city)
+    in_catalog = is_catalog_city(city)
     pack_ready = bool(slug and is_pack_ready(slug))
+    pack_status: str | None = None
 
     if pack_ready and slug:
         osm_points = fetch_city_pack_poi(
             slug, center, city, max_elements=max(limit * 4, 40)
         )
+        pack_status = "ready"
+    elif in_catalog and slug:
+        ensure_pack_async(city)
+        pack_status = "building"
     elif _use_wikidata():
-        if slug and not is_pack_ready(slug):
-            ensure_pack_async(city)
         wikidata_points = fetch_wikidata_leisure(
             city,
             center,
@@ -102,31 +108,30 @@ def search_leisure_points(
         limit=max(limit, len(pool)),
     )
 
+    poi_sources = {
+        "center": "nominatim",
+        "city_pack_slug": slug,
+        "city_pack_ready": pack_ready,
+        "city_in_catalog": in_catalog,
+        "osm_count": len(osm_points),
+        "wikidata_count": len(wikidata_points),
+        "pool_count": len(pool),
+        "matched_count": len(boosted_ids),
+    }
+
     if not ranked:
         return LeisureSearchResult(
             points=_demo_leisure(city, limit, lon=center.lon, lat=center.lat),
-            poi_sources={
-                "center": "nominatim",
-                "city_pack_slug": slug,
-                "city_pack_ready": pack_ready,
-                "osm_count": len(osm_points),
-                "wikidata_count": len(wikidata_points),
-                "pool_count": len(pool),
-            },
+            landmark_discovery=discovery_trace,
+            poi_sources=poi_sources,
+            pack_status=pack_status,
         )
 
     return LeisureSearchResult(
         points=ranked,
         landmark_discovery=discovery_trace,
-        poi_sources={
-            "center": "nominatim",
-            "city_pack_slug": slug,
-            "city_pack_ready": pack_ready,
-            "osm_count": len(osm_points),
-            "wikidata_count": len(wikidata_points),
-            "pool_count": len(pool),
-            "matched_count": len(boosted_ids),
-        },
+        poi_sources=poi_sources,
+        pack_status=pack_status,
     )
 
 

@@ -10,14 +10,14 @@ export interface RouteStop {
   narrative?: string;
 }
 
-export interface RouteGeometry {
-  type: "LineString";
-  coordinates: [number, number][];
-}
-
 export interface GeoPoint {
   lat: number;
   lon: number;
+}
+
+export interface RouteGeometry {
+  type?: "LineString" | string;
+  coordinates: number[][];
 }
 
 export interface TripRouteCase {

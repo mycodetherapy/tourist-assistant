@@ -1101,59 +1101,6 @@ def _needs_maps_backfill(program: RouteProgram) -> bool:
     return any(not str(case.maps_route_url).strip() for case in program.cases)
 
 
-def enrich_case_route_geometry(
-    case: TripRouteCase,
-    *,
-    city: str = "",
-) -> TripRouteCase:
-    """Добавляет OSRM-геометрию по точкам из maps_route_url."""
-    maps_url = str(case.maps_route_url).strip()
-    if not maps_url:
-        return case.model_copy(
-            update={
-                "route_geometry": None,
-                "route_distance_m": None,
-                "route_duration_s": None,
-            }
-        )
-    points = parse_maps_route_points(maps_url)
-    if len(points) < 2:
-        return case.model_copy(
-            update={
-                "route_geometry": None,
-                "route_distance_m": None,
-                "route_duration_s": None,
-            }
-        )
-    from search.osm.routing import fetch_walk_route
-
-    result = fetch_walk_route(points, city=city)
-    if result is None:
-        return case.model_copy(
-            update={
-                "route_geometry": None,
-                "route_distance_m": None,
-                "route_duration_s": None,
-            }
-        )
-    return case.model_copy(
-        update={
-            "route_geometry": result.geometry,
-            "route_distance_m": result.distance_m,
-            "route_duration_s": result.duration_s,
-        }
-    )
-
-
-def enrich_program_route_geometry(
-    program: RouteProgram,
-    *,
-    city: str = "",
-) -> RouteProgram:
-    cases = [enrich_case_route_geometry(case, city=city) for case in program.cases]
-    return program.model_copy(update={"cases": cases})
-
-
 def backfill_route_map_markers(
     program: RouteProgram,
     materials: RouteMaterials,
@@ -1265,21 +1212,64 @@ def backfill_route_maps_only(
             )
             maps_url = str(map_fields.get("maps_route_url", ""))
         cases.append(
-            enrich_case_route_geometry(
-                case.model_copy(
-                    update={
-                        "maps_route_url": maps_url,
-                        "loop_route": close_loop,
-                        **{
-                            k: v
-                            for k, v in map_fields.items()
-                            if k != "maps_route_url"
-                        },
-                    }
-                ),
-                city=materials.city,
+            case.model_copy(
+                update={
+                    "maps_route_url": maps_url,
+                    "loop_route": close_loop,
+                    **{
+                        k: v
+                        for k, v in map_fields.items()
+                        if k != "maps_route_url"
+                    },
+                }
             )
         )
+    program = program.model_copy(update={"cases": cases})
+    return enrich_program_route_geometry(program)
+
+
+def _routes_need_geometry_backfill(program: RouteProgram) -> bool:
+    if not program.cases:
+        return False
+    return any(
+        str(case.maps_route_url).strip() and case.route_geometry is None
+        for case in program.cases
+    )
+
+
+def enrich_case_route_geometry(case: TripRouteCase) -> TripRouteCase:
+    """Добавляет геометрию пешего маршрута через Yandex Router API."""
+    maps_url = str(case.maps_route_url).strip()
+    if not maps_url:
+        return case.model_copy(
+            update={
+                "route_geometry": None,
+                "route_distance_m": None,
+                "route_duration_s": None,
+            }
+        )
+    from search.yandex.router import fetch_walk_route_for_maps_url
+
+    result = fetch_walk_route_for_maps_url(maps_url)
+    if result is None:
+        return case.model_copy(
+            update={
+                "route_geometry": None,
+                "route_distance_m": None,
+                "route_duration_s": None,
+            }
+        )
+    return case.model_copy(
+        update={
+            "route_geometry": result.geometry,
+            "route_distance_m": result.distance_m,
+            "route_duration_s": result.duration_s,
+        }
+    )
+
+
+def enrich_program_route_geometry(program: RouteProgram) -> RouteProgram:
+    cases = [enrich_case_route_geometry(case) for case in program.cases]
     return program.model_copy(update={"cases": cases})
 
 
@@ -1350,24 +1340,21 @@ def _finalize_case_from_indices(
     )
     points = [leisure[i].coordinates for i in indices]
     labels = [leisure[i].name for i in indices]
-    return enrich_case_route_geometry(
-        case.model_copy(
-            update={
-                "title": public_route_title(profile.title),
-                "stops": _stops_from_indices(leisure, indices),
-                "summary": _route_summary(materials.city, len(indices), loop=close_loop),
-                "loop_route": close_loop,
-                **_maps_route_fields(
-                    points,
-                    labels=labels,
-                    city=materials.city,
-                    transport=transport,
-                    max_stops=profile.max_stops + (1 if close_loop else 0),
-                    close_loop=close_loop,
-                ),
-            }
-        ),
-        city=materials.city,
+    return case.model_copy(
+        update={
+            "title": public_route_title(profile.title),
+            "stops": _stops_from_indices(leisure, indices),
+            "summary": _route_summary(materials.city, len(indices), loop=close_loop),
+            "loop_route": close_loop,
+            **_maps_route_fields(
+                points,
+                labels=labels,
+                city=materials.city,
+                transport=transport,
+                max_stops=profile.max_stops + (1 if close_loop else 0),
+                close_loop=close_loop,
+            ),
+        }
     )
 
 
@@ -1475,7 +1462,8 @@ def finalize_route_program(
         f"Пул: {len(materials.leisure_points)} мест досуга ({materials.provider}). "
         "Варианты A/B/C — разная длина и число точек на карте."
     )
-    return program.model_copy(update={"materials_summary": summary, "cases": cases})
+    program = program.model_copy(update={"materials_summary": summary, "cases": cases})
+    return enrich_program_route_geometry(program)
 
 
 def format_routes_text(program: RouteProgram) -> str:

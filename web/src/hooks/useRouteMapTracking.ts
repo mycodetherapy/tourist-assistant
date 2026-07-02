@@ -1,5 +1,7 @@
 import type { RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { MapRoutePoint } from "../utils/mapsRoutePoints";
+import { distanceMeters } from "../utils/mapsRoutePoints";
 import type { YMapInstance } from "../utils/yandexMapsLoader";
 import { loadYandexMaps } from "../utils/yandexMapsLoader";
 import {
@@ -13,15 +15,27 @@ export interface MapPoint {
   lon: number;
 }
 
+const STOP_REACHED_M = 45;
+
+function orderedStops(routeStops: MapRoutePoint[]): MapRoutePoint[] {
+  return routeStops.filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+}
+
 export function useRouteMapTracking(
   mapRef: RefObject<YMapInstance | null>,
   mapReadyRef: RefObject<boolean>,
+  routeStops: MapRoutePoint[] = [],
 ) {
   const userLocationPlacemarkRef = useRef<unknown>(null);
   const stopWatchRef = useRef<(() => void) | null>(null);
+  const visitedStopIndexRef = useRef(-1);
   const [tracking, setTracking] = useState(false);
   const [locatingUser, setLocatingUser] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [nextStopDistanceM, setNextStopDistanceM] = useState<number | null>(null);
+  const [nextStopIndex, setNextStopIndex] = useState<number | null>(null);
+
+  const stops = orderedStops(routeStops);
 
   const removeUserPlacemark = useCallback(async () => {
     const map = mapRef.current;
@@ -32,6 +46,31 @@ export function useRouteMapTracking(
     map.geoObjects.remove(userLocationPlacemarkRef.current);
     userLocationPlacemarkRef.current = null;
   }, [mapRef]);
+
+  const updateNextStop = useCallback(
+    (user: MapPoint) => {
+      if (stops.length === 0) {
+        setNextStopDistanceM(null);
+        setNextStopIndex(null);
+        return;
+      }
+      let visited = visitedStopIndexRef.current;
+      while (visited + 1 < stops.length) {
+        const candidate = stops[visited + 1];
+        if (distanceMeters(user, candidate) <= STOP_REACHED_M) {
+          visited += 1;
+          visitedStopIndexRef.current = visited;
+        } else {
+          break;
+        }
+      }
+      const nextIdx = Math.min(visited + 1, stops.length - 1);
+      const next = stops[nextIdx];
+      setNextStopIndex(nextIdx);
+      setNextStopDistanceM(Math.round(distanceMeters(user, next)));
+    },
+    [stops],
+  );
 
   const showUserLocation = useCallback(
     async (point: MapPoint) => {
@@ -54,8 +93,10 @@ export function useRouteMapTracking(
       );
       userLocationPlacemarkRef.current = mark;
       map.geoObjects.add(mark);
+      map.setCenter([point.lat, point.lon], map.getZoom());
+      updateNextStop(point);
     },
-    [mapRef, mapReadyRef],
+    [mapRef, mapReadyRef, updateNextStop],
   );
 
   const stopTracking = useCallback(() => {
@@ -63,6 +104,9 @@ export function useRouteMapTracking(
     stopWatchRef.current = null;
     setTracking(false);
     setLocatingUser(false);
+    setNextStopDistanceM(null);
+    setNextStopIndex(null);
+    visitedStopIndexRef.current = -1;
     void removeUserPlacemark();
   }, [removeUserPlacemark]);
 
@@ -76,6 +120,7 @@ export function useRouteMapTracking(
     setGeoError(null);
     setLocatingUser(true);
     setTracking(true);
+    visitedStopIndexRef.current = -1;
 
     stopWatchRef.current?.();
     stopWatchRef.current = watchUserLocation(
@@ -106,6 +151,12 @@ export function useRouteMapTracking(
   }, [startTracking, stopTracking, tracking]);
 
   useEffect(() => {
+    visitedStopIndexRef.current = -1;
+    setNextStopDistanceM(null);
+    setNextStopIndex(null);
+  }, [stops]);
+
+  useEffect(() => {
     return () => {
       stopWatchRef.current?.();
       stopWatchRef.current = null;
@@ -119,5 +170,7 @@ export function useRouteMapTracking(
     setGeoError,
     toggleTracking,
     stopTracking,
+    nextStopDistanceM,
+    nextStopIndex,
   };
 }

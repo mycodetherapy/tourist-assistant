@@ -45,6 +45,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+  envDir: repoRoot,
   plugins: [
     ...(devHttps
       ? [

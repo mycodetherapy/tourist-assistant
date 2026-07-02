@@ -39,6 +39,7 @@ class PostgresSchemaTests(unittest.TestCase):
             "program_item_feedback",
             "section_artifacts",
             "graph_runs",
+            "city_packs",
             "audit_events",
             "usage_events",
             "alembic_version",

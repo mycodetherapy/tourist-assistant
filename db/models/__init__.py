@@ -4,6 +4,7 @@ from db.models.base import Base
 from db.models.schema import (
     AgentRun,
     AuditEvent,
+    CityPack,
     GraphRun,
     ItineraryVersion,
     ProgramItemFeedback,
@@ -21,6 +22,7 @@ __all__ = [
     "AgentRun",
     "AuditEvent",
     "Base",
+    "CityPack",
     "GraphRun",
     "ItineraryVersion",
     "ProgramItemFeedback",

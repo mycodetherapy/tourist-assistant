@@ -56,6 +56,10 @@ export function parseMapsRoutingMode(url: string): MapsRoutingMode {
   }
 }
 
+export function distanceMeters(a: MapRoutePoint, b: MapRoutePoint): number {
+  return haversineMeters(a.lat, a.lon, b.lat, b.lon);
+}
+
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const earthRadius = 6_371_000;
@@ -147,4 +151,15 @@ export function routePointsForYandexOpen(mapsRouteUrl: string): MapRoutePoint[] 
     return points.slice(0, -1);
   }
   return points;
+}
+
+/** Опорные точки для multiRouter: без замыкания кольца и дублей ближе 80 м. */
+export function referencePointsForMultiRoute(mapsRouteUrl: string): number[][] {
+  const deduped: MapRoutePoint[] = [];
+  for (const point of routePointsForYandexOpen(mapsRouteUrl)) {
+    if (deduped.length === 0 || !pointsAreClose(deduped[deduped.length - 1], point)) {
+      deduped.push(point);
+    }
+  }
+  return deduped.map((point) => [point.lat, point.lon]);
 }

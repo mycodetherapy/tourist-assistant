@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import subprocess
 import uuid
 from pathlib import Path
@@ -12,7 +13,6 @@ from config.city_catalog import (
     CityPackSpec,
     city_pack_dir,
     get_city_pack_spec,
-    is_default_pack,
     resolve_city_slug,
 )
 
@@ -25,6 +25,20 @@ def pack_dir_for_slug(slug: str) -> Path:
     return city_pack_dir(slug)
 
 
+def _poi_count(db_path: Path) -> int:
+    if not db_path.is_file():
+        return 0
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute("SELECT COUNT(*) FROM poi").fetchone()
+            return int(row[0]) if row else 0
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return 0
+
+
 def is_pack_ready(slug: str) -> bool:
     spec = get_city_pack_spec(slug)
     if spec is None:
@@ -33,15 +47,16 @@ def is_pack_ready(slug: str) -> bool:
             return False
         poi_db = custom / "poi.sqlite"
         meta = custom / "meta.json"
-        osrm_dir = custom / "osrm"
-        osrm_files = list(osrm_dir.glob("*.osrm.mldgr")) if osrm_dir.is_dir() else []
-        return poi_db.is_file() and meta.is_file() and bool(osrm_files)
+        return poi_db.is_file() and meta.is_file()
     if not spec.poi_db_path.is_file():
         return False
-    if not spec.meta_path.is_file():
-        return False
-    osrm_mldgr = spec.osrm_dir / f"{spec.osrm_base_name}.osrm.mldgr"
-    return osrm_mldgr.is_file()
+    return spec.meta_path.is_file()
+
+
+def pack_poi_count(slug: str) -> int:
+    spec = get_city_pack_spec(slug)
+    db_path = spec.poi_db_path if spec else pack_dir_for_slug(slug) / "poi.sqlite"
+    return _poi_count(db_path)
 
 
 def read_pack_meta(slug: str) -> dict | None:
@@ -63,19 +78,19 @@ def resolve_pack_for_city(city: str) -> tuple[str | None, CityPackSpec | None]:
 
 
 def ensure_pack_async(city: str) -> str | None:
-    """Ставит lazy-prepare в очередь для городов вне default_packs. Возвращает slug."""
+    """Ставит lazy-prepare в очередь для городов каталога. Возвращает slug."""
     slug = resolve_city_slug(city)
     if not slug:
-        slug = _slugify_city(city)
+        return None
     if is_pack_ready(slug):
-        return slug
-    if is_default_pack(slug):
-        logger.warning("default pack %s not ready — run city_pack_prepare.sh", slug)
         return slug
     if slug in _PREPARE_IN_FLIGHT:
         return slug
     _PREPARE_IN_FLIGHT.add(slug)
     try:
+        from db.postgres.city_packs import upsert_city_pack_status
+
+        upsert_city_pack_status(slug, status="queued")
         from services.job_enqueue import enqueue_prepare_city_pack
 
         enqueue_prepare_city_pack(slug=slug, city=city)
@@ -90,32 +105,56 @@ def run_pack_prepare_subprocess(slug: str, *, city: str = "") -> None:
     import sys
 
     root = Path(__file__).resolve().parents[2]
-    if get_city_pack_spec(slug) is not None:
-        subprocess.run(
-            ["bash", str(root / "scripts" / "city_pack_prepare.sh"), slug],
-            check=True,
-            cwd=str(root),
-        )
-        return
-    display = city or slug
-    fo_id = __import__("os").getenv("LAZY_PACK_FO", "volga")
-    subprocess.run(
-        [sys.executable, str(root / "scripts" / "city_pack_prepare_lazy_impl.py"), slug, display, fo_id],
-        check=True,
-        cwd=str(root),
-    )
+    try:
+        from db.postgres.city_packs import upsert_city_pack_status
 
+        upsert_city_pack_status(slug, status="building")
+    except Exception as exc:
+        logger.warning("city_packs status building failed: %s", exc)
 
-def _slugify_city(city: str) -> str:
-    import re
+    try:
+        if get_city_pack_spec(slug) is not None:
+            subprocess.run(
+                ["bash", str(root / "scripts" / "city_pack_prepare.sh"), slug],
+                check=True,
+                cwd=str(root),
+            )
+        else:
+            display = city or slug
+            fo_id = __import__("os").getenv("LAZY_PACK_FO", "volga")
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(root / "scripts" / "city_pack_prepare_lazy_impl.py"),
+                    slug,
+                    display,
+                    fo_id,
+                ],
+                check=True,
+                cwd=str(root),
+            )
+        try:
+            from db.postgres.city_packs import mark_city_pack_ready
 
-    key = re.sub(r"[^a-z0-9]+", "-", city.strip().lower())
-    return key.strip("-") or f"city-{uuid.uuid4().hex[:8]}"
+            mark_city_pack_ready(slug)
+        except Exception as exc:
+            logger.warning("city_packs mark ready failed: %s", exc)
+    except Exception:
+        try:
+            from db.postgres.city_packs import upsert_city_pack_status
+
+            upsert_city_pack_status(slug, status="failed", error_message="prepare failed")
+        except Exception as exc:
+            logger.warning("city_packs status failed: %s", exc)
+        raise
+    finally:
+        _PREPARE_IN_FLIGHT.discard(slug)
 
 
 __all__ = [
     "ensure_pack_async",
     "is_pack_ready",
+    "pack_poi_count",
     "read_pack_meta",
     "resolve_city_slug",
     "resolve_pack_for_city",

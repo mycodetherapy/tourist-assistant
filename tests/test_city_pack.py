@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from config.city_catalog import resolve_city_slug
+from config.city_catalog import is_catalog_city, resolve_city_slug
 from search.osm.city_pack import is_pack_ready
 
 
@@ -21,8 +20,12 @@ class CityCatalogTests(unittest.TestCase):
     def test_resolve_yoshkar_ola(self) -> None:
         self.assertEqual(resolve_city_slug("Йошкар-Ола"), "yoshkar-ola")
 
-    def test_unknown_city(self) -> None:
-        self.assertIsNone(resolve_city_slug("Несуществующий"))
+    def test_resolve_samara(self) -> None:
+        self.assertEqual(resolve_city_slug("Самара"), "samara")
+
+    def test_catalog_city(self) -> None:
+        self.assertTrue(is_catalog_city("Казань"))
+        self.assertFalse(is_catalog_city("Несуществующий"))
 
 
 class PackReadyTests(unittest.TestCase):
@@ -31,8 +34,7 @@ class PackReadyTests(unittest.TestCase):
             root = Path(tmp)
             slug = "test-city"
             pack = root / "cities" / slug
-            osrm = pack / "osrm"
-            osrm.mkdir(parents=True)
+            pack.mkdir(parents=True)
             (pack / "meta.json").write_text("{}", encoding="utf-8")
             db = pack / "poi.sqlite"
             conn = sqlite3.connect(db)
@@ -42,7 +44,6 @@ class PackReadyTests(unittest.TestCase):
             )
             conn.commit()
             conn.close()
-            (osrm / "test-city.osrm.mldgr").write_text("x", encoding="utf-8")
 
             with patch("search.osm.city_pack.city_pack_dir", return_value=pack):
                 with patch("config.city_catalog.get_city_pack_spec", return_value=None):
