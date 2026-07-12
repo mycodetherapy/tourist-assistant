@@ -10,7 +10,7 @@
 
 | Направление | Что планируется |
 |-------------|-----------------|
-| **Маршруты** | City pack (OSM PBF → `poi.sqlite`) для 8 городов Поволжья; карта — `ymaps` + Polyline из `route_geometry` |
+| **Маршруты** | City pack (OSM PBF → `poi.sqlite`) для 8 городов Поволжья; карта маршрута — iframe Яндекс.Карт |
 | **SaaS** | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (Postgres + Node API) |
 
 ## Быстрый старт
@@ -85,15 +85,15 @@ npm run dev
 
 1. Mac и телефон в одной Wi‑Fi; запустите API и `npm run dev` (как выше).
 2. В выводе Vite найдите строку **Phone / PWA dev URL** (`https://192.168.x.x:5173`) или узнайте IP: `ipconfig getifaddr en0`.
-3. Откройте **HTTPS**-адрес **в Safari/Chrome** (не через иконку «На экран Домой», если раньше добавляли `localhost`). При первом заходе браузер попросит доверять dev-сертификату — без HTTPS геолокация на карте маршрута не работает.
+3. Откройте **HTTPS**-адрес **в Safari/Chrome** (не через иконку «На экран Домой», если раньше добавляли `localhost`). При первом заходе браузер попросит доверять dev-сертификату — без HTTPS геолокация на карте стартовой точки не работает.
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
 5. **Чёрный экран:** перезапустите `npm run dev` (Vite прописывает HMR на IP Mac). На iPhone: Настройки → Safari → «Дополнения» → «Данные веб-сайтов» → удалите сайт `192.168.x.x`. Не используйте гостевую Wi‑Fi (изоляция клиентов).
 6. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой» (после того как сайт открылся в Safari по IP).
-7. **Геолокация на карте маршрута:** кнопка-мишень — **вкл/выкл** отслеживание в реальном времени (follow + расстояние до следующей остановки). Нужны `VITE_YANDEX_MAPS_API_KEY` и HTTPS. Линия маршрута рисуется из сохранённой `route_geometry` (Yandex Router API при пересборе); без геометрии — iframe-виджет Яндекса.
+7. **Геолокация:** только на **новой поездке** — выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута — iframe без геолокации.
 
 ### City pack (POI из OSM-выжимки)
 
-POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Статусы каталога — таблица `city_packs` в Postgres. **Wikidata** — только для городов **вне** каталога; для городов каталога — ждём pack (lazy prepare через worker). При пересборе worker запрашивает **Yandex Router API** (пеший режим) и сохраняет `route_geometry` в программу. На фронте — `ymaps.Map` + **Polyline** по этой геометрии; без неё — iframe-виджет Яндекса.
+POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Статусы каталога — таблица `city_packs` в Postgres. **Pack готов** → POI только из pack; **город вне каталога** или pack ещё не собран → Wikidata (+ discovery). Карта маршрута — **iframe-виджет** Яндекса по `maps_route_url` (пеший режим `rtt=pd`).
 
 **Первый запуск (Поволжский ФО, 8 городов):**
 
@@ -292,7 +292,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта и геолокация); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder и **Router API** на бэкенде — геометрия `route_geometry` при пересборе).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 ### Модели LLM
 
@@ -420,7 +420,7 @@ python3 scripts/render_graph.py
 | **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
 | **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
 | **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
-| **Яндекс.Карты (Geocoder + Router + JS API)** | Геокодинг базовой точки; пешая геометрия маршрута (Router API → `route_geometry`); карта — Polyline; deep link `maps_route_url` |
+| **Яндекс.Карты (Geocoder + JS API)** | Геокодинг базовой точки; карта стартовой точки (`ymaps.Map`); маршрут — iframe-виджет + deep link `maps_route_url` |
 | **City pack** | POI из `poi.sqlite`; каталог `city_packs` в Postgres |
 | **OpenStreetMap** (Nominatim, Geofabrik PBF) | Центр города; выжимки city pack |
 | **Wikidata SPARQL** | Достопримечательности (P625) |

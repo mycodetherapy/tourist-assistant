@@ -15,11 +15,6 @@ type YMapsApi = {
     properties?: Record<string, unknown>,
     options?: Record<string, unknown>,
   ) => unknown;
-  Polyline?: new (
-    coordinates: number[][],
-    properties?: Record<string, unknown>,
-    options?: Record<string, unknown>,
-  ) => unknown;
 };
 
 type YMapInstance = {

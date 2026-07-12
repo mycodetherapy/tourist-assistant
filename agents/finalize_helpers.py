@@ -365,14 +365,6 @@ def resolve_routes_program(
     if preserved:
         program = merge_preserved_with_new_routes(preserved, program)
 
-    from agents.route_postprocess import (
-        _routes_need_geometry_backfill,
-        enrich_program_route_geometry,
-    )
-
-    if _routes_need_geometry_backfill(program):
-        program = enrich_program_route_geometry(program)
-
     return program, format_routes_text(program)
 
 
@@ -397,17 +389,14 @@ def repair_program_routes(
         return program
 
     from agents.route_postprocess import (
-        _routes_need_geometry_backfill,
         backfill_route_map_markers,
         backfill_route_maps_only,
-        enrich_program_route_geometry,
         format_routes_text,
     )
 
     if (
         not _routes_need_maps_finalize(current)
         and not _routes_need_map_markers_backfill(current)
-        and not _routes_need_geometry_backfill(current)
     ):
         return program
 
@@ -448,8 +437,6 @@ def repair_program_routes(
     repaired = backfill_route_map_markers(
         repaired, materials, route_anchor=route_anchor
     )
-    if _routes_need_geometry_backfill(repaired):
-        repaired = enrich_program_route_geometry(repaired)
     if _routes_need_maps_finalize(repaired):
         return program
     updated = dict(program)

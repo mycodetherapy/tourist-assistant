@@ -1225,52 +1225,7 @@ def backfill_route_maps_only(
             )
         )
     program = program.model_copy(update={"cases": cases})
-    return enrich_program_route_geometry(program)
-
-
-def _routes_need_geometry_backfill(program: RouteProgram) -> bool:
-    if not program.cases:
-        return False
-    return any(
-        str(case.maps_route_url).strip() and case.route_geometry is None
-        for case in program.cases
-    )
-
-
-def enrich_case_route_geometry(case: TripRouteCase) -> TripRouteCase:
-    """Добавляет геометрию пешего маршрута через Yandex Router API."""
-    maps_url = str(case.maps_route_url).strip()
-    if not maps_url:
-        return case.model_copy(
-            update={
-                "route_geometry": None,
-                "route_distance_m": None,
-                "route_duration_s": None,
-            }
-        )
-    from search.yandex.router import fetch_walk_route_for_maps_url
-
-    result = fetch_walk_route_for_maps_url(maps_url)
-    if result is None:
-        return case.model_copy(
-            update={
-                "route_geometry": None,
-                "route_distance_m": None,
-                "route_duration_s": None,
-            }
-        )
-    return case.model_copy(
-        update={
-            "route_geometry": result.geometry,
-            "route_distance_m": result.distance_m,
-            "route_duration_s": result.duration_s,
-        }
-    )
-
-
-def enrich_program_route_geometry(program: RouteProgram) -> RouteProgram:
-    cases = [enrich_case_route_geometry(case) for case in program.cases]
-    return program.model_copy(update={"cases": cases})
+    return program
 
 
 def _indices_for_loop_route(
@@ -1463,7 +1418,7 @@ def finalize_route_program(
         "Варианты A/B/C — разная длина и число точек на карте."
     )
     program = program.model_copy(update={"materials_summary": summary, "cases": cases})
-    return enrich_program_route_geometry(program)
+    return program
 
 
 def format_routes_text(program: RouteProgram) -> str:

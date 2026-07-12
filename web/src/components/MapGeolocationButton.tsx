@@ -17,9 +17,7 @@ export function MapGeolocationButton({
   return (
     <button
       type="button"
-      aria-label={
-        active ? "Остановить отслеживание местоположения" : "Отслеживать моё местоположение"
-      }
+      aria-label={active ? "Скрыть моё местоположение" : "Показать моё местоположение"}
       aria-pressed={active}
       disabled={locating}
       onClick={onClick}

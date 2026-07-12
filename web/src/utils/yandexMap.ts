@@ -62,12 +62,6 @@ export function buildMarkerWidgetUrl(points: { lat: number; lon: number }[]): st
   return widget.toString();
 }
 
-export function widgetUrlWithUserLocation(widgetUrl: string, lat: number, lon: number): string {
-  const url = new URL(widgetUrl);
-  url.searchParams.set("pt", `${lon},${lat},pm2rdm`);
-  return url.toString();
-}
-
 export function isMobileUserAgent(): boolean {
   if (typeof navigator === "undefined") {
     return false;
