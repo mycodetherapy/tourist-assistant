@@ -316,6 +316,27 @@ LLM_OPENROUTER_PROVIDERS=Azure
 
 **Альтернатива из РФ (ProxyAPI и др.):** если OpenRouter недоступен, в **Настройках** задайте Base URL (например `https://api.proxyapi.ru/openai/v1`), ключ прокси и модель в формате OpenAI (`gpt-4.1-mini`). Параметр `provider` (маршрутизация OpenRouter) отправляется только при Base URL с `openrouter.ai` — из BYOK, а не из `LLM_BASE_URL` в `.env` worker.
 
+#### Если OpenRouter всё равно недоступен (403 «Access denied by security policy»)
+
+Иногда блокировка происходит на edge-уровне самого `openrouter.ai` для IP из РФ — до выбора провайдера, поэтому смена `LLM_OPENROUTER_PROVIDERS` не всегда помогает. Два рабочих обхода:
+
+**1. Модель Google через OpenRouter (без смены Base URL).** Провайдеры Google на OpenRouter из РФ обычно доступны:
+
+```env
+LLM_MODEL=google/gemini-2.5-flash
+LLM_OPENROUTER_PROVIDERS=Google,Google AI Studio
+```
+
+`LLM_OPENROUTER_PROVIDERS` — переменная окружения **worker**, общая для всех пользователей инстанса, а не часть персональных BYOK-настроек. Если инстанс глобально настроен на `LLM_OPENROUTER_PROVIDERS=Azure` (дефолт для `openai/gpt-4.1-mini`), один пользователь не сможет просто сменить у себя в **Настройках** модель на `google/gemini-2.5-flash` — Azure не хостит Gemini, запрос упадёт. Чтобы модели разных провайдеров работали одновременно у разных пользователей, расширьте список: `LLM_OPENROUTER_PROVIDERS=Azure,Google,Google AI Studio`.
+
+**2. Полный обход OpenRouter — ProxyAPI, модели не-OpenAI.** У ProxyAPI есть отдельный единый OpenAI-совместимый шлюз (помимо OpenAI-only пути из примера выше) с доступом к моделям других провайдеров, включая Gemini. Проверено: `gemini/gemini-2.5-flash` через него поддерживает и tool calling, и `structured_output` (`method="json_schema"`) — то есть покрывает оба узла графа (`researcher`, `writer`) без изменений кода. В **Настройках** профиля:
+
+- Base URL: `https://openai.api.proxyapi.ru/v1`
+- Модель: `gemini/gemini-2.5-flash` (формат `<провайдер>/<модель>`)
+- API key: ключ ProxyAPI (не OpenRouter)
+
+Это не зависит от `LLM_OPENROUTER_PROVIDERS` — параметр `provider` добавляется только при Base URL с `openrouter.ai`.
+
 #### Рекомендуемые альтернативы (5 моделей)
 
 Проверено по OpenRouter API (март 2026): у каждой модели на указанных провайдерах есть `tools` и `structured_outputs`. Константа — `RECOMMENDED_ALTERNATIVE_LLM_MODELS` в [`config/settings.py`](config/settings.py); автопроверка — `python3 -m unittest tests.test_recommended_llm_models`.
