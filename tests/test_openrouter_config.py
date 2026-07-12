@@ -61,6 +61,9 @@ class TestOpenRouterConfig(unittest.TestCase):
     @patch.dict(os.environ, {"LLM_BASE_URL": "https://example.com/v1"}, clear=False)
     def test_no_extra_body_for_non_openrouter(self) -> None:
         self.assertIsNone(get_llm_extra_body())
+        self.assertIsNone(
+            get_llm_extra_body("https://api.proxyapi.ru/openai/v1")
+        )
 
 
 if __name__ == "__main__":

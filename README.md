@@ -314,6 +314,8 @@ LLM_MODEL=openai/gpt-4.1-mini
 LLM_OPENROUTER_PROVIDERS=Azure
 ```
 
+**Альтернатива из РФ (ProxyAPI и др.):** если OpenRouter недоступен, в **Настройках** задайте Base URL (например `https://api.proxyapi.ru/openai/v1`), ключ прокси и модель в формате OpenAI (`gpt-4.1-mini`). Параметр `provider` (маршрутизация OpenRouter) отправляется только при Base URL с `openrouter.ai` — из BYOK, а не из `LLM_BASE_URL` в `.env` worker.
+
 #### Рекомендуемые альтернативы (5 моделей)
 
 Проверено по OpenRouter API (март 2026): у каждой модели на указанных провайдерах есть `tools` и `structured_outputs`. Константа — `RECOMMENDED_ALTERNATIVE_LLM_MODELS` в [`config/settings.py`](config/settings.py); автопроверка — `python3 -m unittest tests.test_recommended_llm_models`.

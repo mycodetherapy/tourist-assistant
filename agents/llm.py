@@ -41,13 +41,13 @@ def _resolve_config() -> LlmConfig:
 
 
 def _build_llm(config: LlmConfig) -> ChatOpenAI:
-    extra: dict[str, object] = {
-        "default_headers": {
+    extra: dict[str, object] = {}
+    if "openrouter.ai" in config.base_url:
+        extra["default_headers"] = {
             "HTTP-Referer": "https://github.com/tourist-assistant",
             "X-OpenRouter-Title": "tourist-assistant",
-        },
-    }
-    extra_body = get_llm_extra_body()
+        }
+    extra_body = get_llm_extra_body(config.base_url)
     if extra_body:
         extra["extra_body"] = extra_body
     return ChatOpenAI(

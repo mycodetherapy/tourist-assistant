@@ -6,7 +6,8 @@ import os
 import unittest
 from unittest.mock import patch
 
-from agents.llm import clear_llm_cache, get_llm
+from agents.llm import _build_llm, clear_llm_cache, get_llm
+from agents.llm_context import LlmConfig
 from config.settings import DEFAULT_LLM_BASE_URL, LLM_MODEL, is_placeholder_secret
 
 
@@ -37,6 +38,17 @@ class TestLlmConfig(unittest.TestCase):
         llm = get_llm()
         self.assertEqual(llm.model_name, LLM_MODEL)
         self.assertEqual(str(llm.openai_api_base), DEFAULT_LLM_BASE_URL)
+
+    def test_build_llm_skips_openrouter_provider_for_proxy(self) -> None:
+        llm = _build_llm(
+            LlmConfig(
+                api_key="sk-test",
+                base_url="https://api.proxyapi.ru/openai/v1",
+                model="gpt-4.1-mini",
+            )
+        )
+        self.assertEqual(str(llm.openai_api_base), "https://api.proxyapi.ru/openai/v1")
+        self.assertNotIn("extra_body", llm.model_kwargs)
 
 
 if __name__ == "__main__":

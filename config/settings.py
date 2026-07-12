@@ -246,9 +246,10 @@ def get_openrouter_providers() -> list[str]:
     return list(DEFAULT_OPENROUTER_PROVIDERS)
 
 
-def get_llm_extra_body() -> dict[str, object] | None:
+def get_llm_extra_body(base_url: str | None = None) -> dict[str, object] | None:
     """OpenRouter: only/order + require_parameters (нужны tools и structured output)."""
-    if "openrouter.ai" not in get_llm_base_url():
+    resolved = (base_url or get_llm_base_url()).strip()
+    if "openrouter.ai" not in resolved:
         return None
 
     providers = get_openrouter_providers()
