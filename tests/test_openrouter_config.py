@@ -19,6 +19,20 @@ class TestOpenRouterConfig(unittest.TestCase):
         self.assertEqual(LLM_MODEL, "openai/gpt-4.1-mini")
 
     @patch.dict(os.environ, {"LLM_BASE_URL": "https://openrouter.ai/api/v1"}, clear=False)
+    def test_chat_mode_skips_require_parameters(self) -> None:
+        for key in (
+            "LLM_OPENROUTER_PROVIDERS",
+            "LLM_OPENROUTER_PROVIDER_ORDER",
+            "LLM_OPENROUTER_PROVIDER_IGNORE",
+        ):
+            os.environ.pop(key, None)
+        body = get_llm_extra_body(require_capabilities=False)
+        self.assertIsNotNone(body)
+        provider = body["provider"]  # type: ignore[index]
+        self.assertEqual(provider["only"], ["Azure"])
+        self.assertNotIn("require_parameters", provider)
+
+    @patch.dict(os.environ, {"LLM_BASE_URL": "https://openrouter.ai/api/v1"}, clear=False)
     def test_default_only_azure(self) -> None:
         for key in (
             "LLM_OPENROUTER_PROVIDERS",

@@ -7,13 +7,13 @@ from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agents.llm import get_llm
+from agents.llm import get_llm_chat
 from search.wikidata.city_description import fetch_raw_city_fact
 
 CityFactStatus = Literal["pending", "ready", "failed", "skipped"]
 
-_MIN_CHARS = 80
-_MAX_CHARS = 520
+_MIN_CHARS = 280
+_MAX_CHARS = 1400
 
 _URL_RE = re.compile(r"https?://", re.I)
 _MUSEUM_LIST_RE = re.compile(
@@ -24,6 +24,15 @@ _BORING_RE = re.compile(
     r"крупн\w+\s+город\s+на\s+(?:запад|восток|север|юг)е|"
     r"\u043d\u0430\u0441\u0435\u043b\u0435\u043d\u0438\w+|области\s+россии|центр\s+\w+\s+област)"
 )
+_ABSTRACT_FLUFF_RE = re.compile(
+    r"(?i)(уникальн\w+\s+атмосфер|незабываем\w+\s+впечатлен|"
+    r"идеальн\w+\s+место|погрузиться\s+в\s+атмосфер|насладиться\s+красот)"
+)
+_FACT_HINT_RE = re.compile(
+    r"(?i)(\d{3,4}\s*г\.?|век|основан|переименован|столица|кремл|собор|"
+    r"музей|театр|набереж|памятник|UNESCO|ханств|присоединен|войн)"
+)
+_YEAR_RE = re.compile(r"\d{3,4}")
 
 
 def is_boring_city_fact(text: str) -> bool:
@@ -34,7 +43,7 @@ def is_boring_city_fact(text: str) -> bool:
     boring_hits = len(_BORING_RE.findall(blob))
     if boring_hits >= 2:
         return True
-    if boring_hits == 1 and len(blob) < 180:
+    if boring_hits == 1 and len(blob) < 280:
         return True
     admin_only = re.fullmatch(
         r"(?is).*(?:административн\w+\s+центр|является\s+центром).*",
@@ -49,8 +58,17 @@ def is_boring_city_fact(text: str) -> bool:
     return False
 
 
+def has_enough_city_facts(text: str) -> bool:
+    blob = (text or "").strip()
+    if not blob:
+        return False
+    fact_hits = len(_FACT_HINT_RE.findall(blob))
+    year_hits = len(_YEAR_RE.findall(blob))
+    return fact_hits >= 3 and year_hits >= 1
+
+
 def is_valid_city_fact(text: str) -> bool:
-    """80–520 символов, без URL/списков и без административной «воды»."""
+    """280–1400 символов, факты без административной «воды» и абстракций."""
     blob = (text or "").strip()
     if len(blob) < _MIN_CHARS or len(blob) > _MAX_CHARS:
         return False
@@ -62,7 +80,20 @@ def is_valid_city_fact(text: str) -> bool:
         return False
     if is_boring_city_fact(blob):
         return False
+    if looks_like_abstract_city_fact(blob):
+        return False
+    if not has_enough_city_facts(blob):
+        return False
     return True
+
+
+def looks_like_abstract_city_fact(text: str) -> bool:
+    blob = (text or "").strip()
+    if _ABSTRACT_FLUFF_RE.search(blob) and not _FACT_HINT_RE.search(blob):
+        return True
+    abstract_hits = len(_ABSTRACT_FLUFF_RE.findall(blob))
+    fact_hits = len(_FACT_HINT_RE.findall(blob))
+    return abstract_hits >= 2 and fact_hits < 2
 
 
 def _fallback_fact(city: str, raw: str) -> str:
@@ -101,36 +132,44 @@ def _fallback_fact(city: str, raw: str) -> str:
 
 
 _SYSTEM_PROMPT = (
-    "Ты — travel-редактор. Напиши для туриста 2–3 живых предложения о городе "
-    f"({_MIN_CHARS}–{_MAX_CHARS} символов, русский).\n\n"
+    "Ты — travel-редактор. Напиши для туриста фактологичный текст о городе "
+    f"({_MIN_CHARS}–{_MAX_CHARS} символов, русский, 6–8 предложений).\n\n"
     "Нужно:\n"
-    "— Зачем ехать: история, архитектура, природа, атмосфера, характерные места.\n"
-    "— Упомяни 1–2 конкретных места или черты из источника, если они есть.\n"
-    "— Тон: вдохновляющий, но без рекламного пафоса.\n\n"
+    "— Исторические факты: год основания, переименования, ключевые эпохи и войны (с датами из источника).\n"
+    "— 3–4 конкретных места или черты города из источника (кремль, собор, набережная, музей…).\n"
+    "— Чем город знаменит в истории региона — через события и даты, а не общие эпитеты.\n"
+    "— Хотя бы 2 года или века в тексте.\n"
+    "— Тон: познавательный, без рекламного пафоса.\n\n"
     "Запрещено:\n"
     "— «административный центр», «крупный город на … России», население, экономика.\n"
+    "— Абстракции: «уникальная атмосфера», «незабываемые впечатления», «идеальное место».\n"
     "— URL, маркированные списки, советы про обувь и бронирование.\n"
     "— Выдумывать даты, цифры и названия мест, которых нет во входе.\n"
     "— Пересказывать сухую справку из Wikidata дословно.\n\n"
-    "Если во входе мало фактов — опирайся на общеизвестные туристические черты города, "
+    "Если во входе мало фактов — используй общеизвестные исторические черты города, "
     "но без вымышленных деталей."
 )
 
 _RETRY_PROMPT = (
-    "Предыдущий вариант был слишком сухим (административная справка). "
-    "Перепиши: акцент на прогулки, историю, архитектуру и места из источника. "
-    "Без фраз про «административный центр» и «крупный город»."
+    "Предыдущий вариант слишком общий или административный. "
+    "Перепиши: больше дат, войн, переименований и конкретных мест из источника. "
+    "Без фраз про «административный центр» и «уникальную атмосферу»."
+)
+
+_FACT_RETRY_PROMPT = (
+    "Добавь исторические факты: когда основан город, ключевые события, "
+    "какие достопримечательности упомянуть. Меньше абстрактных описаний, больше дат."
 )
 
 
 def polish_city_fact_llm(raw: str, *, city: str) -> str:
     """Короткий LLM-вызов: живой туристический текст на русском."""
-    llm = get_llm()
+    llm = get_llm_chat().bind(max_tokens=2048)
     messages = [
         SystemMessage(content=_SYSTEM_PROMPT),
         HumanMessage(content=f"Город: {city}\n\nИсточник:\n{raw}"),
     ]
-    for attempt in range(2):
+    for attempt in range(3):
         response = llm.invoke(messages)
         content = getattr(response, "content", response)
         text = str(content).strip()
@@ -139,6 +178,9 @@ def polish_city_fact_llm(raw: str, *, city: str) -> str:
         if attempt == 0:
             messages.append(response)
             messages.append(HumanMessage(content=_RETRY_PROMPT))
+        elif attempt == 1:
+            messages.append(response)
+            messages.append(HumanMessage(content=_FACT_RETRY_PROMPT))
     return _fallback_fact(city, raw)
 
 

@@ -58,6 +58,47 @@ export async function getGraphRun(runId: string): Promise<GraphRunRow | null> {
   };
 }
 
+export async function getLatestPendingCityFactRun(
+  tripId: number,
+): Promise<(GraphRunRow & { finished_at: Date | null }) | null> {
+  const { rows } = await query<{
+    id: string;
+    trip_id: string;
+    user_id: string;
+    scope: string;
+    status: string;
+    error: string | null;
+    version_id: string | null;
+    graph_run_id: string | null;
+    city_fact_status: string;
+    finished_at: Date | null;
+  }>(
+    `SELECT id::text, trip_id, user_id, scope, status, error, version_id, graph_run_id,
+            city_fact_status, finished_at
+     FROM graph_runs
+     WHERE trip_id = $1
+       AND status = 'completed'
+       AND city_fact_status = 'pending'
+     ORDER BY COALESCE(finished_at, created_at) DESC
+     LIMIT 1`,
+    [tripId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    run_id: row.id,
+    trip_id: Number(row.trip_id),
+    user_id: Number(row.user_id),
+    scope: row.scope,
+    status: row.status,
+    error: row.error,
+    version_id: row.version_id ? Number(row.version_id) : null,
+    graph_run_id: row.graph_run_id,
+    city_fact_status: row.city_fact_status,
+    finished_at: row.finished_at,
+  };
+}
+
 export async function hasActiveGraphRun(tripId: number): Promise<boolean> {
   const { rows } = await query<{ id: string }>(
     `SELECT id::text FROM graph_runs

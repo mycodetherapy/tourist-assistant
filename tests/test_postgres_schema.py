@@ -40,6 +40,7 @@ class PostgresSchemaTests(unittest.TestCase):
             "section_artifacts",
             "graph_runs",
             "city_packs",
+            "poi_facts",
             "audit_events",
             "usage_events",
             "alembic_version",

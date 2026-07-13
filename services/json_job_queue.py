@@ -7,6 +7,7 @@ from typing import Any
 
 QUEUE_BUILD_ROUTES = "tourist:queue:build_routes"
 QUEUE_CITY_FACT = "tourist:queue:city_fact"
+QUEUE_POI_FACT = "tourist:queue:poi_fact"
 QUEUE_PREPARE_CITY_PACK = "tourist:queue:prepare_city_pack"
 
 
@@ -38,7 +39,7 @@ def pop_job(timeout_sec: int = 5) -> tuple[str, dict[str, Any]] | None:
 
     try:
         result = get_redis().blpop(
-            [QUEUE_BUILD_ROUTES, QUEUE_CITY_FACT, QUEUE_PREPARE_CITY_PACK],
+            [QUEUE_BUILD_ROUTES, QUEUE_CITY_FACT, QUEUE_POI_FACT, QUEUE_PREPARE_CITY_PACK],
             timeout=timeout_sec,
         )
     except RedisTimeoutError:

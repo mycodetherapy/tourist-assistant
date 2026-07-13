@@ -89,6 +89,17 @@ def on_json_job_failure(
         pg_runs.update_graph_run(run_uuid, city_fact_status="failed")
         return
 
+    if task == "poi_fact":
+        cache_key = str(payload.get("cache_key") or "")
+        if cache_key:
+            from db.postgres import poi_facts as pg_poi_facts
+
+            pg_poi_facts.mark_poi_fact_failed(
+                cache_key=cache_key,
+                error=error,
+            )
+        return
+
     pg_runs.update_graph_run(
         run_uuid,
         status="failed",

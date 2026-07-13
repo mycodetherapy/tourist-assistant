@@ -36,6 +36,13 @@ def format_runtime_error(exc: Exception) -> str:
             "Если ошибка остаётся — VPN или другая модель в LLM_MODEL.\n"
             f"Детали: {text}"
         )
+    if "No endpoints found that can handle the requested parameters" in text:
+        return (
+            "Ошибка LLM (404): OpenRouter не нашёл endpoint для этой модели и параметров.\n"
+            "Для справок по точкам и «О городе» пересоберите worker после обновления; "
+            "для маршрутов проверьте LLM_MODEL и LLM_OPENROUTER_PROVIDERS (рекомендуется Azure).\n"
+            f"Детали: {text}"
+        )
     if "All providers have been ignored" in text:
         return (
             "Ошибка LLM (404): OpenRouter не нашёл провайдера для модели.\n"

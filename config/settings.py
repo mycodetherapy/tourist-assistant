@@ -246,23 +246,29 @@ def get_openrouter_providers() -> list[str]:
     return list(DEFAULT_OPENROUTER_PROVIDERS)
 
 
-def get_llm_extra_body(base_url: str | None = None) -> dict[str, object] | None:
-    """OpenRouter: only/order + require_parameters (нужны tools и structured output)."""
+def get_llm_extra_body(
+    base_url: str | None = None,
+    *,
+    require_capabilities: bool = True,
+) -> dict[str, object] | None:
+    """OpenRouter: only/order; require_parameters только для tools/structured output."""
     resolved = (base_url or get_llm_base_url()).strip()
     if "openrouter.ai" not in resolved:
         return None
 
     providers = get_openrouter_providers()
     if not providers:
-        return {"provider": {"allow_fallbacks": True, "require_parameters": True}}
-    return {
-        "provider": {
-            "only": providers,
-            "order": providers,
-            "allow_fallbacks": False,
-            "require_parameters": True,
-        }
+        if require_capabilities:
+            return {"provider": {"allow_fallbacks": True, "require_parameters": True}}
+        return {"provider": {"allow_fallbacks": True}}
+    provider_block: dict[str, object] = {
+        "only": providers,
+        "order": providers,
+        "allow_fallbacks": False,
     }
+    if require_capabilities:
+        provider_block["require_parameters"] = True
+    return {"provider": provider_block}
 
 
 def is_placeholder_secret(value: str) -> bool:

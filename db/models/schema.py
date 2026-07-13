@@ -224,6 +224,28 @@ class GraphRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class PoiFact(Base):
+    """Глобальный кэш туристической справки по POI (ключ — QID / osm_* / search hash)."""
+
+    __tablename__ = "poi_facts"
+    __table_args__ = (Index("idx_poi_facts_status", "status"),)
+
+    cache_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    poi_name: Mapped[str] = mapped_column(Text, nullable=False)
+    city: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
+    text: Mapped[str | None] = mapped_column(Text)
+    source_kind: Mapped[str | None] = mapped_column(Text)
+    used_llm: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class CityPack(Base):
     """Каталог городских POI-паков (файлы на диске + статус prepare)."""
 

@@ -111,6 +111,46 @@ def city_fact_task(graph_run_id: str, payload: dict[str, Any]) -> None:
         raise
 
 
+def poi_fact_task(job_id: str, payload: dict[str, Any]) -> None:
+    """Async справка по POI (on-demand, глобальный кэш poi_facts)."""
+    _require_pg()
+    from agents.poi_fact import generate_poi_fact
+    from db.postgres import poi_facts as pg_poi_facts
+    from search.poi_fact_sources import resolve_poi_context
+
+    user_id = int(payload["user_id"])
+    trip_id = int(payload["trip_id"])
+    city = str(payload["city"])
+    cache_key = str(payload["cache_key"])
+    poi_id = str(payload.get("poi_id") or "")
+    name = str(payload.get("name") or "")
+
+    try:
+        llm_config = _llm_config_for_user(user_id)
+        ctx = resolve_poi_context(
+            trip_id=trip_id,
+            city=city,
+            poi_id=poi_id or None,
+            name=name,
+        )
+        with run_with_llm_config(llm_config):
+            result = generate_poi_fact(ctx, use_llm=True)
+        pg_poi_facts.mark_poi_fact_ready(
+            cache_key=cache_key,
+            text=result.text,
+            used_llm=result.used_llm,
+            source_kind=result.source_kind,
+        )
+    except Exception as exc:
+        from services.errors import format_runtime_error
+
+        pg_poi_facts.mark_poi_fact_failed(
+            cache_key=cache_key,
+            error=format_runtime_error(exc),
+        )
+        raise
+
+
 def prepare_city_pack_task(graph_run_id: str, payload: dict[str, Any]) -> None:
     """RQ: lazy подготовка city pack для города вне default_packs."""
     from search.osm.city_pack import run_pack_prepare_subprocess

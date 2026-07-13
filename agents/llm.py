@@ -40,14 +40,17 @@ def _resolve_config() -> LlmConfig:
         return _config_from_env()
 
 
-def _build_llm(config: LlmConfig) -> ChatOpenAI:
+def _build_llm(config: LlmConfig, *, require_capabilities: bool = True) -> ChatOpenAI:
     extra: dict[str, object] = {}
     if "openrouter.ai" in config.base_url:
         extra["default_headers"] = {
             "HTTP-Referer": "https://github.com/tourist-assistant",
             "X-OpenRouter-Title": "tourist-assistant",
         }
-    extra_body = get_llm_extra_body(config.base_url)
+    extra_body = get_llm_extra_body(
+        config.base_url,
+        require_capabilities=require_capabilities,
+    )
     if extra_body:
         extra["extra_body"] = extra_body
     return ChatOpenAI(
@@ -64,9 +67,23 @@ def _get_llm_cached(api_key: str, base_url: str, model: str) -> ChatOpenAI:
     return _build_llm(LlmConfig(api_key=api_key, base_url=base_url, model=model))
 
 
+@lru_cache(maxsize=8)
+def _get_llm_chat_cached(api_key: str, base_url: str, model: str) -> ChatOpenAI:
+    return _build_llm(
+        LlmConfig(api_key=api_key, base_url=base_url, model=model),
+        require_capabilities=False,
+    )
+
+
 def get_llm() -> ChatOpenAI:
     config = _resolve_config()
     return _get_llm_cached(config.api_key, config.base_url, config.model)
+
+
+def get_llm_chat() -> ChatOpenAI:
+    """Простой текст без tools: без require_parameters в OpenRouter routing."""
+    config = _resolve_config()
+    return _get_llm_chat_cached(config.api_key, config.base_url, config.model)
 
 
 def get_llm_with_tools():
@@ -83,11 +100,13 @@ def get_llm_final():
 
 def clear_llm_cache() -> None:
     _get_llm_cached.cache_clear()
+    _get_llm_chat_cached.cache_clear()
 
 
 __all__ = [
     "clear_llm_cache",
     "get_llm",
+    "get_llm_chat",
     "get_llm_final",
     "get_llm_with_tools",
 ]

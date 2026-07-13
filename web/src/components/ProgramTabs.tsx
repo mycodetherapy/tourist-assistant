@@ -8,9 +8,11 @@ import { parseRouteProgram, rawRouteCases, routeCaseAtIndex } from "../api/route
 import type { ItemVote, ProgramResponse } from "../api/types";
 import { pickPreferredCaseId } from "../utils/routeVotes";
 import { ItemVoteButtons } from "./ItemVoteButtons";
+import { PoiFactModal } from "./PoiFactModal";
 import { RouteCaseDetails } from "./RouteCaseDetails";
 import { RouteCaseSwitcher } from "./RouteCaseSwitcher";
 import { RouteMapView } from "./RouteMapView";
+import { usePoiFact } from "../hooks/usePoiFact";
 
 const { useBreakpoint } = Grid;
 
@@ -49,6 +51,7 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
   const queryClient = useQueryClient();
   const screens = useBreakpoint();
   const isMobile = screens.md === false;
+  const poiFact = usePoiFact(tripId);
   const routeCases = parseRouteProgram(data.program.routes);
   const routeCasesRaw = rawRouteCases(data.program.routes);
   const defaultRouteCaseId = useMemo(
@@ -187,6 +190,9 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
                   routeCase={routeCase}
                   stopVotes={stopVoteByPoi}
                   votingDisabled={votingDisabled || voteMutation.isPending}
+                  onStopClick={(stop) => {
+                    void poiFact.open(stop);
+                  }}
                   onStopVote={(_poiId, itemKey, index, vote) =>
                     handleVote("route_stops", index, itemKey, vote)
                   }
@@ -240,7 +246,7 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
       <div className="rounded-lg border border-gray-100 bg-white px-3 py-3">
         <h3 className="mb-2 text-sm font-semibold text-gray-700">О городе</h3>
         {data.city_fact_status === "pending" ? (
-          <Skeleton active paragraph={{ rows: 2 }} title={false} />
+          <Skeleton active paragraph={{ rows: 3 }} title={false} />
         ) : data.city_fact_status === "failed" ? (
           <Alert
             type="info"
@@ -255,6 +261,15 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
           />
         )}
       </div>
+
+      <PoiFactModal
+        open={poiFact.isOpen}
+        title={poiFact.target?.name ?? "Место"}
+        loading={poiFact.loading}
+        error={poiFact.error}
+        data={poiFact.data}
+        onClose={poiFact.close}
+      />
     </div>
   );
 }

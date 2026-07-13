@@ -297,3 +297,24 @@ export async function countLikedRoutes(
   }
   return count;
 }
+
+export async function patchItineraryProgram(
+  versionId: number,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  if (!Object.keys(patch).length) return;
+  const now = new Date();
+  await query(
+    `UPDATE itinerary_versions
+     SET program_json = program_json || $1::jsonb
+     WHERE id = $2`,
+    [JSON.stringify(patch), versionId],
+  );
+  await query(
+    `UPDATE trips t
+     SET updated_at = $1
+     FROM itinerary_versions iv
+     WHERE iv.id = $2 AND iv.trip_id = t.id`,
+    [now, versionId],
+  );
+}

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from services.json_job_queue import QUEUE_BUILD_ROUTES, QUEUE_CITY_FACT, QUEUE_PREPARE_CITY_PACK, push_job
+from services.json_job_queue import QUEUE_BUILD_ROUTES, QUEUE_CITY_FACT, QUEUE_POI_FACT, QUEUE_PREPARE_CITY_PACK, push_job
 
 
 def enqueue_build_routes(*, graph_run_id: UUID, payload: dict[str, Any]) -> str:
@@ -26,6 +26,16 @@ def enqueue_city_fact(*, graph_run_id: UUID, payload: dict[str, Any]) -> str:
         payload=payload,
     )
     return str(graph_run_id)
+
+
+def enqueue_poi_fact(*, job_id: UUID, payload: dict[str, Any]) -> str:
+    push_job(
+        QUEUE_POI_FACT,
+        task="poi_fact",
+        graph_run_id=str(job_id),
+        payload=payload,
+    )
+    return str(job_id)
 
 
 def enqueue_prepare_city_pack(*, slug: str, city: str) -> str:

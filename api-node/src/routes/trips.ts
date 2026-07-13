@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
@@ -21,6 +22,7 @@ import {
   startRun,
 } from "../services/runManager.js";
 import { buildProgramView } from "../services/programView.js";
+import { recoverCityFactIfNeeded } from "../services/cityFactRecovery.js";
 import { repairProgramForTrip } from "../services/repairProgram.js";
 import {
   collectRouteStopPoiIds,
@@ -47,6 +49,9 @@ import {
   InputValidationError,
   sanitizeAndValidate,
 } from "../lib/inputValidation.js";
+import { normalizePoiFactCacheKey } from "../lib/poiFactCacheKey.js";
+import { enqueuePoiFact } from "../jobs/enqueue.js";
+import * as poiFactsRepo from "../repos/poiFacts.js";
 
 const MAX_LIKED_ROUTES = 10;
 const MAX_LIKED_ROUTE_STOPS = 40;
@@ -91,6 +96,11 @@ const feedbackSchema = z
   .refine((v) => (v.item_key ?? "").trim() || v.item_index !== undefined, {
     message: "Укажите item_key или item_index",
   });
+
+const poiFactStartSchema = z.object({
+  poi_id: z.string().max(128).optional().nullable(),
+  name: z.string().min(1).max(256),
+});
 
 function validationErrorReply(reply: FastifyReply, err: InputValidationError) {
   return reply.code(400).send({ detail: err.message });
@@ -307,7 +317,14 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ detail: "Программа не найдена" });
       }
       const repaired = await repairProgramForTrip(tripId, trip, latest.program);
-      return buildProgramView(tripId, { ...latest, program: repaired });
+      const program = await recoverCityFactIfNeeded({
+        tripId,
+        userId: request.user!.id,
+        city: trip.city,
+        versionId: latest.id,
+        program: repaired,
+      });
+      return buildProgramView(tripId, { ...latest, program });
     },
   );
 
@@ -485,6 +502,102 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
       }
       const repaired = await repairProgramForTrip(tripId, trip, latest.program);
       return buildProgramView(tripId, { ...latest, program: repaired });
+    },
+  );
+
+  app.post<{ Params: { trip_id: string } }>(
+    "/api/trips/:trip_id/poi-facts",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const tripId = Number(request.params.trip_id);
+      const trip = await tripsRepo.getTrip(tripId, request.user!.id);
+      if (!trip) {
+        return reply.code(404).send({ detail: "Поездка не найдена" });
+      }
+      const body = poiFactStartSchema.safeParse(request.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ detail: "Некорректные данные" });
+      }
+      const poiId = (body.data.poi_id ?? "").trim();
+      const name = body.data.name.trim();
+      const cacheKey = normalizePoiFactCacheKey({
+        poiId: poiId || null,
+        name,
+        city: trip.city,
+      });
+
+      const existing = await poiFactsRepo.getPoiFact(cacheKey);
+      if (
+        existing?.status === "ready" &&
+        existing.text &&
+        !poiFactsRepo.looksLikeSearchGarbage(existing.text)
+      ) {
+        return poiFactsRepo.toPoiFactResponse(existing);
+      }
+      if (
+        existing?.status === "pending" &&
+        !poiFactsRepo.isPendingStale(existing.updated_at)
+      ) {
+        return poiFactsRepo.toPoiFactResponse(existing);
+      }
+
+      try {
+        await requireUserLlmConfigured(request.user!.id);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          return reply.code(err.statusCode).send({
+            detail: { code: "llm_key_required", message: err.message },
+          });
+        }
+        throw err;
+      }
+
+      const sourceKind = poiId
+        ? poiId.startsWith("Q") || poiId.startsWith("wikidata_")
+          ? "wikidata"
+          : /^osm_/.test(poiId)
+            ? "osm"
+            : "search"
+        : "search";
+
+      const row = await poiFactsRepo.upsertPoiFactPending({
+        cacheKey,
+        poiName: name,
+        city: trip.city,
+        sourceKind,
+      });
+
+      await enqueuePoiFact(randomUUID(), {
+        trip_id: tripId,
+        user_id: request.user!.id,
+        city: trip.city,
+        cache_key: cacheKey,
+        poi_id: poiId,
+        name,
+      });
+
+      return poiFactsRepo.toPoiFactResponse(row);
+    },
+  );
+
+  app.get<{ Params: { trip_id: string; cache_key: string } }>(
+    "/api/trips/:trip_id/poi-facts/:cache_key",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const tripId = Number(request.params.trip_id);
+      const trip = await tripsRepo.getTrip(tripId, request.user!.id);
+      if (!trip) {
+        return reply.code(404).send({ detail: "Поездка не найдена" });
+      }
+      const cacheKey = decodeURIComponent(request.params.cache_key).trim();
+      if (!cacheKey) {
+        return reply.code(400).send({ detail: "Некорректный cache_key" });
+      }
+      const row = await poiFactsRepo.getPoiFact(cacheKey);
+      if (!row) {
+        return reply.code(404).send({ detail: "Справка не найдена" });
+      }
+      return poiFactsRepo.toPoiFactResponse(row);
     },
   );
 }

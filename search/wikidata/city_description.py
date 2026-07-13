@@ -94,6 +94,74 @@ def fetch_wikipedia_lead(*, title: str, lang: str = "ru") -> str:
     return extract
 
 
+def search_wikipedia_titles(
+    *,
+    query: str,
+    lang: str = "ru",
+    limit: int = 5,
+) -> list[str]:
+    """Поиск статей Wikipedia по запросу (MediaWiki API)."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    url = (
+        f"https://{lang}.wikipedia.org/w/api.php?"
+        "action=query&list=search&format=json&utf8=1"
+        f"&srsearch={quote(q)}&srlimit={max(1, min(limit, 10))}"
+    )
+    try:
+        req = Request(url, headers={"User-Agent": _USER_AGENT})
+        with urlopen(req, timeout=12) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return []
+    query_block = payload.get("query") if isinstance(payload, dict) else None
+    search = query_block.get("search") if isinstance(query_block, dict) else None
+    if not isinstance(search, list):
+        return []
+    titles: list[str] = []
+    for hit in search:
+        if isinstance(hit, dict):
+            title = str(hit.get("title") or "").strip()
+            if title:
+                titles.append(title)
+    return titles
+
+
+def fetch_wikipedia_extract(
+    *,
+    title: str,
+    lang: str = "ru",
+    max_chars: int = 1200,
+) -> str:
+    """Вводный фрагмент статьи Wikipedia (plain text, включая «История»)."""
+    title = (title or "").strip()
+    if not title:
+        return ""
+    url = (
+        f"https://{lang}.wikipedia.org/w/api.php?"
+        "action=query&format=json&utf8=1&explaintext=1"
+        f"&prop=extracts&exchars={max(400, min(max_chars, 2400))}"
+        f"&titles={quote(title)}"
+    )
+    try:
+        req = Request(url, headers={"User-Agent": _USER_AGENT})
+        with urlopen(req, timeout=12) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return ""
+    pages = payload.get("query", {}).get("pages") if isinstance(payload, dict) else None
+    if not isinstance(pages, dict):
+        return ""
+    page = next(iter(pages.values()), None)
+    if not isinstance(page, dict):
+        return ""
+    extract = str(page.get("extract") or "").strip()
+    if len(extract) > max_chars:
+        extract = extract[:max_chars].rsplit(" ", 1)[0] + "…"
+    return extract
+
+
 def _is_admin_only_description(text: str) -> bool:
     blob = (text or "").strip()
     if not blob:
@@ -115,7 +183,7 @@ def fetch_raw_city_fact(city: str) -> str:
     label = center.city.strip() or city.strip()
     parts: list[str] = [f"Город: {label}"]
 
-    wiki_lead = ""
+    wiki_text = ""
     wikidata_id = center.wikidata_id or ""
     if wikidata_id:
         entity = _fetch_entity(wikidata_id)
@@ -125,8 +193,14 @@ def fetch_raw_city_fact(city: str) -> str:
                 if not title:
                     continue
                 lang = "ru" if site.startswith("ru") else "en"
-                wiki_lead = fetch_wikipedia_lead(title=title, lang=lang)
-                if wiki_lead:
+                wiki_text = fetch_wikipedia_extract(
+                    title=title,
+                    lang=lang,
+                    max_chars=1800,
+                )
+                if not wiki_text:
+                    wiki_text = fetch_wikipedia_lead(title=title, lang=lang)
+                if wiki_text:
                     break
 
         landmarks = fetch_top_landmark_names(wikidata_id, limit=5)
@@ -139,8 +213,8 @@ def fetch_raw_city_fact(city: str) -> str:
         if description and not _is_admin_only_description(description):
             parts.append(f"Wikidata: {description}")
 
-    if wiki_lead:
-        parts.insert(1, f"Wikipedia: {wiki_lead}")
+    if wiki_text:
+        parts.insert(1, f"Wikipedia: {wiki_text}")
     elif center.display_name:
         parts.append(f"Регион: {center.display_name.strip()}")
 

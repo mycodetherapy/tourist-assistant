@@ -16,9 +16,10 @@ from agents.city_fact import (
 class CityFactValidationTests(unittest.TestCase):
     def test_valid_fact(self) -> None:
         text = (
-            "Казань — город на слиянии Волги и Казанки, где кремль UNESCO "
-            "соседствует с улицами старого татарского квартала. "
-            "Сюда едут за прогулками по набережной и атмосферой двух культур."
+            "Казань основана в 1005 году и стала столицей Казанского ханства. "
+            "В 1552 году город взял Иван Грозный; Казанский кремль XVI века — объект UNESCO. "
+            "Рядом — улица Баумана и татарский старогород. Город на слиянии Волги и Казанки "
+            "сочетает мусульманское и православное наследие, сюда едут за историей Поволжья."
         )
         self.assertTrue(is_valid_city_fact(text))
 
@@ -47,7 +48,7 @@ class CityFactValidationTests(unittest.TestCase):
 
 class CityFactGenerationTests(unittest.TestCase):
     @patch("agents.city_fact.fetch_raw_city_fact")
-    @patch("agents.city_fact.get_llm")
+    @patch("agents.city_fact.get_llm_chat")
     def test_polish_llm_valid(self, mock_get_llm: MagicMock, mock_raw: MagicMock) -> None:
         mock_raw.return_value = (
             "Город: Казань\n"
@@ -55,9 +56,10 @@ class CityFactGenerationTests(unittest.TestCase):
             "Известные места (Wikidata): Казанский кремль, улица Баумана"
         )
         fact = (
-            "Казань — город на слиянии Волги и Казанки, где кремль UNESCO "
-            "соседствует с улицами старого татарского квартала. "
-            "Сюда едут за прогулками по набережной и атмосферой двух культур."
+            "Казань основана в 1005 году и стала столицей Казанского ханства. "
+            "Казанский кремль — объект UNESCO XVI века, рядом — улица Баумана "
+            "и татарский старогород. Город на слиянии Волги и Казанки сочетает "
+            "мусульманское и православное наследие, сюда едут за историей Поволжья."
         )
         mock_get_llm.return_value.invoke.return_value = MagicMock(content=fact)
         out = polish_city_fact_llm(mock_raw.return_value, city="Казань")
@@ -75,7 +77,7 @@ class CityFactGenerationTests(unittest.TestCase):
         )
         out = generate_city_fact(city="Казань", use_llm=False)
         mock_polish.assert_not_called()
-        self.assertTrue(is_valid_city_fact(out) or len(out) >= 80)
+        self.assertTrue(is_valid_city_fact(out) or len(out) >= 280)
 
 
 if __name__ == "__main__":
