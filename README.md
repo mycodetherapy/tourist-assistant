@@ -155,6 +155,22 @@ Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-do
 
 Требования: [Docker](https://docs.docker.com/get-docker/) и Docker Compose v2.
 
+#### VPS (Timeweb): Docker Hub 429 / блокировка
+
+На серверах Timeweb Cloud при `docker compose build` возможна ошибка `429 Too Many Requests` или `403 Forbidden` при pull с `docker.io`. Подключите [прокси Timeweb](https://dockerhub.timeweb.cloud/):
+
+```bash
+sudo tee /etc/docker/daemon.json <<'EOF'
+{
+  "registry-mirrors": ["https://dockerhub.timeweb.cloud"]
+}
+EOF
+sudo systemctl restart docker
+docker compose --profile docker-web up -d --build
+```
+
+Опционально: `docker login` (бесплатный аккаунт Docker Hub) — выше лимит pull. Явный pull через прокси: `docker pull dockerhub.timeweb.cloud/library/node:22-alpine`.
+
 #### Первый запуск
 
 ```bash

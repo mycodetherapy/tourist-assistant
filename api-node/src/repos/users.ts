@@ -187,12 +187,11 @@ export async function saveUserProfile(
 
 /** Обновляет last_seen_at не чаще раза в минуту (debounce на уровне SQL). */
 export async function touchUserLastSeen(userId: number): Promise<void> {
-  const now = new Date();
   await query(
     `UPDATE users
-     SET last_seen_at = $2
+     SET last_seen_at = NOW()
      WHERE id = $1
-       AND (last_seen_at IS NULL OR last_seen_at < $2 - INTERVAL '1 minute')`,
-    [userId, now],
+       AND (last_seen_at IS NULL OR last_seen_at < NOW() - INTERVAL '1 minute')`,
+    [userId],
   );
 }
