@@ -236,6 +236,7 @@ def finalize_node(state: AgentState) -> dict[str, Any]:
 
     routes_instruction = (
         "- routes: РОВНО 3 пеших маршрута A/B/C разной длины. "
+        "В каждом варианте обязательны поля case_id (A/B/C), title и summary. "
         "Только leisure poi_id из materials_digest; без вокзалов и аэропортов. "
         "A/B/C различаются протяжённостью (короткий/средний/длинный), не числом точек; "
         "насыщай маршрут местами из пула. narrative — название места. "

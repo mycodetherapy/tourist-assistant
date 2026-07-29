@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage, ToolMessage
 
-from models.routes import RouteMaterials, RouteProgram
+from models.routes import RouteMaterials, RouteProgram, normalize_routes_draft_payload
 from models.schemas import ProgramDraft, RoutesDraft
 from planning.rebuild import required_tools_for_scope, resolve_tool_name
 
@@ -479,9 +479,9 @@ def _coerce_routes_draft(result: Any) -> RoutesDraft:
     if isinstance(parsed, ProgramDraft):
         return RoutesDraft(routes=parsed.routes)
     if isinstance(parsed, dict):
-        return RoutesDraft(**parsed)
+        return RoutesDraft(**normalize_routes_draft_payload(parsed))
     if isinstance(result, dict):
-        return RoutesDraft(**result)
+        return RoutesDraft(**normalize_routes_draft_payload(result))
     raise TypeError(f"Unexpected structured output type: {type(result)!r}")
 
 
@@ -497,6 +497,17 @@ def _coerce_program_draft(result: Any) -> ProgramDraft:
     if isinstance(result, dict):
         return ProgramDraft(**result)
     raise TypeError(f"Unexpected structured output type: {type(result)!r}")
+
+
+def _is_recoverable_llm_output_error(exc: Exception) -> bool:
+    err_name = type(exc).__name__
+    err_text = str(exc).lower()
+    if "length" in err_text or err_name in (
+        "LengthFinishReasonError",
+        "OutputParserException",
+    ):
+        return True
+    return err_name == "ValidationError"
 
 
 def invoke_program_draft(
@@ -515,15 +526,11 @@ def invoke_program_draft(
     try:
         return _coerce_routes_draft(llm_final.invoke(prompt))
     except Exception as exc:
-        err_name = type(exc).__name__
-        err_text = str(exc).lower()
-        if "length" not in err_text and err_name not in (
-            "LengthFinishReasonError",
-            "OutputParserException",
-        ):
+        if not _is_recoverable_llm_output_error(exc):
             raise
+        reason = "обрезан (length)" if "length" in str(exc).lower() else "невалидная схема"
         print(
-            "  [writer] ответ LLM обрезан (length) — сборка из digest без повторного вызова."
+            f"  [writer] ответ LLM {reason} — сборка из digest без повторного вызова."
         )
         return build_fallback_program_draft(
             state_messages,
