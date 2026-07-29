@@ -8,9 +8,9 @@ const apiNodeRoot = path.resolve(
 );
 const repoRoot = path.resolve(apiNodeRoot, "..");
 
-/** Корневой .env репозитория (как у Python API и worker). */
-loadDotenv({ path: path.join(repoRoot, ".env") });
-/** Локальные переопределения api-node/.env */
-loadDotenv({ path: path.join(apiNodeRoot, ".env"), override: true });
+/** Корневой .env репозитория (как у Python API и worker). Не override — Docker env_file важнее. */
+loadDotenv({ path: path.join(repoRoot, ".env"), override: false });
+/** Локальные переопределения api-node/.env (только dev). */
+loadDotenv({ path: path.join(apiNodeRoot, ".env"), override: false });
 
 export { apiNodeRoot, repoRoot };
