@@ -20,7 +20,13 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# site-packages внутри venv (.venv/ уже игнорируется целиком); не трогать api-node/src/lib
+.venv/lib/
+.venv/lib64/
+venv/lib/
+venv/lib64/
+env/lib/
+env/lib64/
 lib64/
 parts/
 sdist/
