@@ -35,6 +35,7 @@ class User(Base):
     google_sub: Mapped[str | None] = mapped_column(Text, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     settings: Mapped[UserSettings | None] = relationship(back_populates="user")
     profile: Mapped[UserProfile | None] = relationship(back_populates="user")

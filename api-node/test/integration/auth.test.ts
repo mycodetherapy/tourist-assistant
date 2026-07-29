@@ -32,8 +32,19 @@ describe.skipIf(!hasDatabase)("auth integration", () => {
       payload: { email: testEmail, password: testPassword },
     });
     expect(reg.statusCode).toBe(201);
-    const regBody = reg.json() as { access_token: string };
+    const regBody = reg.json() as { access_token: string; user: { id: number } };
     expect(regBody.access_token).toBeTruthy();
+
+    const auditReg = await query<{ action: string }>(
+      `SELECT action FROM audit_events
+       WHERE user_id = $1 AND action IN ('user.register', 'user.login')
+       ORDER BY action`,
+      [regBody.user.id],
+    );
+    expect(auditReg.rows.map((r) => r.action).sort()).toEqual([
+      "user.login",
+      "user.register",
+    ]);
 
     const bad = await app.inject({
       method: "POST",
@@ -57,6 +68,12 @@ describe.skipIf(!hasDatabase)("auth integration", () => {
     });
     expect(me.statusCode).toBe(200);
     expect((me.json() as { email: string }).email).toBe(testEmail);
+
+    const seen = await query<{ last_seen_at: Date | null }>(
+      "SELECT last_seen_at FROM users WHERE id = $1",
+      [regBody.user.id],
+    );
+    expect(seen.rows[0]?.last_seen_at).toBeTruthy();
   });
 
   it("trips require auth", async () => {

@@ -541,6 +541,26 @@ python3 -m scripts.metrics_report --trip-id 12
 
 Примечание: стоимость/токены пишутся через `get_openai_callback()` и могут быть пустыми для не-OpenAI провайдеров.
 
+### Статистика пользователей (консоль, без админки)
+
+После миграции (`alembic upgrade head`) и деплоя api-node с audit на auth:
+
+```bash
+python3 scripts/admin_stats.py summary
+python3 scripts/admin_stats.py registrations --days 30
+python3 scripts/admin_stats.py logins --days 30
+python3 scripts/admin_stats.py online --minutes 5
+python3 scripts/admin_stats.py activity --limit 20
+python3 scripts/admin_stats.py user --email user@example.com
+```
+
+Источники данных:
+
+- **Регистрации** — `users.created_at`; события `user.register` в `audit_events` (email/Google)
+- **Логины** — `audit_events` (`user.login` при register/login/OAuth)
+- **«Онлайн»** — `users.last_seen_at` (обновляется при авторизованных API-запросах, debounce 1 мин)
+- **Действия** — `audit_events` (`trip.create`, `graph_run.start`, …) + агрегаты `trips` / `graph_runs` / `usage_events`
+
 ---
 
 ## Структура репозитория
@@ -550,6 +570,7 @@ tourist-assistant/
 ├── api-node/               # Node.js REST API (Fastify, Postgres + Redis)
 ├── Dockerfile.api-node     # Docker: Node API + Python repair_program_cli
 ├── scripts/repair_program_cli.py  # repair_program_routes для GET program
+├── scripts/admin_stats.py         # консольная статистика пользователей
 ├── auth/                   # BYOK crypto, require_user_llm_config (worker)
 ├── docs/openapi.json       # OpenAPI 3 (npm run export:openapi)
 ├── services/               # TripService, RunManager, json_job_queue

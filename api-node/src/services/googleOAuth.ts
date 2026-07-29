@@ -57,7 +57,7 @@ export function buildGoogleAuthorizeUrl(frontendUrl: string): {
 export async function loginOrLinkGoogle(params: {
   googleSub: string;
   email: string;
-}): Promise<{ user: User; token: string }> {
+}): Promise<{ user: User; token: string; isNewUser: boolean }> {
   const email = params.email.trim().toLowerCase();
   if (!email || !params.googleSub) {
     throw new AuthError("Google не вернул email", 400);
@@ -65,7 +65,11 @@ export async function loginOrLinkGoogle(params: {
 
   const bySub = await getUserByGoogleSub(params.googleSub);
   if (bySub) {
-    return { user: bySub, token: createAccessToken(bySub.id, bySub.email) };
+    return {
+      user: bySub,
+      token: createAccessToken(bySub.id, bySub.email),
+      isNewUser: false,
+    };
   }
 
   const byEmail = await getUserByEmail(email);
@@ -77,14 +81,22 @@ export async function loginOrLinkGoogle(params: {
       await linkGoogleSub(byEmail.id, params.googleSub);
     }
     const user = (await getUserById(byEmail.id))!;
-    return { user, token: createAccessToken(user.id, user.email) };
+    return {
+      user,
+      token: createAccessToken(user.id, user.email),
+      isNewUser: false,
+    };
   }
 
   const user = await createUser({
     email,
     google_sub: params.googleSub,
   });
-  return { user, token: createAccessToken(user.id, user.email) };
+  return {
+    user,
+    token: createAccessToken(user.id, user.email),
+    isNewUser: true,
+  };
 }
 
 export async function exchangeGoogleCode(code: string): Promise<{

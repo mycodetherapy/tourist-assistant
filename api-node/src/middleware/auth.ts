@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { decodeAccessToken } from "../lib/crypto.js";
 import { AuthError, userFromTokenSub } from "../services/auth.js";
+import { touchUserLastSeen } from "../repos/users.js";
 import type { User } from "../repos/users.js";
 
 declare module "fastify" {
@@ -22,6 +23,7 @@ export async function requireAuth(
   try {
     const payload = decodeAccessToken(token);
     request.user = await userFromTokenSub(payload.sub);
+    void touchUserLastSeen(request.user.id).catch(() => {});
   } catch (err) {
     if (err instanceof AuthError) {
       reply.code(err.statusCode).send({ detail: err.message });

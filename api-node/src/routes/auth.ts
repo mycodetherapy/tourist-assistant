@@ -25,6 +25,10 @@ import {
   verifyOAuthState,
 } from "../services/googleOAuth.js";
 import { requireAuth } from "../middleware/auth.js";
+import {
+  recordUserLogin,
+  recordUserRegister,
+} from "../services/authAudit.js";
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post(
@@ -51,6 +55,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           body.data.email,
           body.data.password,
         );
+        await recordUserRegister(user.id, { method: "email" });
+        await recordUserLogin(user.id, { method: "email" });
         return reply.code(201).send({
           access_token: token,
           token_type: "bearer",
@@ -90,6 +96,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           body.data.email,
           body.data.password,
         );
+        await recordUserLogin(user.id, { method: "email" });
         return {
           access_token: token,
           token_type: "bearer",
@@ -208,10 +215,14 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       }
       try {
         const profile = await exchangeGoogleCode(query.code);
-        const { token } = await loginOrLinkGoogle({
+        const { token, user, isNewUser } = await loginOrLinkGoogle({
           googleSub: profile.sub,
           email: profile.email,
         });
+        if (isNewUser) {
+          await recordUserRegister(user.id, { method: "google" });
+        }
+        await recordUserLogin(user.id, { method: "google" });
         const frontend = resolveFrontendUrl(
           query.frontend,
           request.cookies?.[cookies.frontend],
