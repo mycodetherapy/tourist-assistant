@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +8,25 @@ import basicSsl from "@vitejs/plugin-basic-ssl";
 import { defineConfig, loadEnv } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
+const repoRoot = path.resolve(webRoot, "..");
+
+/** Docker web-образ: context ./web → repoRoot=/, .env лежит в web/.env. Локально — корневой .env. */
+function resolveEnvDir(): string {
+  if (fs.existsSync(path.join(repoRoot, ".env"))) {
+    return repoRoot;
+  }
+  if (fs.existsSync(path.join(webRoot, ".env"))) {
+    return webRoot;
+  }
+  return repoRoot;
+}
+
+function mergeEnv(mode: string): Record<string, string> {
+  const fromRepo = loadEnv(mode, repoRoot, "");
+  const fromWeb = loadEnv(mode, webRoot, "");
+  return { ...fromRepo, ...fromWeb };
+}
 
 /** IPv4 Mac в LAN — иначе HMR с телефона цепляется к localhost (чёрный экран). */
 function resolveLanIp(env: Record<string, string>): string | undefined {
@@ -25,13 +44,15 @@ function resolveLanIp(env: Record<string, string>): string | undefined {
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, repoRoot, "");
+  const envDir = resolveEnvDir();
+  const env = mergeEnv(mode);
   // Node API (api-node) — :8001; FastAPI legacy — VITE_API_PORT=8000
   const apiPort = env.VITE_API_PORT || env.API_NODE_PORT || "8001";
   const apiTarget = `http://127.0.0.1:${apiPort}`;
   const lanIp = resolveLanIp(env);
   // HTTPS по умолчанию при доступе с телефона по LAN — иначе геолокация зависает на http://IP:5173
   const devHttps = env.VITE_DEV_HTTPS === "true" || (env.VITE_DEV_HTTPS !== "false" && Boolean(lanIp));
+  console.log(`[vite] envDir → ${envDir}`);
   console.log(`[vite] API proxy → ${apiTarget}`);
   if (lanIp) {
     const scheme = devHttps ? "https" : "http";
@@ -45,7 +66,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-  envDir: repoRoot,
+  envDir,
   plugins: [
     ...(devHttps
       ? [

@@ -5,7 +5,10 @@ COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 COPY . .
-RUN npm run build
+
+# Опционально из docker compose (корневой .env); иначе web/.env при сборке.
+ARG VITE_YANDEX_MAPS_API_KEY
+RUN if [ -n "$VITE_YANDEX_MAPS_API_KEY" ]; then export VITE_YANDEX_MAPS_API_KEY="$VITE_YANDEX_MAPS_API_KEY"; fi && npm run build
 
 FROM nginx:1.27-alpine
 
