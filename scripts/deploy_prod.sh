@@ -35,6 +35,7 @@ if [[ -n "${GHCR_TOKEN:-}" ]]; then
 fi
 
 export IMAGE_TAG
+echo "$IMAGE_TAG" > .deploy-image-tag
 
 compose() {
   docker compose --env-file .env -f "$COMPOSE_FILE" "$@"
