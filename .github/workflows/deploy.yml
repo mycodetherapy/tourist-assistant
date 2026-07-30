@@ -32,9 +32,6 @@ jobs:
           - name: web
             context: ./web
             file: ./web/Dockerfile
-            build_args: |
-              NGINX_CONF=nginx.pg.conf
-              VITE_YANDEX_MAPS_API_KEY=${{ secrets.VITE_YANDEX_MAPS_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -64,7 +61,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: ${{ matrix.build_args }}
+          build-args: ${{ matrix.name == 'web' && format('NGINX_CONF=nginx.pg.conf\nVITE_YANDEX_MAPS_API_KEY={0}', secrets.VITE_YANDEX_MAPS_API_KEY) || '' }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
