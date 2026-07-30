@@ -1,5 +1,7 @@
 # Туристический ассистент (LangGraph)
 
+[![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
+
 Агент составляет **маршруты по городу**: три альтернативных варианта A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 6–8 предложений с историческими фактами). Центральная функция продукта — маршруты и базовая точка старта (`route_anchor`). Поездки, предпочтения и версии программы хранятся в **PostgreSQL**.
 
 ## Статус и планы
