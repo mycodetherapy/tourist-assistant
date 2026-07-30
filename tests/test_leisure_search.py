@@ -63,6 +63,7 @@ class TestLeisureSearch(unittest.TestCase):
         fetch_city_pack.assert_called_once()
         fetch_wikidata.assert_not_called()
 
+    @patch("search.yandex.leisure_search.is_catalog_city", return_value=False)
     @patch("search.yandex.leisure_search.ensure_pack_async")
     @patch("search.yandex.leisure_search.fetch_wikidata_leisure")
     @patch("search.yandex.leisure_search.fetch_city_pack_poi")
@@ -77,6 +78,7 @@ class TestLeisureSearch(unittest.TestCase):
         fetch_city_pack,
         fetch_wikidata,
         ensure_pack_async,
+        _in_catalog,
     ) -> None:
         resolve_city_center.return_value = _kazan_center()
         fetch_wikidata.return_value = [_sample_poi("Музей", "Q1", 49.11, 55.79)]
@@ -84,7 +86,7 @@ class TestLeisureSearch(unittest.TestCase):
         self.assertGreaterEqual(len(result.points), 1)
         fetch_city_pack.assert_not_called()
         fetch_wikidata.assert_called_once()
-        ensure_pack_async.assert_called_once_with("Казань")
+        ensure_pack_async.assert_not_called()
 
     @patch("search.yandex.leisure_search.resolve_city_center", return_value=None)
     def test_demo_when_city_not_found(self, _resolve) -> None:

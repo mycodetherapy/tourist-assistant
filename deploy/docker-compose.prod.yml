@@ -1,0 +1,90 @@
+# Production stack: готовые образы из GHCR (без git pull / build на сервере).
+#
+# Первичная настройка на VPS:
+#   sudo mkdir -p /opt/tourist-assistant/data
+#   sudo cp deploy/env.example /opt/tourist-assistant/.env   # заполнить секреты
+#   sudo docker login ghcr.io -u <github-user> -p <PAT read:packages>
+#
+# Деплой выполняет GitHub Actions (merge в main) через scripts/deploy_prod.sh
+
+name: progulyai
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tourist
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tourist}
+      POSTGRES_DB: tourist
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tourist -d tourist"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  worker:
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/mycodetherapy/tourist-assistant}-worker:${IMAGE_TAG:?IMAGE_TAG required}
+    command: sh -c "alembic upgrade head && python -m worker"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD:-tourist}@postgres:5432/tourist
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY required}
+      TOURIST_ASSISTANT_IN_DOCKER: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  api-node:
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/mycodetherapy/tourist-assistant}-api-node:${IMAGE_TAG:?IMAGE_TAG required}
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD:-tourist}@postgres:5432/tourist
+      REDIS_URL: redis://redis:6379/0
+      API_NODE_PORT: "8001"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY required}
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL required}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/mycodetherapy/tourist-assistant}-web:${IMAGE_TAG:?IMAGE_TAG required}
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - api-node
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  redis_data:

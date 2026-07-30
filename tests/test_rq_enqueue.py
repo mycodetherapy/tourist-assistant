@@ -1,14 +1,15 @@
-"""Tests for RQ enqueue (Redis binary mode)."""
+"""Tests for RQ enqueue (Redis binary mode). Legacy; skip if rq is not installed."""
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import unittest
 from unittest import skipUnless
 
-from rq import Queue
-
 from db.redis_client import clear_redis_cache, get_redis
+
+RQ_AVAILABLE = importlib.util.find_spec("rq") is not None
 
 
 def _noop_task() -> str:
@@ -19,7 +20,7 @@ def _redis_configured() -> bool:
     return bool(os.getenv("REDIS_URL", "").strip())
 
 
-@skipUnless(_redis_configured(), "REDIS_URL required")
+@skipUnless(RQ_AVAILABLE and _redis_configured(), "rq package and REDIS_URL required")
 class RqEnqueueTests(unittest.TestCase):
     def setUp(self) -> None:
         clear_redis_cache()
@@ -31,6 +32,8 @@ class RqEnqueueTests(unittest.TestCase):
         clear_redis_cache()
 
     def test_enqueue_puts_job_in_queue(self) -> None:
+        from rq import Queue
+
         conn = get_redis()
         q = Queue("rq_test_only", connection=conn)
         job = q.enqueue("tests.test_rq_enqueue._noop_task")

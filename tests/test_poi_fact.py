@@ -81,7 +81,7 @@ class TestPoiFactLlm(unittest.TestCase):
             "по валам и знакомством с историей марийского края и правления Ивана Грозного; "
             "на территории проводятся экскурсии и тематические фестивали."
         )
-        mock_get_llm.return_value.invoke.return_value = response
+        mock_get_llm.return_value.bind.return_value.invoke.return_value = response
         text = generate_poi_fact_llm(name="Царевококшайский кремль", city="Йошкар-Ола")
         self.assertIn("кремль", text.lower())
 
