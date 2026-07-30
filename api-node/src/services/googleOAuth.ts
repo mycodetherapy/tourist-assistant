@@ -34,37 +34,80 @@ function verifyState(state: string): boolean {
   return sig === expected;
 }
 
-function isLocalDevOrigin(origin: string): boolean {
+function defaultFrontendOrigin(): string {
+  return (process.env.FRONTEND_URL ?? config.frontendUrl).replace(/\/$/, "");
+}
+
+function isValidIpv4(hostname: string): boolean {
+  const parts = hostname.split(".");
+  if (parts.length !== 4) return false;
+  return parts.every((part) => {
+    if (!/^\d{1,3}$/.test(part)) return false;
+    const value = Number(part);
+    return value >= 0 && value <= 255;
+  });
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+function effectivePort(url: URL): string {
+  if (url.port) return url.port;
+  return url.protocol === "https:" ? "443" : "80";
+}
+
+function isStrictOriginUrl(origin: string): boolean {
   try {
-    const { hostname } = new URL(origin);
-    return (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)
-    );
+    const url = new URL(origin);
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+      return false;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    const { hostname } = url;
+    return isLoopbackHostname(hostname) || isValidIpv4(hostname);
   } catch {
     return false;
   }
 }
 
+function configuredFrontendOrigins(): Set<string> {
+  const allowed = new Set<string>();
+  const frontend = (process.env.FRONTEND_URL ?? "http://localhost:5173")
+    .trim()
+    .replace(/\/$/, "");
+  if (frontend) allowed.add(frontend);
+  const corsRaw = process.env.CORS_ORIGINS ?? "";
+  for (const item of corsRaw.split(",")) {
+    const origin = item.trim().replace(/\/$/, "");
+    if (origin) allowed.add(origin);
+  }
+  return allowed;
+}
+
+export function isAllowedFrontendOrigin(origin: string): boolean {
+  const normalized = origin.trim().replace(/\/$/, "");
+  if (!normalized) return false;
+
+  if (configuredFrontendOrigins().has(normalized)) return true;
+
+  return isStrictOriginUrl(normalized);
+}
+
 export function oauthRedirectOrigin(frontendUrl: string): string {
   const normalized = frontendUrl.trim().replace(/\/$/, "");
-  if (!normalized) {
-    return (process.env.FRONTEND_URL ?? config.frontendUrl).replace(/\/$/, "");
+  const fallback = defaultFrontendOrigin();
+
+  if (!normalized || !isAllowedFrontendOrigin(normalized)) {
+    return fallback;
   }
 
   if (configuredFrontendOrigins().has(normalized)) {
     return normalized;
   }
 
-  if (!isLocalDevOrigin(normalized)) {
-    return normalized;
-  }
-
-  const devBase = (process.env.FRONTEND_URL ?? "http://localhost:5173")
-    .trim()
-    .replace(/\/$/, "");
-  if (!isLocalDevOrigin(devBase)) {
+  const devBase = defaultFrontendOrigin();
+  if (!isAllowedFrontendOrigin(devBase)) {
     return normalized;
   }
 
@@ -72,13 +115,14 @@ export function oauthRedirectOrigin(frontendUrl: string): string {
     const current = new URL(normalized);
     const canonical = new URL(devBase);
     if (
-      (current.hostname === "127.0.0.1" || current.hostname === "localhost") &&
-      (current.port || canonical.port) === (canonical.port || current.port)
+      isLoopbackHostname(current.hostname) &&
+      isLoopbackHostname(canonical.hostname) &&
+      effectivePort(current) === effectivePort(canonical)
     ) {
       return canonical.origin;
     }
   } catch {
-    return normalized;
+    return fallback;
   }
 
   return normalized;
@@ -245,32 +289,6 @@ export async function exchangeGoogleCode(
   return { sub: userinfo.sub, email: userinfo.email };
 }
 
-function configuredFrontendOrigins(): Set<string> {
-  const allowed = new Set<string>();
-  const frontend = (process.env.FRONTEND_URL ?? "http://localhost:5173")
-    .trim()
-    .replace(/\/$/, "");
-  if (frontend) allowed.add(frontend);
-  const corsRaw = process.env.CORS_ORIGINS ?? "";
-  for (const item of corsRaw.split(",")) {
-    const origin = item.trim().replace(/\/$/, "");
-    if (origin) allowed.add(origin);
-  }
-  return allowed;
-}
-
-export function isAllowedFrontendOrigin(origin: string): boolean {
-  const normalized = origin.trim().replace(/\/$/, "");
-  if (!normalized) return false;
-
-  if (configuredFrontendOrigins().has(normalized)) return true;
-
-  // Локальная разработка: Vite на http/https, LAN IP с телефона
-  return /^https?:\/\/(localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?$/.test(
-    normalized,
-  );
-}
-
 export function resolveFrontendUrl(
   queryFrontend: string | undefined,
   cookieFrontend: string | undefined,
@@ -281,10 +299,7 @@ export function resolveFrontendUrl(
       return candidate;
     }
   }
-  const fallback = (process.env.FRONTEND_URL ?? config.frontendUrl)
-    .trim()
-    .replace(/\/$/, "");
-  return fallback || config.frontendUrl;
+  return defaultFrontendOrigin() || config.frontendUrl;
 }
 
 export function oauthCookieNames(): {

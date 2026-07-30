@@ -212,11 +212,11 @@ Packages → каждый образ → **Change visibility → Private** (ес
 ```bash
 sudo mkdir -p /opt/tourist-assistant/data
 sudo cp deploy/env.example /opt/tourist-assistant/.env
-# Заполните JWT_SECRET, SETTINGS_ENCRYPTION_KEY, FRONTEND_URL, CORS_ORIGINS, …
+# Заполните JWT_SECRET, SETTINGS_ENCRYPTION_KEY, FRONTEND_URL, CORS_ORIGINS, POSTGRES_PASSWORD, …
 sudo docker login ghcr.io -u <GHCR_USER> -p <GHCR_READ_TOKEN>
 ```
 
-Существующий `.env` с `docker-compose.yml` можно оставить: добавьте `POSTGRES_PASSWORD=tourist` (если пароль БД не меняли). Дальнейшие релизы — только через CI после merge в `main`.
+Существующий `.env` с `docker-compose.yml` можно оставить: добавьте `POSTGRES_PASSWORD=…` (на prod — **обязательно**, без дефолта `tourist`). Дальнейшие релизы — только через CI после merge в `main`.
 
 Ручной деплой с сервера (если нужно):
 
@@ -351,7 +351,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `CORS_ORIGINS` | Нет | Доп. origins через запятую; для OAuth — тот же домен, что и `FRONTEND_URL` на проде |
 | `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openai.api.proxyapi.ru/v1` |
 | `LLM_MODEL` | Нет | Slug модели. По умолчанию `gemini/gemini-2.5-flash` (см. [Модели LLM](#модели-llm)) |
-| `LLM_OPENROUTER_PROVIDERS` | Нет | Только для Base URL с `openrouter.ai`: белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
+| `LLM_OPENROUTER_PROVIDERS` | Нет | **Только worker**, и **только** если Base URL содержит `openrouter.ai`. При ProxyAPI (`openai.api.proxyapi.ru`) игнорируется |
 | `DATABASE_URL` | Да** | PostgreSQL (обязателен для API и worker) |
 | `TEST_DATABASE_URL` | Для тестов | Отдельная БД `tourist_test` для `unittest` (`TRUNCATE`); создаётся `scripts/ensure_test_database.py` |
 | `REDIS_URL` | Да** | Redis: JSON worker queue, locks, лимиты прогонов |
@@ -381,7 +381,19 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 
 **Ошибка `redirect_uri_mismatch`:** откройте ссылку «Войти через Google», в адресной строке Google найдите `redirect_uri=` — этот URI добавьте в Console. На Mac чаще всего не хватает `https://localhost:5173/...`; при входе с телефона по IP — добавьте URI с вашим `192.168.x.x`.
 
+**Безопасность:** параметр `?frontend=` и cookie `oauth_frontend` принимаются только из whitelist (`FRONTEND_URL`, `CORS_ORIGINS`, localhost / 127.0.0.1 / LAN IPv4). Произвольные домены (например `attacker.com`) отклоняются — редирект с JWT идёт на `FRONTEND_URL`.
+
 ### Модели LLM
+
+#### ProxyAPI (по умолчанию) vs OpenRouter
+
+| | **ProxyAPI** (дефолт) | **OpenRouter** (альтернатива) |
+|--|----------------------|------------------------------|
+| `LLM_BASE_URL` | `https://openai.api.proxyapi.ru/v1` | `https://openrouter.ai/api/v1` |
+| `LLM_MODEL` | `gemini/gemini-2.5-flash` | например `openai/gpt-4.1-mini` или `google/gemini-2.5-flash` |
+| `LLM_OPENROUTER_PROVIDERS` | **Не используется** | Только worker: `Azure`, `Google`, … |
+| BYOK в UI | Base URL + модель + ключ пользователя | То же; `provider` уходит только при `openrouter.ai` в Base URL |
+| Из РФ без VPN | Обычно да | Часто нужен VPN или провайдеры вроде Azure/Google |
 
 #### Модель по умолчанию: `gemini/gemini-2.5-flash` через ProxyAPI
 

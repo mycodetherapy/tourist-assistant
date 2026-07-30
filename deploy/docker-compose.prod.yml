@@ -14,7 +14,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: tourist
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tourist}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required in .env}
       POSTGRES_DB: tourist
     volumes:
       - pg_data:/var/lib/postgresql/data
@@ -43,7 +43,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD:-tourist}@postgres:5432/tourist
+      DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD}@postgres:5432/tourist
       REDIS_URL: redis://redis:6379/0
       TOURIST_ASSISTANT_IN_DOCKER: "1"
     depends_on:
@@ -60,7 +60,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD:-tourist}@postgres:5432/tourist
+      DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD}@postgres:5432/tourist
       REDIS_URL: redis://redis:6379/0
       API_NODE_PORT: "8001"
     depends_on:
