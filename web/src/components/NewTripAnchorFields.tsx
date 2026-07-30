@@ -14,7 +14,7 @@ interface NewTripAnchorFieldsProps {
 
 const FALLBACK_CENTER: MapPoint = { lat: 55.75, lon: 37.62 };
 
-/** Опциональная базовая точка при создании поездки (до trip_id). */
+/** Опциональная базовая точка при создании прогулки (до trip_id). */
 export function NewTripAnchorFields({
   city,
   value,

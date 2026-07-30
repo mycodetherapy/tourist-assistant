@@ -41,7 +41,7 @@ export function TripDetailPage() {
     mutationFn: () => deleteTrip(tripId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trips"] });
-      notification.success({ title: "Поездка удалена" });
+      notification.success({ title: "Прогулка удалена" });
       navigate("/trips");
     },
     onError: (error) => {
@@ -134,7 +134,7 @@ export function TripDetailPage() {
   }
 
   if (!tripQuery.data) {
-    return <Alert type="error" title="Поездка не найдена" />;
+    return <Alert type="error" title="Прогулка не найдена" />;
   }
 
   const trip = tripQuery.data;
@@ -147,7 +147,7 @@ export function TripDetailPage() {
     <div className="space-y-6">
       <div className="flex justify-stretch sm:justify-end">
         <Popconfirm
-          title={`Удалить поездку #${trip.id}?`}
+          title={`Удалить прогулку #${trip.id}?`}
           description={trip.city}
           okText="Удалить"
           cancelText="Отмена"
@@ -163,7 +163,7 @@ export function TripDetailPage() {
             loading={deleteMutation.isPending}
             disabled={isBuilding}
           >
-            Удалить поездку
+            Удалить прогулку
           </Button>
         </Popconfirm>
       </div>

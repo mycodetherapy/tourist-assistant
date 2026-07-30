@@ -7,7 +7,7 @@ interface TripMetaCardProps {
 
 export function TripMetaCard({ trip }: TripMetaCardProps) {
   return (
-    <Card title={`Поездка #${trip.id}`}>
+    <Card title={`Прогулка #${trip.id}`}>
       <Descriptions column={1} size="small">
         <Descriptions.Item label="Город">{trip.city}</Descriptions.Item>
       </Descriptions>

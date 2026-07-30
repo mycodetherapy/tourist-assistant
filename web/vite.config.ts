@@ -98,9 +98,9 @@ export default defineConfig(({ mode }) => {
         ],
       },
       manifest: {
-        name: "Туристический ассистент",
-        short_name: "Туризм",
-        description: "Планирование поездок с AI-ассистентом",
+        name: "Прогуляй — пешие маршруты",
+        short_name: "Прогуляй",
+        description: "Три варианта пешей прогулки по городу — карта маршрута и ссылка на Яндекс.Карты",
         theme_color: "#001529",
         background_color: "#f5f5f5",
         display: "standalone",

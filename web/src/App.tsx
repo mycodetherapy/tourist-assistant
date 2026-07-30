@@ -3,6 +3,7 @@ import { Button, Drawer, Grid, Layout, Menu, Popconfirm } from "antd";
 import { useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
+import { APP_NAME } from "./brand";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -17,8 +18,8 @@ const { Header, Content } = Layout;
 const { useBreakpoint } = Grid;
 
 const NAV_ITEMS = [
-  { key: "list", label: "Поездки", to: "/trips" },
-  { key: "new", label: "Новая поездка", to: "/trips/new" },
+  { key: "list", label: "Прогулки", to: "/trips" },
+  { key: "new", label: "Новая прогулка", to: "/trips/new" },
   { key: "settings", label: "Настройки", to: "/settings" },
 ] as const;
 
@@ -72,7 +73,7 @@ export default function App() {
             className="flex min-w-0 flex-1 items-center gap-2 text-white text-base font-medium sm:flex-none sm:text-lg"
           >
             <CompassOutlined className="shrink-0" />
-            <span className="truncate">{isMobile ? "Туризм" : "Туристический ассистент"}</span>
+            <span className="truncate">{APP_NAME}</span>
           </Link>
           {!isMobile ? (
             <Menu

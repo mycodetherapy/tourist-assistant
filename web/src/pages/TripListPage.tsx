@@ -20,7 +20,7 @@ export function TripListPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trips"] });
-      notification.success({ title: "Поездка удалена" });
+      notification.success({ title: "Прогулка удалена" });
     },
     onError: (error) => {
       notification.error({ title: "Ошибка", description: getErrorMessage(error) });
@@ -33,17 +33,17 @@ export function TripListPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 sm:mb-6">
-        <h1 className="m-0 text-xl font-semibold sm:text-2xl">Поездки</h1>
+        <h1 className="m-0 text-xl font-semibold sm:text-2xl">Прогулки</h1>
         <Link to="/trips/new" className="w-full sm:w-auto">
           <Button type="primary" icon={<PlusOutlined />} block className="sm:!w-auto">
-            Новая поездка
+            Новая прогулка
           </Button>
         </Link>
       </div>
       {!isLoading && trips.length === 0 ? (
-        <Empty description="Поездок пока нет">
+        <Empty description="Прогулок пока нет">
           <Link to="/trips/new">
-            <Button type="primary">Создать первую поездку</Button>
+            <Button type="primary">Создать первую прогулку</Button>
           </Link>
         </Empty>
       ) : (

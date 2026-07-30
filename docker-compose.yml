@@ -1,4 +1,4 @@
-# Туристический ассистент: Node API + React + Postgres + Redis + Python worker.
+# Прогуляй: Node API + React + Postgres + Redis + Python worker.
 #
 # Полный стек (UI в Docker на :5173):
 #   docker compose --profile docker-web up -d --build

@@ -79,7 +79,7 @@ def _build_planner_system_prompt(ctx: PlannerContext, rebuild_scope: str) -> str
         prefs_block = f"\nПредпочтения пользователя (опросник): {ctx.search_context}\n"
     tools_hint = planner_tools_hint(rebuild_scope)
     return (
-        "Ты — туристический ассистент. Составляешь маршруты по городу.\n"
+        "Ты — сервис пеших прогулок «Прогуляй». Составляешь маршруты по городу.\n"
         f"Город поездки: {ctx.city}. Даты: {ctx.dates}."
         f"{prefs_block}\n"
         "Инструмент: search_route_materials — единый пул мест досуга "

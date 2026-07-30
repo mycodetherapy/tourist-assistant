@@ -36,7 +36,7 @@ export function TripTable({ trips, loading, deletingId, onDelete }: TripTablePro
             <Button type="link">Открыть</Button>
           </Link>
           <Popconfirm
-            title={`Удалить поездку #${row.id}?`}
+            title={`Удалить прогулку #${row.id}?`}
             description={row.city}
             okText="Удалить"
             cancelText="Отмена"

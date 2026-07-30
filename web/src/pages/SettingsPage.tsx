@@ -114,7 +114,7 @@ export function SettingsPage() {
               </Button>
             ) : null}
             <Link to="/trips">
-              <Button type="link">К поездкам</Button>
+              <Button type="link">К прогулкам</Button>
             </Link>
           </div>
         </Form>

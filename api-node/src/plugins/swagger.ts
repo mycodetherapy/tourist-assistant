@@ -18,7 +18,7 @@ export async function registerSwagger(
     openapi: {
       openapi: "3.1.0",
       info: {
-        title: "Туристический ассистент API",
+        title: "Прогуляй API",
         description:
           "REST API веб-интерфейса: multi-user SaaS, Postgres, асинхронная сборка LangGraph (worker), BYOK LLM.",
         version: "2.0.0",
