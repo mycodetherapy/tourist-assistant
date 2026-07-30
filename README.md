@@ -171,6 +171,59 @@ docker compose --profile docker-web up -d --build
 
 Опционально: `docker login` (бесплатный аккаунт Docker Hub) — выше лимит pull. Явный pull через прокси: `docker pull dockerhub.timeweb.cloud/library/node:22-alpine`.
 
+### CI/CD и продакшен
+
+Исходники — **открытый GitHub**. Продакшен работает на **готовых Docker-образах** из приватного **GHCR**, без `git pull` и без сборки на VPS.
+
+| Этап | Что происходит |
+|------|----------------|
+| PR → `develop` / `main` | [`.github/workflows/ci.yml`](.github/workflows/ci.yml): Python-тесты, api-node, сборка web, smoke Docker build |
+| Merge → `main` | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): push образов в GHCR + SSH-деплой на VPS |
+| VPS | `docker compose -f docker-compose.prod.yml pull` и перезапуск (`scripts/deploy_prod.sh`) |
+
+**Ветки:** разработка в `develop`, стабильный релиз — только `main` через PR ([CONTRIBUTING.md](CONTRIBUTING.md)).
+
+**Образы в GHCR** (приватные, тег = git SHA + `main` + `latest`):
+
+- `ghcr.io/mycodetherapy/tourist-assistant-worker`
+- `ghcr.io/mycodetherapy/tourist-assistant-api-node`
+- `ghcr.io/mycodetherapy/tourist-assistant-web`
+
+#### Секреты GitHub Actions
+
+В репозитории: **Settings → Secrets and variables → Actions**:
+
+| Secret | Назначение |
+|--------|------------|
+| `VPS_HOST` | IP или домен VPS (например `185.39.206.213`) |
+| `VPS_USER` | SSH-пользователь (`root` или deploy-user) |
+| `VPS_SSH_KEY` | Приватный ключ SSH (полное содержимое) |
+| `GHCR_USER` | GitHub username для `docker login` на VPS |
+| `GHCR_READ_TOKEN` | PAT с правом `read:packages` (pull образов на сервере) |
+| `VITE_YANDEX_MAPS_API_KEY` | Ключ Яндекс.Карт для **сборки** web в CI |
+
+Packages → каждый образ → **Change visibility → Private** (если репозиторий публичный).
+
+#### Первичная настройка VPS (один раз)
+
+```bash
+sudo mkdir -p /opt/tourist-assistant/data
+sudo cp deploy/env.example /opt/tourist-assistant/.env
+# Заполните JWT_SECRET, SETTINGS_ENCRYPTION_KEY, FRONTEND_URL, CORS_ORIGINS, …
+sudo docker login ghcr.io -u <GHCR_USER> -p <GHCR_READ_TOKEN>
+```
+
+Существующий `.env` с `docker-compose.yml` можно оставить: добавьте `POSTGRES_PASSWORD=tourist` (если пароль БД не меняли). Дальнейшие релизы — только через CI после merge в `main`.
+
+Ручной деплой с сервера (если нужно):
+
+```bash
+cd /opt/tourist-assistant
+IMAGE_TAG=<git-sha> ./deploy_prod.sh
+```
+
+Локальная разработка по-прежнему через `docker compose up --build` в корне репозитория.
+
 #### Первый запуск
 
 ```bash
@@ -643,7 +696,9 @@ tourist-assistant/
 ├── data/                   # локальные артефакты (в .gitignore)
 ├── requirements.txt
 ├── Dockerfile              # Python worker image
-├── docker-compose.yml      # postgres, redis, api-node, worker, web
+├── .github/workflows/      # CI (PR) и Deploy (main → GHCR + VPS)
+├── deploy/                 # docker-compose.prod.yml, env.example для VPS
+├── docker-compose.yml      # лок/dev: postgres, redis, api-node, worker, web
 ├── .env.example
 └── README.md
 ```
