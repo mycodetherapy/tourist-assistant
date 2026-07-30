@@ -229,7 +229,18 @@ sudo cp deploy/env.example /opt/tourist-assistant/.env
 sudo docker login ghcr.io -u <GHCR_USER> -p <GHCR_READ_TOKEN>
 ```
 
-Существующий `.env` с `docker-compose.yml` можно оставить: добавьте `POSTGRES_PASSWORD=…` (на prod — **обязательно**, без дефолта `tourist`). Дальнейшие релизы — только через CI после merge в `main`.
+Существующий `.env` с `docker-compose.yml` можно оставить: добавьте `POSTGRES_PASSWORD=…` (на prod — **обязательно**, минимум 16 символов, не `tourist`). Для OAuth укажите `FRONTEND_URL=https://progulyai.ru` и `CORS_ORIGINS=https://progulyai.ru,https://www.progulyai.ru`, а также `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. Дальнейшие релизы — только через CI после merge в `main`.
+
+Смена пароля Postgres на работающем prod:
+
+```bash
+cd /opt/tourist-assistant
+NEW_POSTGRES_PASSWORD='…' bash rotate_postgres_password.sh
+```
+
+`deploy_prod.sh` не пропустит деплой с `POSTGRES_PASSWORD=tourist` или `FRONTEND_URL=localhost`.
+
+Если Google OAuth падает после выбора аккаунта — на VPS: `docker compose -f docker-compose.prod.yml logs api-node --tail 80` и `docker compose … exec -T worker alembic current` (нужна ревизия `c4e1f8a92d10`).
 
 Ручной деплой с сервера (если нужно):
 

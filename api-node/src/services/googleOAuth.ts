@@ -71,6 +71,20 @@ function isStrictOriginUrl(origin: string): boolean {
   }
 }
 
+function addWwwVariant(allowed: Set<string>, origin: string): void {
+  try {
+    const url = new URL(origin);
+    if (isLoopbackHostname(url.hostname) || isValidIpv4(url.hostname)) {
+      return;
+    }
+    if (!url.hostname.startsWith("www.")) {
+      allowed.add(`${url.protocol}//www.${url.hostname}`);
+    }
+  } catch {
+    /* ignore invalid origin */
+  }
+}
+
 function configuredFrontendOrigins(): Set<string> {
   const allowed = new Set<string>();
   const frontend = (process.env.FRONTEND_URL ?? "http://localhost:5173")
@@ -81,6 +95,9 @@ function configuredFrontendOrigins(): Set<string> {
   for (const item of corsRaw.split(",")) {
     const origin = item.trim().replace(/\/$/, "");
     if (origin) allowed.add(origin);
+  }
+  for (const origin of [...allowed]) {
+    addWwwVariant(allowed, origin);
   }
   return allowed;
 }
@@ -215,6 +232,28 @@ export function oauthCookieSecure(frontendUrl: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Shared cookie domain for apex + www on prod (e.g. `.progulyai.ru`). */
+export function oauthCookieDomain(frontendUrl: string): string | undefined {
+  try {
+    const url = new URL(frontendUrl.trim().replace(/\/$/, ""));
+    if (isLoopbackHostname(url.hostname) || isValidIpv4(url.hostname)) {
+      return undefined;
+    }
+    const parts = url.hostname.toLowerCase().split(".");
+    if (parts.length >= 2) {
+      return `.${parts.slice(-2).join(".")}`;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+export function oauthLoginErrorUrl(frontendUrl: string, code: string): string {
+  const base = oauthRedirectOrigin(frontendUrl);
+  return `${base}/login?error=${encodeURIComponent(code)}`;
 }
 
 export function isAllowedRedirectUri(uri: string): boolean {

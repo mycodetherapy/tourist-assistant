@@ -21,8 +21,10 @@ import {
   exchangeGoogleCode,
   inferFrontendOrigin,
   loginOrLinkGoogle,
+  oauthCookieDomain,
   oauthCookieNames,
   oauthCookieSecure,
+  oauthLoginErrorUrl,
   resolveFrontendUrl,
   resolveOAuthRedirectUri,
   verifyOAuthState,
@@ -169,6 +171,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       try {
         const { url, state, redirectUri } = buildGoogleAuthorizeUrl(frontendUrl);
         const cookies = oauthCookieNames();
+        const cookieDomain = oauthCookieDomain(frontendUrl);
         const cookieOpts = {
           path: "/",
           httpOnly: true,
@@ -176,6 +179,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           maxAge: 600,
           secure: oauthCookieSecure(frontendUrl),
           signed: false,
+          ...(cookieDomain ? { domain: cookieDomain } : {}),
         };
         reply
           .setCookie(cookies.state, state, cookieOpts)
@@ -210,6 +214,22 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       };
       const cookies = oauthCookieNames();
       const cookieState = request.cookies?.[cookies.state];
+      const frontendForError = resolveFrontendUrl(
+        query.frontend,
+        request.cookies?.[cookies.frontend],
+      );
+      const clearOAuthCookies = () => {
+        const clearOpts = { path: "/" as const };
+        const domain = oauthCookieDomain(frontendForError);
+        const domainOpts = domain ? { ...clearOpts, domain } : clearOpts;
+        reply
+          .clearCookie(cookies.state, clearOpts)
+          .clearCookie(cookies.frontend, clearOpts)
+          .clearCookie(cookies.redirect, clearOpts)
+          .clearCookie(cookies.state, domainOpts)
+          .clearCookie(cookies.frontend, domainOpts)
+          .clearCookie(cookies.redirect, domainOpts);
+      };
       if (!verifyOAuthState(query.state) || query.state !== cookieState) {
         request.log.warn(
           {
@@ -218,10 +238,12 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           },
           "Google OAuth state mismatch",
         );
-        return reply.code(400).send({ detail: "Ошибка авторизации Google" });
+        clearOAuthCookies();
+        return reply.redirect(oauthLoginErrorUrl(frontendForError, "oauth_state"));
       }
       if (!query.code) {
-        return reply.code(400).send({ detail: "Ошибка авторизации Google" });
+        clearOAuthCookies();
+        return reply.redirect(oauthLoginErrorUrl(frontendForError, "oauth_denied"));
       }
       try {
         const frontend = resolveFrontendUrl(
@@ -244,19 +266,39 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         if (isNewUser) {
           await recordUserRegister(user.id, { method: "google" });
         }
-        await recordUserLogin(user.id, { method: "google" });
+        try {
+          await recordUserLogin(user.id, { method: "google" });
+        } catch (auditErr) {
+          request.log.warn({ err: auditErr }, "Google OAuth login audit failed");
+        }
+        const cookieDomain = oauthCookieDomain(frontend);
+        const clearOpts = { path: "/" as const };
+        const domainOpts = cookieDomain
+          ? { ...clearOpts, domain: cookieDomain }
+          : clearOpts;
         reply
-          .clearCookie(cookies.state, { path: "/" })
-          .clearCookie(cookies.frontend, { path: "/" })
-          .clearCookie(cookies.redirect, { path: "/" });
+          .clearCookie(cookies.state, clearOpts)
+          .clearCookie(cookies.frontend, clearOpts)
+          .clearCookie(cookies.redirect, clearOpts)
+          .clearCookie(cookies.state, domainOpts)
+          .clearCookie(cookies.frontend, domainOpts)
+          .clearCookie(cookies.redirect, domainOpts);
         const redirectUrl = `${frontend}/auth/callback?token=${encodeURIComponent(token)}`;
         return reply.redirect(redirectUrl);
       } catch (err) {
+        const frontend = resolveFrontendUrl(
+          query.frontend,
+          request.cookies?.[cookies.frontend],
+        );
         if (err instanceof AuthError) {
-          return reply.code(err.statusCode).send({ detail: err.message });
+          request.log.warn(
+            { statusCode: err.statusCode, message: err.message },
+            "Google OAuth callback rejected",
+          );
+          return reply.redirect(oauthLoginErrorUrl(frontend, "oauth_failed"));
         }
         request.log.error({ err }, "Google OAuth callback failed");
-        return reply.code(400).send({ detail: "Ошибка авторизации Google" });
+        return reply.redirect(oauthLoginErrorUrl(frontend, "oauth_failed"));
       }
     },
   );

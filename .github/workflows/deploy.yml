@@ -94,7 +94,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "deploy/docker-compose.prod.yml,scripts/deploy_prod.sh,scripts/verify_prod_env.sh,scripts/prod_ps.sh,scripts/prod_compose_env.sh"
+          source: "deploy/docker-compose.prod.yml,scripts/deploy_prod.sh,scripts/verify_prod_env.sh,scripts/prod_ps.sh,scripts/prod_compose_env.sh,scripts/rotate_postgres_password.sh"
           target: /opt/tourist-assistant
           strip_components: 0
 
@@ -112,7 +112,8 @@ jobs:
             mv -f /opt/tourist-assistant/scripts/verify_prod_env.sh /opt/tourist-assistant/verify_prod_env.sh
             mv -f /opt/tourist-assistant/scripts/prod_ps.sh /opt/tourist-assistant/prod_ps.sh
             mv -f /opt/tourist-assistant/scripts/prod_compose_env.sh /opt/tourist-assistant/prod_compose_env.sh
-            chmod +x /opt/tourist-assistant/deploy_prod.sh /opt/tourist-assistant/verify_prod_env.sh /opt/tourist-assistant/prod_ps.sh
+            mv -f /opt/tourist-assistant/scripts/rotate_postgres_password.sh /opt/tourist-assistant/rotate_postgres_password.sh
+            chmod +x /opt/tourist-assistant/deploy_prod.sh /opt/tourist-assistant/verify_prod_env.sh /opt/tourist-assistant/prod_ps.sh /opt/tourist-assistant/rotate_postgres_password.sh
             rmdir /opt/tourist-assistant/deploy 2>/dev/null || true
 
       - name: Pull images and restart stack

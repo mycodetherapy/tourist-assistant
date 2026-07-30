@@ -30,6 +30,23 @@ if ((${#missing[@]} > 0)); then
   exit 1
 fi
 
+read_env_val() {
+  grep -E "^${1}=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"
+}
+
+pg_pass="$(read_env_val POSTGRES_PASSWORD)"
+if [[ "$pg_pass" == "tourist" ]] || ((${#pg_pass} < 16)); then
+  echo "ERROR: POSTGRES_PASSWORD слабый (минимум 16 символов, не «tourist»)." >&2
+  echo "На VPS: bash scripts/rotate_postgres_password.sh" >&2
+  exit 1
+fi
+
+frontend_url="$(read_env_val FRONTEND_URL)"
+if [[ "$frontend_url" == *localhost* ]] || [[ "$frontend_url" == *127.0.0.1* ]]; then
+  echo "ERROR: FRONTEND_URL=$frontend_url — укажите https://progulyai.ru (OAuth сломается)." >&2
+  exit 1
+fi
+
 if [[ -z "${GHCR_TOKEN:-}" ]]; then
   echo "ERROR: GHCR_TOKEN is not set." >&2
   echo "In GitHub Actions set secrets GHCR_USER and GHCR_READ_TOKEN (PAT with read:packages)." >&2

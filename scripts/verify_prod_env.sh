@@ -22,7 +22,7 @@ echo "dir=$PROD_DEPLOY_DIR file=$PROD_COMPOSE_FILE IMAGE_TAG=${IMAGE_TAG:-MISSIN
 
 echo ""
 echo "=== .env на хосте (только имена, длина значения) ==="
-for key in JWT_SECRET SETTINGS_ENCRYPTION_KEY FRONTEND_URL CORS_ORIGINS YANDEX_MAPS_API_KEY POSTGRES_PASSWORD; do
+for key in JWT_SECRET SETTINGS_ENCRYPTION_KEY FRONTEND_URL CORS_ORIGINS YANDEX_MAPS_API_KEY POSTGRES_PASSWORD GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
   line=$(grep -E "^${key}=" .env 2>/dev/null | head -1 || true)
   if [[ -z "$line" ]]; then
     echo "$key: MISSING in .env"
