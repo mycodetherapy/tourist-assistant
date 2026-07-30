@@ -54,14 +54,22 @@ export function SettingsPage() {
         className="mb-4"
         type="info"
         showIcon
-        message="OpenRouter BYOK"
+        message="BYOK: свой ключ LLM"
         description={
           <>
-            Укажите свой API-ключ с{" "}
-            <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">
-              openrouter.ai/keys
-            </a>
-            . Сборка программы оплачивается с вашего баланса OpenRouter.
+            <p className="m-0 mb-2">
+              Укажите API-ключ вашего провайдера (ProxyAPI, OpenRouter и др.), Base URL и модель.
+              Сборка программы оплачивается с вашего баланса у выбранного провайдера.
+            </p>
+            <p className="m-0">
+              <strong>Из РФ</strong> удобнее{" "}
+              <a href="https://proxyapi.ru" target="_blank" rel="noopener noreferrer">
+                ProxyAPI
+              </a>
+              : работает без VPN. Зарегистрируйтесь, получите ключ в личном кабинете и вставьте его
+              ниже — Base URL (<code>https://openai.api.proxyapi.ru/v1</code>) и модель (
+              <code>gemini/gemini-2.5-flash</code>) уже подставлены по умолчанию.
+            </p>
           </>
         }
       />
@@ -84,17 +92,17 @@ export function SettingsPage() {
           }}
           onFinish={(values) => saveMutation.mutate(values)}
         >
-          <Form.Item name="llm_api_key" label="OpenRouter API key">
+          <Form.Item name="llm_api_key" label="API key">
             <Input.Password
-              placeholder="sk-or-..."
+              placeholder="sk-..."
               autoComplete="off"
             />
           </Form.Item>
           <Form.Item name="llm_base_url" label="Base URL">
-            <Input placeholder="https://openrouter.ai/api/v1" />
+            <Input placeholder="https://openai.api.proxyapi.ru/v1" />
           </Form.Item>
           <Form.Item name="llm_model" label="Модель">
-            <Input placeholder="openai/gpt-4.1-mini" />
+            <Input placeholder="gemini/gemini-2.5-flash" />
           </Form.Item>
           <div className="flex flex-wrap gap-2">
             <Button type="primary" htmlType="submit" loading={saveMutation.isPending}>

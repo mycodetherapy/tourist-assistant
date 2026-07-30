@@ -62,7 +62,7 @@ export function TripDetailPage() {
     onError: (error) => {
       if (isLlmKeyRequiredError(error)) {
         notification.warning({
-          title: "Нужен ключ OpenRouter",
+          title: "Нужен ключ LLM",
           description: "Добавьте API-ключ в настройках, затем запустите сборку снова.",
         });
         navigate("/settings");
@@ -177,7 +177,7 @@ export function TripDetailPage() {
           title="Сборка маршрутов не удалась"
           description={lastBuildError}
           action={
-            lastBuildError.includes("настройках") || lastBuildError.includes("OpenRouter") ? (
+            lastBuildError.includes("настройках") || lastBuildError.includes("LLM") ? (
               <Button size="small" onClick={() => navigate("/settings")}>
                 Настройки
               </Button>

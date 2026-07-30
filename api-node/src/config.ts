@@ -1,7 +1,7 @@
 import "./loadEnv.js";
 
-const DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_LLM_MODEL = "openai/gpt-4.1-mini";
+const DEFAULT_LLM_BASE_URL = "https://openai.api.proxyapi.ru/v1";
+const DEFAULT_LLM_MODEL = "gemini/gemini-2.5-flash";
 
 function required(name: string, value: string | undefined): string {
   const v = (value ?? "").trim();

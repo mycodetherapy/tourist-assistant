@@ -20,20 +20,20 @@ def format_runtime_error(exc: Exception) -> str:
     ):
         if is_postgres_enabled():
             return (
-                "Ошибка аутентификации LLM (401): OpenRouter не принял ключ из настроек профиля.\n"
-                "Откройте «Настройки» → укажите ключ с https://openrouter.ai/keys и пересоберите маршруты.\n"
+                "Ошибка аутентификации LLM (401): провайдер не принял ключ из настроек профиля.\n"
+                "Откройте «Настройки» → проверьте API key, Base URL и модель, затем пересоберите маршруты.\n"
                 f"Детали: {text}"
             )
         return (
             "Ошибка аутентификации LLM (401): провайдер не принял LLM_API_KEY.\n"
-            "Проверьте .env: ключ с https://openrouter.ai/keys (не sk-or-... из .env.example).\n"
+            "Проверьте .env: реальный ключ провайдера (не плейсхолдер из .env.example).\n"
             f"Детали: {text}"
         )
     if "403" in text or "unsupported_country_region_territory" in text:
         return (
-            "Ошибка LLM (403): провайдер OpenAI недоступен из вашего региона.\n"
-            "По умолчанию запросы идут через Azure (LLM_OPENROUTER_PROVIDERS).\n"
-            "Если ошибка остаётся — VPN или другая модель в LLM_MODEL.\n"
+            "Ошибка LLM (403): провайдер недоступен из вашего региона.\n"
+            "Проверьте Base URL и модель в настройках (по умолчанию ProxyAPI + gemini/gemini-2.5-flash).\n"
+            "Для OpenRouter — смените LLM_OPENROUTER_PROVIDERS или используйте VPN.\n"
             f"Детали: {text}"
         )
     if "No endpoints found that can handle the requested parameters" in text:
@@ -54,7 +54,7 @@ def format_runtime_error(exc: Exception) -> str:
         return (
             "Ошибка LLM (404): у выбранных провайдеров нет поддержки tool calling.\n"
             "Для openai/gpt-4o-mini tools доступны только через OpenAI (VPN из РФ).\n"
-            "Рекомендуется: LLM_MODEL=openai/gpt-4.1-mini, LLM_OPENROUTER_PROVIDERS=Azure\n"
+            "Рекомендуется: gemini/gemini-2.5-flash через ProxyAPI (Base URL openai.api.proxyapi.ru)\n"
             f"Детали: {text}"
         )
     if "messages with role 'tool'" in text or "tool_calls" in text:

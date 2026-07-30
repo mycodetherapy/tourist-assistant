@@ -15,8 +15,8 @@ from config.settings import (
 
 
 class TestOpenRouterConfig(unittest.TestCase):
-    def test_default_model_supports_azure_tools(self) -> None:
-        self.assertEqual(LLM_MODEL, "openai/gpt-4.1-mini")
+    def test_default_model(self) -> None:
+        self.assertEqual(LLM_MODEL, "gemini/gemini-2.5-flash")
 
     @patch.dict(os.environ, {"LLM_BASE_URL": "https://openrouter.ai/api/v1"}, clear=False)
     def test_chat_mode_skips_require_parameters(self) -> None:

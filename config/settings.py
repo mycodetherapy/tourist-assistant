@@ -193,9 +193,9 @@ SEARCH_FILTERS: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 
-DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1"
-# gpt-4.1-mini на Azure поддерживает tools + structured_outputs (gpt-4o-mini — только OpenAI).
-LLM_MODEL = "openai/gpt-4.1-mini"
+DEFAULT_LLM_BASE_URL = "https://openai.api.proxyapi.ru/v1"
+# ProxyAPI: gemini-2.5-flash поддерживает tools + structured_output из РФ без VPN.
+LLM_MODEL = "gemini/gemini-2.5-flash"
 LLM_TEMPERATURE = 0.2
 
 # Белый список OpenRouter (only + order). DeepInfra не хостит openai/* на OpenRouter.
@@ -217,7 +217,7 @@ def get_llm_api_key() -> str:
 
 
 def get_llm_base_url() -> str:
-    """Base URL OpenAI-compatible API; по умолчанию OpenRouter."""
+    """Base URL OpenAI-compatible API; по умолчанию ProxyAPI."""
     explicit = os.getenv("LLM_BASE_URL", "").strip()
     if explicit:
         return explicit
@@ -292,9 +292,9 @@ def ensure_env() -> None:
         )
     if is_placeholder_secret(api_key):
         raise SystemExit(
-            "Ошибка: LLM_API_KEY в .env — плейсхолдер из .env.example (sk-or-...), "
+            "Ошибка: LLM_API_KEY в .env — плейсхолдер из .env.example, "
             "а не реальный ключ.\n"
-            "Вставьте ключ с https://openrouter.ai/keys.\n"
+            "Укажите ключ вашего LLM-провайдера (ProxyAPI, OpenRouter и т.д.).\n"
             "Если ключ был раньше — восстановите из бэкапа или сгенерируйте новый."
         )
 

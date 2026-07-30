@@ -20,7 +20,7 @@ export async function registerSwagger(
       info: {
         title: "Туристический ассистент API",
         description:
-          "REST API веб-интерфейса: multi-user SaaS, Postgres, асинхронная сборка LangGraph (worker), BYOK OpenRouter.",
+          "REST API веб-интерфейса: multi-user SaaS, Postgres, асинхронная сборка LangGraph (worker), BYOK LLM.",
         version: "2.0.0",
       },
       servers: [

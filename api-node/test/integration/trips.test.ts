@@ -146,6 +146,6 @@ describe.skipIf(!hasDatabase)("trips integration", () => {
     expect(resp.statusCode).toBe(428);
     const body = resp.json() as { detail: { code: string; message: string } };
     expect(body.detail.code).toBe("llm_key_required");
-    expect(body.detail.message).toMatch(/повреждён|OpenRouter/i);
+    expect(body.detail.message).toMatch(/повреждён|LLM/i);
   });
 });

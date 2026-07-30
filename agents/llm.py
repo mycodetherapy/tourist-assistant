@@ -1,4 +1,4 @@
-"""LLM через OpenRouter: planner с tool_calls, finalize со structured output."""
+"""LLM через OpenAI-compatible API: planner с tool_calls, finalize со structured output."""
 
 from __future__ import annotations
 

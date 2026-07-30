@@ -36,7 +36,7 @@ export function NewTripPage() {
     onError: (error) => {
       if (isLlmKeyRequiredError(error)) {
         notification.warning({
-          title: "Нужен ключ OpenRouter",
+          title: "Нужен ключ LLM",
           description:
             "Добавьте API-ключ в настройках, затем нажмите «Собрать программу» на странице поездки.",
         });

@@ -124,7 +124,7 @@ export function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Как это работает</h2>
           <p className="mb-10 max-w-2xl text-slate-600">
-            Регистрация, ключ OpenRouter в настройках — и можно собирать первую поездку.
+            Регистрация, API-ключ LLM в настройках — и можно собирать первую поездку.
           </p>
           <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step, index) => (
@@ -179,19 +179,20 @@ export function LandingPage() {
             <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6 sm:p-8">
               <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-[#001529]">
                 <KeyOutlined className="text-amber-600" />
-                Ключ OpenRouter
+                Ключ LLM-провайдера
               </h3>
               <p className="mb-4 text-sm leading-relaxed text-slate-700">
-                Для сборки маршрутов нужен API-ключ от{" "}
+                Для сборки маршрутов нужен API-ключ от OpenAI-compatible провайдера
+                (по умолчанию —{" "}
                 <a
-                  href="https://openrouter.ai/keys"
+                  href="https://proxyapi.ru"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-sky-700 underline decoration-sky-300 underline-offset-2 hover:text-sky-900"
                 >
-                  OpenRouter
+                  ProxyAPI
                 </a>
-                . Через него работает языковая модель: она читает ваши пожелания и формирует варианты
+                ). Через него работает языковая модель: она читает ваши пожелания и формирует варианты
                 A/B/C по пулу мест в городе.
               </p>
               <ul className="m-0 list-none space-y-3 p-0 text-sm text-slate-700">
@@ -199,14 +200,14 @@ export function LandingPage() {
                   <span className="text-amber-600">•</span>
                   <span>
                     <strong>Зачем:</strong> без ключа ассистент не соберёт маршруты. Оплата модели —
-                    напрямую в OpenRouter (BYOK).
+                    напрямую у провайдера (BYOK).
                   </span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-amber-600">•</span>
                   <span>
-                    <strong>Где взять:</strong> регистрация на openrouter.ai, ключ в разделе Keys,
-                    небольшого баланса обычно хватает на несколько пересборов.
+                    <strong>Где взять:</strong> регистрация на proxyapi.ru или другом провайдере,
+                    ключ в личном кабинете; небольшого баланса обычно хватает на несколько пересборов.
                   </span>
                 </li>
                 <li className="flex gap-2">
