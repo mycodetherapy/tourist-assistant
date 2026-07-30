@@ -98,7 +98,7 @@ npm run dev
 
 ### City pack (POI из OSM-выжимки)
 
-POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Статусы каталога — таблица `city_packs` в Postgres. **Pack готов** → POI только из pack; **город вне каталога** или pack ещё не собран → Wikidata (+ discovery). Карта маршрута — **iframe-виджет** Яндекса по `maps_route_url` (пеший режим `rtt=pd`).
+POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Статусы каталога — таблица `city_packs` в Postgres. **Pack готов** → POI из OSM; **pack не готов или пустой** → Wikidata; оба пусты → demo. Карта маршрута — **iframe-виджет** Яндекса по `maps_route_url` (пеший режим `rtt=pd`).
 
 **Первый запуск (Поволжский ФО, 8 городов):**
 
@@ -114,7 +114,7 @@ bash scripts/city_pack_batch.sh
 
 Каталог городов: [`config/city_packs.yaml`](config/city_packs.yaml); федеральные округа (Geofabrik): [`config/federal_districts.yaml`](config/federal_districts.yaml). Новый город — запись в YAML + `city_pack_prepare.sh` + `alembic upgrade head` (синхронизация `city_packs`).
 
-Города **в каталоге** без готового pack — worker ставит prepare в очередь; POI из Wikidata **не** подмешиваются. Города **вне каталога** — Wikidata. `pip install osmium` нужен для `build_poi_index.py`.
+Города **в каталоге** без готового pack — worker ставит prepare в очередь, POI берутся из **Wikidata** до готовности pack. Если и OSM, и Wikidata пусты — demo-точки. `pip install osmium` нужен для `build_poi_index.py`.
 
 Для стабильного PWA-теста без dev-сервера: `cd web && npm run build && npm run preview -- --host`.
 
