@@ -54,6 +54,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push (${{ matrix.name }})
+        if: matrix.name != 'web'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -61,7 +62,21 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: ${{ matrix.name == 'web' && format('NGINX_CONF=nginx.pg.conf\nVITE_YANDEX_MAPS_API_KEY={0}', secrets.VITE_YANDEX_MAPS_API_KEY) || '' }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Build and push (web)
+        if: matrix.name == 'web'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NGINX_CONF=nginx.pg.conf
+            VITE_YANDEX_MAPS_API_KEY=${{ secrets.VITE_YANDEX_MAPS_API_KEY }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
