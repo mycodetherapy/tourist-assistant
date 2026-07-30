@@ -1,4 +1,4 @@
-"""Поиск мест досуга: city pack (OSM PBF) + Wikidata вне каталога."""
+"""Поиск мест досуга: city pack (OSM PBF), иначе Wikidata, иначе demo."""
 
 from __future__ import annotations
 
@@ -62,7 +62,8 @@ def search_leisure_points(
     elif in_catalog and slug:
         ensure_pack_async(city)
         pack_status = "building"
-    elif _use_wikidata():
+
+    if not osm_points and _use_wikidata():
         wikidata_points = fetch_wikidata_leisure(
             city,
             center,
