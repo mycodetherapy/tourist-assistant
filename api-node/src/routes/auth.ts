@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { config, googleOAuthConfigured } from "../config.js";
+import { googleOAuthConfigured } from "../config.js";
 import {
   bearerSecurity,
   loginBodySchema,
@@ -19,9 +19,12 @@ import {
 import {
   buildGoogleAuthorizeUrl,
   exchangeGoogleCode,
+  inferFrontendOrigin,
   loginOrLinkGoogle,
   oauthCookieNames,
+  oauthCookieSecure,
   resolveFrontendUrl,
+  resolveOAuthRedirectUri,
   verifyOAuthState,
 } from "../services/googleOAuth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -153,31 +156,31 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       if (!googleOAuthConfigured()) {
         return reply.code(503).send({ detail: "Google OAuth не настроен" });
       }
-      const frontend =
+      const queryFrontend =
         typeof request.query === "object" &&
         request.query !== null &&
         "frontend" in request.query
           ? String((request.query as { frontend?: string }).frontend ?? "")
           : "";
-      const frontendUrl = resolveFrontendUrl(frontend, undefined);
+      const frontendUrl = resolveFrontendUrl(
+        queryFrontend || inferFrontendOrigin(request.headers.referer),
+        undefined,
+      );
       try {
-        const { url, state } = buildGoogleAuthorizeUrl(frontendUrl);
+        const { url, state, redirectUri } = buildGoogleAuthorizeUrl(frontendUrl);
         const cookies = oauthCookieNames();
+        const cookieOpts = {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax" as const,
+          maxAge: 600,
+          secure: oauthCookieSecure(frontendUrl),
+          signed: false,
+        };
         reply
-          .setCookie(cookies.state, state, {
-            path: "/",
-            httpOnly: true,
-            sameSite: "lax",
-            maxAge: 600,
-            secure: config.port === 443,
-          })
-          .setCookie(cookies.frontend, frontendUrl, {
-            path: "/",
-            httpOnly: true,
-            sameSite: "lax",
-            maxAge: 600,
-            secure: config.port === 443,
-          });
+          .setCookie(cookies.state, state, cookieOpts)
+          .setCookie(cookies.frontend, frontendUrl, cookieOpts)
+          .setCookie(cookies.redirect, redirectUri, cookieOpts);
         return reply.redirect(url);
       } catch (err) {
         if (err instanceof AuthError) {
@@ -208,13 +211,32 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       const cookies = oauthCookieNames();
       const cookieState = request.cookies?.[cookies.state];
       if (!verifyOAuthState(query.state) || query.state !== cookieState) {
+        request.log.warn(
+          {
+            hasCookieState: Boolean(cookieState),
+            stateValid: verifyOAuthState(query.state),
+          },
+          "Google OAuth state mismatch",
+        );
         return reply.code(400).send({ detail: "Ошибка авторизации Google" });
       }
       if (!query.code) {
         return reply.code(400).send({ detail: "Ошибка авторизации Google" });
       }
       try {
-        const profile = await exchangeGoogleCode(query.code);
+        const frontend = resolveFrontendUrl(
+          query.frontend,
+          request.cookies?.[cookies.frontend],
+        );
+        const redirectUri = resolveOAuthRedirectUri(
+          request.cookies?.[cookies.redirect],
+          frontend,
+        );
+        const profile = await exchangeGoogleCode(
+          query.code,
+          redirectUri,
+          (message, extra) => request.log.warn(extra ?? {}, message),
+        );
         const { token, user, isNewUser } = await loginOrLinkGoogle({
           googleSub: profile.sub,
           email: profile.email,
@@ -223,19 +245,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           await recordUserRegister(user.id, { method: "google" });
         }
         await recordUserLogin(user.id, { method: "google" });
-        const frontend = resolveFrontendUrl(
-          query.frontend,
-          request.cookies?.[cookies.frontend],
-        );
         reply
           .clearCookie(cookies.state, { path: "/" })
-          .clearCookie(cookies.frontend, { path: "/" });
+          .clearCookie(cookies.frontend, { path: "/" })
+          .clearCookie(cookies.redirect, { path: "/" });
         const redirectUrl = `${frontend}/auth/callback?token=${encodeURIComponent(token)}`;
         return reply.redirect(redirectUrl);
       } catch (err) {
         if (err instanceof AuthError) {
           return reply.code(err.statusCode).send({ detail: err.message });
         }
+        request.log.error({ err }, "Google OAuth callback failed");
         return reply.code(400).send({ detail: "Ошибка авторизации Google" });
       }
     },

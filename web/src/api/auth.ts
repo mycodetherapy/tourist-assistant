@@ -17,5 +17,6 @@ export async function fetchMe(): Promise<UserInfo> {
 }
 
 export function googleLoginUrl(): string {
-  return "/api/auth/google";
+  const frontend = encodeURIComponent(window.location.origin);
+  return `/api/auth/google?frontend=${frontend}`;
 }

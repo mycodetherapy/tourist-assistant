@@ -91,7 +91,8 @@ npm run dev
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
 5. **Чёрный экран:** перезапустите `npm run dev` (Vite прописывает HMR на IP Mac). На iPhone: Настройки → Safari → «Дополнения» → «Данные веб-сайтов» → удалите сайт `192.168.x.x`. Не используйте гостевую Wi‑Fi (изоляция клиентов).
 6. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой» (после того как сайт открылся в Safari по IP).
-7. **Геолокация:** только на **новой поездке** — выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута — iframe без геолокации.
+7. **Геолокация:** только при **новой прогулке** — выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута — iframe без геолокации.
+8. **Google OAuth:** при HTTPS dev callback — `https://<host>:5173/api/auth/google/callback` (добавьте URI в Google Cloud Console; origin передаётся автоматически).
 
 ### City pack (POI из OSM-выжимки)
 
@@ -344,9 +345,10 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `JWT_SECRET` | Да** | Секрет подписи JWT (api-node) |
 | `SETTINGS_ENCRYPTION_KEY` | Да** | Fernet-ключ шифрования BYOK в БД (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
 | `JWT_ACCESS_TTL_MINUTES` | Нет | Срок жизни access token (по умолчанию 60) |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет | Google OAuth (опционально) |
-| `GOOGLE_REDIRECT_URI` | Нет | Callback OAuth, по умолчанию `http://localhost:8001/api/auth/google/callback` |
-| `CORS_ORIGINS` | Нет | Доп. origins через запятую для прод-домена |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет | Google OAuth (опционально). Один OAuth client — несколько **Authorized redirect URIs** в Google Console |
+| `GOOGLE_REDIRECT_URI` | Нет | Fallback; в OAuth `redirect_uri` = `{origin фронта}/api/auth/google/callback` (см. ниже) |
+| `FRONTEND_URL` | Нет | Origin фронта (prod: `https://progulyai.ru`; локально: `https://localhost:5173` при HTTPS dev) |
+| `CORS_ORIGINS` | Нет | Доп. origins через запятую; для OAuth — тот же домен, что и `FRONTEND_URL` на проде |
 | `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openai.api.proxyapi.ru/v1` |
 | `LLM_MODEL` | Нет | Slug модели. По умолчанию `gemini/gemini-2.5-flash` (см. [Модели LLM](#модели-llm)) |
 | `LLM_OPENROUTER_PROVIDERS` | Нет | Только для Base URL с `openrouter.ai`: белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
@@ -364,6 +366,20 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
 
 **Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+
+#### Google OAuth (prod + local)
+
+Фронт передаёт `?frontend=` (текущий `window.location.origin`); api-node строит callback `{origin}/api/auth/google/callback`. В **Google Cloud Console → OAuth client → Authorized redirect URIs** укажите **оба** (один client на prod и dev):
+
+| Окружение | Redirect URI |
+|-----------|----------------|
+| **Prod** | `https://progulyai.ru/api/auth/google/callback` |
+| **Local HTTPS dev** | `https://localhost:5173/api/auth/google/callback` |
+| **Local LAN (телефон)** | `https://<IP-вашего-Mac>:5173/api/auth/google/callback` — только если входите с телефона по IP |
+
+Строка должна **совпадать посимвольно** (https, без слэша в конце, порт `:5173`). Старые `http://localhost:5173/...` или `http://localhost:8001/...` **не подходят**, если Vite на HTTPS.
+
+**Ошибка `redirect_uri_mismatch`:** откройте ссылку «Войти через Google», в адресной строке Google найдите `redirect_uri=` — этот URI добавьте в Console. На Mac чаще всего не хватает `https://localhost:5173/...`; при входе с телефона по IP — добавьте URI с вашим `192.168.x.x`.
 
 ### Модели LLM
 
