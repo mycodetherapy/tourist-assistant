@@ -80,4 +80,6 @@ services:
 
 volumes:
   pg_data:
+    name: ${POSTGRES_VOLUME_NAME:-progulyai_pg_data}
   redis_data:
+    name: ${REDIS_VOLUME_NAME:-progulyai_redis_data}
