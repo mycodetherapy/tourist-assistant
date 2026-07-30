@@ -40,6 +40,18 @@ compose() {
   docker compose --env-file .env -f "$COMPOSE_FILE" "$@"
 }
 
+stop_legacy_web() {
+  echo "=== Retire legacy stack on :5173 (docker-compose.yml) ==="
+  if [[ -f docker-compose.yml ]]; then
+    docker compose -f docker-compose.yml --profile docker-web down --remove-orphans 2>/dev/null || true
+  fi
+  local cid
+  for cid in $(docker ps -q --filter "publish=5173" 2>/dev/null); do
+    echo "Stopping container on host :5173: $cid"
+    docker rm -f "$cid" 2>/dev/null || true
+  done
+}
+
 echo "=== Pull images (tag=${IMAGE_TAG}) ==="
 compose pull worker api-node web
 
@@ -50,7 +62,8 @@ echo "=== Apply migrations and restart worker ==="
 compose up -d --force-recreate worker api-node
 
 echo "=== Restart web (refresh nginx upstream after api-node recreate) ==="
-compose up -d web
+stop_legacy_web
+compose up -d --force-recreate web
 compose restart web
 
 echo "=== Status ==="
