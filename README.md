@@ -1,5 +1,7 @@
 # Прогуляй (progulyai.ru)
 
+**Сразу попробовать:** [https://progulyai.ru](https://progulyai.ru) — регистрация, три маршрута A/B/C и карта в браузере, без установки.
+
 [![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
 
 **Прогуляй** — веб-сервис пеших прогулок по городу: три альтернативных маршрута A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 6–8 предложений с историческими фактами). Центральная функция — маршруты и базовая точка старта (`route_anchor`). Прогулки, предпочтения и версии программы хранятся в **PostgreSQL**.
@@ -10,10 +12,10 @@
 
 **Ближайшие планы:**
 
-| Направление | Что планируется |
-|-------------|-----------------|
-| **Маршруты** | City pack (OSM PBF → `poi.sqlite`) для 8 городов Поволжья; карта маршрута — iframe Яндекс.Карт |
-| **SaaS** | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (Postgres + Node API) |
+| Направление  | Что планируется                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------------------ |
+| **Маршруты** | City pack (OSM PBF → `poi.sqlite`) для 8 городов Поволжья; карта маршрута — iframe Яндекс.Карт               |
+| **SaaS**     | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (Postgres + Node API) |
 
 ## Быстрый старт
 
@@ -142,13 +144,13 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 ./scripts/install_git_hooks.sh
 ```
 
-| Экран | Действие |
-|-------|----------|
-| **Вход / регистрация** | Email+пароль или Google; JWT в `localStorage` |
-| **Настройки** | BYOK: API key LLM, Base URL, модель (шифруется в Postgres) |
-| **Список прогулок** | Только прогулки текущего пользователя |
-| **Новая прогулка** | Wizard: город → запуск → фоновая сборка (polling 1–2 мин) |
-| **Карточка прогулки** | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`); пересбор маршрутов одной кнопкой |
+| Экран                  | Действие                                                                                                                                                                                                                                        |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Вход / регистрация** | Email+пароль или Google; JWT в `localStorage`                                                                                                                                                                                                   |
+| **Настройки**          | BYOK: API key LLM, Base URL, модель (шифруется в Postgres)                                                                                                                                                                                      |
+| **Список прогулок**    | Только прогулки текущего пользователя                                                                                                                                                                                                           |
+| **Новая прогулка**     | Wizard: город → запуск → фоновая сборка (polling 1–2 мин)                                                                                                                                                                                       |
+| **Карточка прогулки**  | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`); пересбор маршрутов одной кнопкой |
 
 Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
@@ -178,11 +180,11 @@ docker compose --profile docker-web up -d --build
 
 Исходники — **открытый GitHub**. Продакшен работает на **готовых Docker-образах** из приватного **GHCR**, без `git pull` и без сборки на VPS.
 
-| Этап | Что происходит |
-|------|----------------|
+| Этап                    | Что происходит                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
 | PR → `develop` / `main` | [`.github/workflows/ci.yml`](.github/workflows/ci.yml): Python-тесты, api-node, сборка web, smoke Docker build |
-| Merge → `main` | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): push образов в GHCR + SSH-деплой на VPS |
-| VPS | `docker compose -f docker-compose.prod.yml pull` и перезапуск (`scripts/deploy_prod.sh`) |
+| Merge → `main`          | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): push образов в GHCR + SSH-деплой на VPS        |
+| VPS                     | `docker compose -f docker-compose.prod.yml pull` и перезапуск (`scripts/deploy_prod.sh`)                       |
 
 **Ветки:** разработка в `develop`, стабильный релиз — только `main` через PR ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
@@ -196,16 +198,27 @@ docker compose --profile docker-web up -d --build
 
 В репозитории: **Settings → Secrets and variables → Actions**:
 
-| Secret | Назначение |
-|--------|------------|
-| `VPS_HOST` | IP или домен VPS (например `185.39.206.213`) |
-| `VPS_USER` | SSH-пользователь (`root` или deploy-user) |
-| `VPS_SSH_KEY` | Приватный ключ SSH (полное содержимое) |
-| `GHCR_USER` | GitHub username для `docker login` на VPS |
-| `GHCR_READ_TOKEN` | PAT с правом `read:packages` (pull образов на сервере) |
-| `VITE_YANDEX_MAPS_API_KEY` | Ключ Яндекс.Карт для **сборки** web в CI |
+| Secret                     | Назначение                                                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `VPS_HOST`                 | IP или домен VPS (например `185.39.206.213`)                                                                          |
+| `VPS_USER`                 | SSH-пользователь (`root` или deploy-user)                                                                             |
+| `VPS_SSH_KEY`              | Приватный ключ SSH (полное содержимое)                                                                                |
+| `GHCR_USER`                | GitHub **username** владельца пакетов (обычно `mycodetherapy`)                                                        |
+| `GHCR_READ_TOKEN`          | Classic PAT с scope **`read:packages`** (или fine-grained: Packages → Read). Без него pull на VPS → **403 Forbidden** |
+| `VITE_YANDEX_MAPS_API_KEY` | Ключ Яндекс.Карт для **сборки** web в CI                                                                              |
 
 Packages → каждый образ → **Change visibility → Private** (если репозиторий публичный).
+
+**Deploy падает с `403 Forbidden` на `ghcr.io/.../tourist-assistant-worker`:**
+
+1. В **Settings → Secrets → Actions** должны быть заданы **`GHCR_USER`** и **`GHCR_READ_TOKEN`** (не пустые).
+2. PAT: [github.com/settings/tokens](https://github.com/settings/tokens) → **read:packages**; для org — Authorize SSO у токена.
+3. Проверка на VPS вручную:
+   ```bash
+   echo "$TOKEN" | docker login ghcr.io -u mycodetherapy --password-stdin
+   docker pull ghcr.io/mycodetherapy/tourist-assistant-worker:main
+   ```
+4. У пакета в GHCR: **Package settings → Manage Actions access** — репозиторий `tourist-assistant` имеет доступ (или PAT от владельца пакетов).
 
 #### Первичная настройка VPS (один раз)
 
@@ -297,13 +310,13 @@ docker compose build api-node && docker compose up -d api-node
 
 Локально (`npm run dev`) repair берёт код с диска — пересборка не нужна.
 
-| Подход | Плюсы | Минусы |
-|--------|-------|--------|
-| **Текущий: гибридный образ** (`Dockerfile.api-node`) | Полный parity с Python; один контейнер | Больший образ; rebuild при изменении Python repair |
-| **Чистый Node-образ + HTTP к worker** | Маленький api-node; repair всегда свежий в worker | Нужен внутренний endpoint на worker; сеть между сервисами |
-| **Чистый Node + volume mount Python** (только dev) | Без rebuild в dev | Не для prod; хрупко |
-| **Порт repair на TypeScript** | Один runtime в api-node | Дублирование ~1000 строк `route_postprocess` |
-| **Отдельный микросервис `repair`** | Изоляция | Ещё один деплой |
+| Подход                                               | Плюсы                                             | Минусы                                                    |
+| ---------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------- |
+| **Текущий: гибридный образ** (`Dockerfile.api-node`) | Полный parity с Python; один контейнер            | Больший образ; rebuild при изменении Python repair        |
+| **Чистый Node-образ + HTTP к worker**                | Маленький api-node; repair всегда свежий в worker | Нужен внутренний endpoint на worker; сеть между сервисами |
+| **Чистый Node + volume mount Python** (только dev)   | Без rebuild в dev                                 | Не для prod; хрупко                                       |
+| **Порт repair на TypeScript**                        | Один runtime в api-node                           | Дублирование ~1000 строк `route_postprocess`              |
+| **Отдельный микросервис `repair`**                   | Изоляция                                          | Ещё один деплой                                           |
 
 Для prod сейчас оптимален гибридный образ; при частых правках repair удобнее вынести HTTP-вызов на worker (тот же код, без копии в api-node).
 
@@ -339,31 +352,31 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 
 Шаблон: [`.env.example`](.env.example) (совпадает с типовым локальным `.env`).
 
-| Переменная | Обязательно | Описание |
-|------------|-------------|----------|
-| `LLM_API_KEY` | Нет* | Для `python -m eval --with-llm` и dev-скриптов; веб-API использует BYOK в профиле |
-| `JWT_SECRET` | Да** | Секрет подписи JWT (api-node) |
-| `SETTINGS_ENCRYPTION_KEY` | Да** | Fernet-ключ шифрования BYOK в БД (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
-| `JWT_ACCESS_TTL_MINUTES` | Нет | Срок жизни access token (по умолчанию 60) |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет | Google OAuth (опционально). Один OAuth client — несколько **Authorized redirect URIs** в Google Console |
-| `GOOGLE_REDIRECT_URI` | Нет | Fallback; в OAuth `redirect_uri` = `{origin фронта}/api/auth/google/callback` (см. ниже) |
-| `FRONTEND_URL` | Нет | Origin фронта (prod: `https://progulyai.ru`; локально: `https://localhost:5173` при HTTPS dev) |
-| `CORS_ORIGINS` | Нет | Доп. origins через запятую; для OAuth — тот же домен, что и `FRONTEND_URL` на проде |
-| `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openai.api.proxyapi.ru/v1` |
-| `LLM_MODEL` | Нет | Slug модели. По умолчанию `gemini/gemini-2.5-flash` (см. [Модели LLM](#модели-llm)) |
-| `LLM_OPENROUTER_PROVIDERS` | Нет | **Только worker**, и **только** если Base URL содержит `openrouter.ai`. При ProxyAPI (`openai.api.proxyapi.ru`) игнорируется |
-| `DATABASE_URL` | Да** | PostgreSQL (обязателен для API и worker) |
-| `TEST_DATABASE_URL` | Для тестов | Отдельная БД `tourist_test` для `unittest` (`TRUNCATE`); создаётся `scripts/ensure_test_database.py` |
-| `REDIS_URL` | Да** | Redis: JSON worker queue, locks, лимиты прогонов |
-| `LANGCHAIN_TRACING_V2` | Нет | `true` — трейсы в [LangSmith](https://smith.langchain.com) |
-| `LANGCHAIN_API_KEY` | Нет | Ключ LangSmith |
-| `LANGCHAIN_PROJECT` | Нет | Имя проекта (по умолчанию `tourist-assistant`) |
-| `LANGSMITH_ENDPOINT` | Нет | Кастомный endpoint LangSmith (опционально) |
-| `LANGFUSE_ENABLED` | Нет | `true` — включить трейсы в LangFuse (self-hosted) |
-| `LANGFUSE_HOST` | Нет | LangFuse, например `http://localhost:3000` |
-| `LANGFUSE_HOST_DOCKER` | Нет | LangFuse для Docker, например `http://host.docker.internal:3000` |
-| `LANGFUSE_PUBLIC_KEY` | Нет | Public key проекта LangFuse |
-| `LANGFUSE_SECRET_KEY` | Нет | Secret key проекта LangFuse |
+| Переменная                                  | Обязательно | Описание                                                                                                                       |
+| ------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `LLM_API_KEY`                               | Нет\*       | Для `python -m eval --with-llm` и dev-скриптов; веб-API использует BYOK в профиле                                              |
+| `JWT_SECRET`                                | Да\*\*      | Секрет подписи JWT (api-node)                                                                                                  |
+| `SETTINGS_ENCRYPTION_KEY`                   | Да\*\*      | Fernet-ключ шифрования BYOK в БД (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
+| `JWT_ACCESS_TTL_MINUTES`                    | Нет         | Срок жизни access token (по умолчанию 60)                                                                                      |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет         | Google OAuth (опционально). Один OAuth client — несколько **Authorized redirect URIs** в Google Console                        |
+| `GOOGLE_REDIRECT_URI`                       | Нет         | Fallback; в OAuth `redirect_uri` = `{origin фронта}/api/auth/google/callback` (см. ниже)                                       |
+| `FRONTEND_URL`                              | Нет         | Origin фронта (prod: `https://progulyai.ru`; локально: `https://localhost:5173` при HTTPS dev)                                 |
+| `CORS_ORIGINS`                              | Нет         | Доп. origins через запятую; для OAuth — тот же домен, что и `FRONTEND_URL` на проде                                            |
+| `LLM_BASE_URL`                              | Нет         | OpenAI-compatible endpoint, по умолчанию `https://openai.api.proxyapi.ru/v1`                                                   |
+| `LLM_MODEL`                                 | Нет         | Slug модели. По умолчанию `gemini/gemini-2.5-flash` (см. [Модели LLM](#модели-llm))                                            |
+| `LLM_OPENROUTER_PROVIDERS`                  | Нет         | **Только worker**, и **только** если Base URL содержит `openrouter.ai`. При ProxyAPI (`openai.api.proxyapi.ru`) игнорируется   |
+| `DATABASE_URL`                              | Да\*\*      | PostgreSQL (обязателен для API и worker)                                                                                       |
+| `TEST_DATABASE_URL`                         | Для тестов  | Отдельная БД `tourist_test` для `unittest` (`TRUNCATE`); создаётся `scripts/ensure_test_database.py`                           |
+| `REDIS_URL`                                 | Да\*\*      | Redis: JSON worker queue, locks, лимиты прогонов                                                                               |
+| `LANGCHAIN_TRACING_V2`                      | Нет         | `true` — трейсы в [LangSmith](https://smith.langchain.com)                                                                     |
+| `LANGCHAIN_API_KEY`                         | Нет         | Ключ LangSmith                                                                                                                 |
+| `LANGCHAIN_PROJECT`                         | Нет         | Имя проекта (по умолчанию `tourist-assistant`)                                                                                 |
+| `LANGSMITH_ENDPOINT`                        | Нет         | Кастомный endpoint LangSmith (опционально)                                                                                     |
+| `LANGFUSE_ENABLED`                          | Нет         | `true` — включить трейсы в LangFuse (self-hosted)                                                                              |
+| `LANGFUSE_HOST`                             | Нет         | LangFuse, например `http://localhost:3000`                                                                                     |
+| `LANGFUSE_HOST_DOCKER`                      | Нет         | LangFuse для Docker, например `http://host.docker.internal:3000`                                                               |
+| `LANGFUSE_PUBLIC_KEY`                       | Нет         | Public key проекта LangFuse                                                                                                    |
+| `LANGFUSE_SECRET_KEY`                       | Нет         | Secret key проекта LangFuse                                                                                                    |
 
 **Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
@@ -371,10 +384,10 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 
 Фронт передаёт `?frontend=` (текущий `window.location.origin`); api-node строит callback `{origin}/api/auth/google/callback`. В **Google Cloud Console → OAuth client → Authorized redirect URIs** укажите **оба** (один client на prod и dev):
 
-| Окружение | Redirect URI |
-|-----------|----------------|
-| **Prod** | `https://progulyai.ru/api/auth/google/callback` |
-| **Local HTTPS dev** | `https://localhost:5173/api/auth/google/callback` |
+| Окружение               | Redirect URI                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| **Prod**                | `https://progulyai.ru/api/auth/google/callback`                                                |
+| **Local HTTPS dev**     | `https://localhost:5173/api/auth/google/callback`                                              |
 | **Local LAN (телефон)** | `https://<IP-вашего-Mac>:5173/api/auth/google/callback` — только если входите с телефона по IP |
 
 Строка должна **совпадать посимвольно** (https, без слэша в конце, порт `:5173`). Старые `http://localhost:5173/...` или `http://localhost:8001/...` **не подходят**, если Vite на HTTPS.
@@ -387,13 +400,13 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 
 #### ProxyAPI (по умолчанию) vs OpenRouter
 
-| | **ProxyAPI** (дефолт) | **OpenRouter** (альтернатива) |
-|--|----------------------|------------------------------|
-| `LLM_BASE_URL` | `https://openai.api.proxyapi.ru/v1` | `https://openrouter.ai/api/v1` |
-| `LLM_MODEL` | `gemini/gemini-2.5-flash` | например `openai/gpt-4.1-mini` или `google/gemini-2.5-flash` |
-| `LLM_OPENROUTER_PROVIDERS` | **Не используется** | Только worker: `Azure`, `Google`, … |
-| BYOK в UI | Base URL + модель + ключ пользователя | То же; `provider` уходит только при `openrouter.ai` в Base URL |
-| Из РФ без VPN | Обычно да | Часто нужен VPN или провайдеры вроде Azure/Google |
+|                            | **ProxyAPI** (дефолт)                 | **OpenRouter** (альтернатива)                                  |
+| -------------------------- | ------------------------------------- | -------------------------------------------------------------- |
+| `LLM_BASE_URL`             | `https://openai.api.proxyapi.ru/v1`   | `https://openrouter.ai/api/v1`                                 |
+| `LLM_MODEL`                | `gemini/gemini-2.5-flash`             | например `openai/gpt-4.1-mini` или `google/gemini-2.5-flash`   |
+| `LLM_OPENROUTER_PROVIDERS` | **Не используется**                   | Только worker: `Azure`, `Google`, …                            |
+| BYOK в UI                  | Base URL + модель + ключ пользователя | То же; `provider` уходит только при `openrouter.ai` в Base URL |
+| Из РФ без VPN              | Обычно да                             | Часто нужен VPN или провайдеры вроде Azure/Google              |
 
 #### Модель по умолчанию: `gemini/gemini-2.5-flash` через ProxyAPI
 
@@ -442,14 +455,14 @@ LLM_OPENROUTER_PROVIDERS=Google,Google AI Studio
 
 Проверено по OpenRouter API (март 2026): у каждой модели на указанных провайдерах есть `tools` и `structured_outputs`. Константа — `RECOMMENDED_ALTERNATIVE_LLM_MODELS` в [`config/settings.py`](config/settings.py); автопроверка — `python3 -m unittest tests.test_recommended_llm_models`.
 
-| Модель | Производитель | Провайдер OpenRouter | ~Цена in/out | VPN |
-|--------|---------------|----------------------|--------------|-----|
-| `openai/gpt-4.1-mini` | OpenAI | `Azure` | $0.40 / $1.60 | Обычно не нужен (Azure) |
-| `openai/gpt-4o-mini` | OpenAI | `OpenAI` | $0.15 / $0.60 | **Да** (403 из РФ без VPN) |
-| `google/gemini-2.5-flash-lite` | Google | `Google`, `Google AI Studio` | $0.10 / $0.40 | Обычно не нужен |
-| `deepseek/deepseek-chat-v3.1` | DeepSeek | `DeepInfra` | $0.21 / $0.80 | Обычно не нужен |
-| `meta-llama/llama-3.3-70b-instruct` | Meta | `DeepInfra`, `Together` | $0.10 / $0.32 | Обычно не нужен |
-| `mistralai/mistral-nemo` | Mistral | `Mistral` | $0.02 / $0.15 | Обычно не нужен |
+| Модель                              | Производитель | Провайдер OpenRouter         | ~Цена in/out  | VPN                        |
+| ----------------------------------- | ------------- | ---------------------------- | ------------- | -------------------------- |
+| `openai/gpt-4.1-mini`               | OpenAI        | `Azure`                      | $0.40 / $1.60 | Обычно не нужен (Azure)    |
+| `openai/gpt-4o-mini`                | OpenAI        | `OpenAI`                     | $0.15 / $0.60 | **Да** (403 из РФ без VPN) |
+| `google/gemini-2.5-flash-lite`      | Google        | `Google`, `Google AI Studio` | $0.10 / $0.40 | Обычно не нужен            |
+| `deepseek/deepseek-chat-v3.1`       | DeepSeek      | `DeepInfra`                  | $0.21 / $0.80 | Обычно не нужен            |
+| `meta-llama/llama-3.3-70b-instruct` | Meta          | `DeepInfra`, `Together`      | $0.10 / $0.32 | Обычно не нужен            |
+| `mistralai/mistral-nemo`            | Mistral       | `Mistral`                    | $0.02 / $0.15 | Обычно не нужен            |
 
 Примеры `.env` для OpenRouter:
 
@@ -496,19 +509,19 @@ LLM_OPENROUTER_PROVIDERS=DeepInfra
 python3 scripts/render_graph.py
 ```
 
-| Узел | Файл | Роль |
-|------|------|------|
-| `researcher` | `agents/nodes.py` | LLM + tool_calls по `rebuild_scope` |
-| `executor` | `agents/nodes.py` | Выполняет tools, пишет строки в `tool_runs` |
-| `writer` | `agents/nodes.py` | Structured output → маршруты (`RoutesDraft`), merge; факт о городе — не здесь |
-| `critic` | `agents/critic.py` | Детерминированные проверки; retry: tools → `researcher`, качество программы → `writer` |
-| *(async)* `city_fact` | `agents/city_fact.py`, `services/city_fact_job.py` | Wikidata/Nominatim → LLM-polish; патч `lifehacks` + `city_fact_status` в SQLite параллельно с графом |
-| *(on-demand)* `poi_fact` | `agents/poi_fact.py`, `poi_facts` | Клик по остановке → LLM-справка по промпту «В городе X есть Y…»; кэш в Postgres |
+| Узел                     | Файл                                               | Роль                                                                                                 |
+| ------------------------ | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `researcher`             | `agents/nodes.py`                                  | LLM + tool_calls по `rebuild_scope`                                                                  |
+| `executor`               | `agents/nodes.py`                                  | Выполняет tools, пишет строки в `tool_runs`                                                          |
+| `writer`                 | `agents/nodes.py`                                  | Structured output → маршруты (`RoutesDraft`), merge; факт о городе — не здесь                        |
+| `critic`                 | `agents/critic.py`                                 | Детерминированные проверки; retry: tools → `researcher`, качество программы → `writer`               |
+| _(async)_ `city_fact`    | `agents/city_fact.py`, `services/city_fact_job.py` | Wikidata/Nominatim → LLM-polish; патч `lifehacks` + `city_fact_status` в SQLite параллельно с графом |
+| _(on-demand)_ `poi_fact` | `agents/poi_fact.py`, `poi_facts`                  | Клик по остановке → LLM-справка по промпту «В городе X есть Y…»; кэш в Postgres                      |
 
 **Инструменты** (`search/tools.py`):
 
-| Инструмент | Что ищет |
-|------------|----------|
+| Инструмент               | Что ищет                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------- |
 | `search_route_materials` | Пул POI: **city pack** (`poi.sqlite`) если готов; иначе Wikidata + discovery |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
@@ -517,12 +530,12 @@ python3 scripts/render_graph.py
 
 ### Eval (уровни проверки)
 
-| Уровень | Модуль | Что проверяет |
-|---------|--------|----------------|
-| 1 | `eval/checks/deterministic.py` | JSON-схема `FinalProgram`, `maps_route_url` |
-| 2 | `eval/checks/tools.py` | Вызовы tools, `live_data`, `results_count` |
-| 3 | `eval/checks/llm_judge.py` | Опционально: цены со ссылками, город (`--with-llm`) |
-| 4 | `eval/checks/regression.py` | Метрики vs `eval/golden/*.json` |
+| Уровень | Модуль                         | Что проверяет                                       |
+| ------- | ------------------------------ | --------------------------------------------------- |
+| 1       | `eval/checks/deterministic.py` | JSON-схема `FinalProgram`, `maps_route_url`         |
+| 2       | `eval/checks/tools.py`         | Вызовы tools, `live_data`, `results_count`          |
+| 3       | `eval/checks/llm_judge.py`     | Опционально: цены со ссылками, город (`--with-llm`) |
+| 4       | `eval/checks/regression.py`    | Метрики vs `eval/golden/*.json`                     |
 
 Датасет: `eval/dataset/smoke.yaml`. Запуск: `python3 -m eval --suite smoke`.
 
@@ -540,19 +553,19 @@ python3 scripts/render_graph.py
 
 ### С какими внешними системами и данными работает агент?
 
-| Система | Назначение |
-|---------|------------|
-| **LLM (ProxyAPI / OpenRouter и др.)** | Researcher, writer, опционально LLM-judge в eval (`gemini/gemini-2.5-flash` по умолчанию) |
-| **PostgreSQL** (`DATABASE_URL`) | Поездки, программы, auth, graph_runs, audit |
-| **Redis** (`REDIS_URL`) | Очередь worker, locks, per-user run quotas |
-| **Tavily API** (опционально) | Веб-поиск с ответом-сводкой |
-| **DuckDuckGo** (`ddgs`, ru-ru) | Веб-поиск по умолчанию |
-| **LangFuse** (опционально) | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker) |
-| **LangSmith** (опционально) | Трейсы графа (`observability/tracing.py`) |
-| **Яндекс.Карты (Geocoder + JS API)** | Геокодинг базовой точки; карта стартовой точки (`ymaps.Map`); маршрут — iframe-виджет + deep link `maps_route_url` |
-| **City pack** | POI из `poi.sqlite`; каталог `city_packs` в Postgres |
-| **OpenStreetMap** (Nominatim, Geofabrik PBF) | Центр города; выжимки city pack |
-| **Wikidata SPARQL** | Достопримечательности (P625) |
+| Система                                      | Назначение                                                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **LLM (ProxyAPI / OpenRouter и др.)**        | Researcher, writer, опционально LLM-judge в eval (`gemini/gemini-2.5-flash` по умолчанию)                          |
+| **PostgreSQL** (`DATABASE_URL`)              | Поездки, программы, auth, graph_runs, audit                                                                        |
+| **Redis** (`REDIS_URL`)                      | Очередь worker, locks, per-user run quotas                                                                         |
+| **Tavily API** (опционально)                 | Веб-поиск с ответом-сводкой                                                                                        |
+| **DuckDuckGo** (`ddgs`, ru-ru)               | Веб-поиск по умолчанию                                                                                             |
+| **LangFuse** (опционально)                   | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker)                                                     |
+| **LangSmith** (опционально)                  | Трейсы графа (`observability/tracing.py`)                                                                          |
+| **Яндекс.Карты (Geocoder + JS API)**         | Геокодинг базовой точки; карта стартовой точки (`ymaps.Map`); маршрут — iframe-виджет + deep link `maps_route_url` |
+| **City pack**                                | POI из `poi.sqlite`; каталог `city_packs` в Postgres                                                               |
+| **OpenStreetMap** (Nominatim, Geofabrik PBF) | Центр города; выжимки city pack                                                                                    |
+| **Wikidata SPARQL**                          | Достопримечательности (P625)                                                                                       |
 
 Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`; базовая точка — `onboarding/preferences.py` (`route_anchor`). Пул POI: Wikidata Tier 0 + Tier 1 до ~50. LLM ранжирует `poi_id`; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C.
 
@@ -572,32 +585,32 @@ python3 scripts/render_graph.py
 - Источник знаний — **живой веб‑поиск** (`ddgs` / Tavily) и ссылки в `digest`, а не статичный корпус документов.
 - Postgres здесь — **память/версии/профиль**, а не база знаний для retrieval.
 - RAG усложнит систему (эмбеддинги, актуализация, качество корпуса), но не решит проблему «актуальность» — всё равно нужен web.
-Если расширять проект дальше, RAG был бы уместен для локальной базы: FAQ по визам/транспорту, чек‑листы, правила пересадок, «best practices» по городу и т.п.
+  Если расширять проект дальше, RAG был бы уместен для локальной базы: FAQ по визам/транспорту, чек‑листы, правила пересадок, «best practices» по городу и т.п.
 
 ### Сложные и нестандартные ситуации
 
-| Ситуация | Обработка |
-|----------|-----------|
-| **Пустой или нерелевантный поиск** | Фильтр по `SEARCH_FILTERS` + fallback demo-POI; warning в `data_warnings` (API + баннер в UI) |
-| **Ошибка поиска / сети** | `ToolMessage` с ошибкой; `route_after_executor` → retry `researcher`; `tool_runs` с `live_data=false` |
-| **Prompt-injection во вводе** | `input_validation.sanitize_and_validate` |
-| **Галлюцинации мест** | Маршруты — только `poi_id` из пула materials |
-| **Critic не прошёл** | До 2 повторов: проблемы tools/POI → `researcher`, проблемы маршрутов → `writer`; факт о городе critic не блокирует, пока `city_fact_status=pending` |
-| **Повторный запуск** | `user_profile` + `trip_preferences` из SQLite |
-| **Город в каталоге, pack не готов** | Wikidata не подмешивается; worker ставит `prepare_city_pack`; пока пустой пул — demo-POI + предупреждение |
-| **Демо-точки вместо POI** | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
-| **Одинаковые маршруты A/B/C** | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → retry `writer` |
-| **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`) |
-| **Кольцевой маршрут** | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км |
-| **Дизлайк остановки и пересборка** | 👎 на `route_stops` не сбрасывается после rebuild; `banned_poi_ids` в snapshot + `enforce_route_poi_policy` исключают POI даже при готовых `maps_route_url` |
+| Ситуация                            | Обработка                                                                                                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Пустой или нерелевантный поиск**  | Фильтр по `SEARCH_FILTERS` + fallback demo-POI; warning в `data_warnings` (API + баннер в UI)                                                                                               |
+| **Ошибка поиска / сети**            | `ToolMessage` с ошибкой; `route_after_executor` → retry `researcher`; `tool_runs` с `live_data=false`                                                                                       |
+| **Prompt-injection во вводе**       | `input_validation.sanitize_and_validate`                                                                                                                                                    |
+| **Галлюцинации мест**               | Маршруты — только `poi_id` из пула materials                                                                                                                                                |
+| **Critic не прошёл**                | До 2 повторов: проблемы tools/POI → `researcher`, проблемы маршрутов → `writer`; факт о городе critic не блокирует, пока `city_fact_status=pending`                                         |
+| **Повторный запуск**                | `user_profile` + `trip_preferences` из SQLite                                                                                                                                               |
+| **Город в каталоге, pack не готов** | Wikidata не подмешивается; worker ставит `prepare_city_pack`; пока пустой пул — demo-POI + предупреждение                                                                                   |
+| **Демо-точки вместо POI**           | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
+| **Одинаковые маршруты A/B/C**       | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → retry `writer`                                                   |
+| **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`)                                                                    |
+| **Кольцевой маршрут**               | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км            |
+| **Дизлайк остановки и пересборка**  | 👎 на `route_stops` не сбрасывается после rebuild; `banned_poi_ids` в snapshot + `enforce_route_poi_policy` исключают POI даже при готовых `maps_route_url`                                 |
 
 ### Как понять, что агент работает хорошо?
 
-| Критерий | Приемлемый результат |
-|----------|----------------------|
-| **Полнота программы** | 3 варианта маршрута A/B/C; факт о городе 280–1400 символов с датами и местами; справка по POI 300–2200 символов (LLM, on-demand) |
-| **Опора на поиск** | Маршруты A/B/C: сложность по **протяжённости** (A ~2–3.5 км, B ~4–5.5, C ~6–8.5), до 8 плотных leisure-точек; без повторов названий; `maps_route_url` по координатам (иногда кольцевой); POI только из Wikidata/discovery-пула |
-| **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят |
+| Критерий                           | Приемлемый результат                                                                                                                                                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Полнота программы**              | 3 варианта маршрута A/B/C; факт о городе 280–1400 символов с датами и местами; справка по POI 300–2200 символов (LLM, on-demand)                                                                                               |
+| **Опора на поиск**                 | Маршруты A/B/C: сложность по **протяжённости** (A ~2–3.5 км, B ~4–5.5, C ~6–8.5), до 8 плотных leisure-точек; без повторов названий; `maps_route_url` по координатам (иногда кольцевой); POI только из Wikidata/discovery-пула |
+| **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят                                                                                                                                          |
 
 ---
 
@@ -605,7 +618,7 @@ python3 scripts/render_graph.py
 
 ### LangFuse (self-hosted)
 
-1) Поднять LangFuse локально:
+1. Поднять LangFuse локально:
 
 ```bash
 cd docker/langfuse
@@ -613,14 +626,14 @@ cp .env.example .env
 docker compose --env-file .env -f docker-compose.yml up -d
 ```
 
-2) Взять ключи проекта в UI LangFuse (`http://localhost:3000`) и прописать в `.env` проекта:
+2. Взять ключи проекта в UI LangFuse (`http://localhost:3000`) и прописать в `.env` проекта:
 
 - `LANGFUSE_ENABLED=true`
 - `LANGFUSE_HOST=http://localhost:3000` (или `LANGFUSE_HOST_DOCKER=...` при запуске в Docker)
 - `LANGFUSE_PUBLIC_KEY=...`
 - `LANGFUSE_SECRET_KEY=...`
 
-3) Запустите api-node (`cd api-node && npm run dev`) или создайте поездку через веб — трейсинг пойдёт через LangChain callbacks.
+3. Запустите api-node (`cd api-node && npm run dev`) или создайте поездку через веб — трейсинг пойдёт через LangChain callbacks.
 
 ### LangSmith (опционально, параллельно)
 

@@ -30,8 +30,21 @@ if ((${#missing[@]} > 0)); then
   exit 1
 fi
 
-if [[ -n "${GHCR_TOKEN:-}" ]]; then
-  echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER:?GHCR_USER required with GHCR_TOKEN}" --password-stdin
+if [[ -z "${GHCR_TOKEN:-}" ]]; then
+  echo "ERROR: GHCR_TOKEN is not set." >&2
+  echo "In GitHub Actions set secrets GHCR_USER and GHCR_READ_TOKEN (PAT with read:packages)." >&2
+  echo "Or on VPS: export GHCR_USER=... GHCR_TOKEN=... before ./deploy_prod.sh" >&2
+  exit 1
+fi
+if [[ -z "${GHCR_USER:-}" ]]; then
+  echo "ERROR: GHCR_USER is required when GHCR_TOKEN is set." >&2
+  exit 1
+fi
+
+echo "=== Docker login ghcr.io (user=${GHCR_USER}) ==="
+if ! echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin; then
+  echo "ERROR: docker login ghcr.io failed. Check GHCR_USER / GHCR_READ_TOKEN (read:packages)." >&2
+  exit 1
 fi
 
 export IMAGE_TAG
