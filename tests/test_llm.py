@@ -16,6 +16,7 @@ class TestLlmConfig(unittest.TestCase):
         self.assertTrue(is_placeholder_secret("sk-..."))
         self.assertFalse(is_placeholder_secret("sk-live-abcd1234efgh5678"))
 
+    @patch("agents.llm.is_postgres_enabled", return_value=False)
     @patch.dict(
         os.environ,
         {
@@ -25,7 +26,7 @@ class TestLlmConfig(unittest.TestCase):
         },
         clear=False,
     )
-    def test_get_llm_uses_env(self) -> None:
+    def test_get_llm_uses_env(self, _pg: object) -> None:
         clear_llm_cache()
         llm = get_llm()
         self.assertEqual(llm.model_name, "gpt-test")
@@ -33,7 +34,8 @@ class TestLlmConfig(unittest.TestCase):
         self.assertEqual(llm.openai_api_key.get_secret_value(), "sk-test-key")
 
     @patch.dict(os.environ, {"LLM_API_KEY": "sk-test-key"}, clear=True)
-    def test_get_llm_defaults(self) -> None:
+    @patch("agents.llm.is_postgres_enabled", return_value=False)
+    def test_get_llm_defaults(self, _pg: object) -> None:
         clear_llm_cache()
         llm = get_llm()
         self.assertEqual(llm.model_name, LLM_MODEL)
@@ -48,7 +50,7 @@ class TestLlmConfig(unittest.TestCase):
             ),
             require_capabilities=False,
         )
-        extra_body = llm.model_kwargs.get("extra_body")
+        extra_body = llm.extra_body or llm.model_kwargs.get("extra_body")
         self.assertIsNotNone(extra_body)
         provider = extra_body["provider"]  # type: ignore[index]
         self.assertNotIn("require_parameters", provider)
@@ -63,6 +65,7 @@ class TestLlmConfig(unittest.TestCase):
         )
         self.assertEqual(str(llm.openai_api_base), "https://api.proxyapi.ru/openai/v1")
         self.assertNotIn("extra_body", llm.model_kwargs)
+        self.assertIsNone(getattr(llm, "extra_body", None))
 
 
 if __name__ == "__main__":
