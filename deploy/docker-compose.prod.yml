@@ -45,8 +45,6 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD:-tourist}@postgres:5432/tourist
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
-      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY required}
       TOURIST_ASSISTANT_IN_DOCKER: "1"
     depends_on:
       postgres:
@@ -65,11 +63,6 @@ services:
       DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD:-tourist}@postgres:5432/tourist
       REDIS_URL: redis://redis:6379/0
       API_NODE_PORT: "8001"
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
-      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY required}
-      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL required}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
-      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS required}
     depends_on:
       postgres:
         condition: service_healthy
