@@ -85,7 +85,7 @@ export async function requireUserLlmConfigured(userId: number): Promise<void> {
   const row = await getUserSettings(userId);
   if (!row?.llm_api_key_enc) {
     throw new AuthError(
-      "Добавьте ключ OpenRouter в настройках профиля",
+      "Добавьте API-ключ LLM в настройках профиля",
       428,
     );
   }
@@ -93,13 +93,13 @@ export async function requireUserLlmConfigured(userId: number): Promise<void> {
     const apiKey = decryptSecret(row.llm_api_key_enc).trim();
     if (!apiKey) {
       throw new AuthError(
-        "Сохранённый LLM-ключ пустой — укажите ключ OpenRouter заново",
+        "Сохранённый LLM-ключ пустой — укажите ключ заново в настройках",
         428,
       );
     }
     if (isPlaceholderSecret(apiKey)) {
       throw new AuthError(
-        "Сохранённый LLM-ключ недействителен — укажите реальный ключ OpenRouter",
+        "Сохранённый LLM-ключ недействителен — укажите реальный ключ провайдера",
         428,
       );
     }
@@ -108,7 +108,7 @@ export async function requireUserLlmConfigured(userId: number): Promise<void> {
       throw err;
     }
     throw new AuthError(
-      "Сохранённый LLM-ключ повреждён — укажите ключ OpenRouter заново в настройках",
+      "Сохранённый LLM-ключ повреждён — укажите ключ заново в настройках",
       428,
     );
   }
@@ -146,7 +146,7 @@ export async function saveLlmSettings(
     const key = fields.llm_api_key.trim();
     if (!key) throw new AuthError("LLM API key не может быть пустым");
     if (isPlaceholderSecret(key)) {
-      throw new AuthError("Укажите реальный ключ OpenRouter, не плейсхолдер");
+      throw new AuthError("Укажите реальный API-ключ LLM, не плейсхолдер");
     }
     enc = encryptSecret(key);
   }

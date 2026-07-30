@@ -36,9 +36,9 @@ export function NewTripPage() {
     onError: (error) => {
       if (isLlmKeyRequiredError(error)) {
         notification.warning({
-          title: "Нужен ключ OpenRouter",
+          title: "Нужен ключ LLM",
           description:
-            "Добавьте API-ключ в настройках, затем нажмите «Собрать программу» на странице поездки.",
+            "Добавьте API-ключ в настройках, затем нажмите «Собрать программу» на странице прогулки.",
         });
         navigate("/settings");
         return;
@@ -68,7 +68,7 @@ export function NewTripPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold sm:mb-6 sm:text-2xl">Новая поездка</h1>
+      <h1 className="mb-4 text-xl font-semibold sm:mb-6 sm:text-2xl">Новая прогулка</h1>
       <Form form={form} layout="vertical" preserve className="max-w-2xl">
         <Form.Item name="city" label="Город маршрута" rules={[{ required: true }]}>
           <Input placeholder="Санкт-Петербург" />

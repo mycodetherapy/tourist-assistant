@@ -1,12 +1,12 @@
-# Туристический ассистент (LangGraph)
+# Прогуляй (progulyai.ru)
 
 [![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
 
-Агент составляет **маршруты по городу**: три альтернативных варианта A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 6–8 предложений с историческими фактами). Центральная функция продукта — маршруты и базовая точка старта (`route_anchor`). Поездки, предпочтения и версии программы хранятся в **PostgreSQL**.
+**Прогуляй** — веб-сервис пеших прогулок по городу: три альтернативных маршрута A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 6–8 предложений с историческими фактами). Центральная функция — маршруты и базовая точка старта (`route_anchor`). Прогулки, предпочтения и версии программы хранятся в **PostgreSQL**.
 
 ## Статус и планы
 
-Приложение находится **в стадии активной разработки**. Текущая версия — **routes-first MVP**: агент собирает три маршрута; **факт о городе** подгружается **параллельно** (маршруты показываются сразу, блок «О городе» — по готовности). **Веб-интерфейс и REST API** позволяют создавать поездки и пересобирать маршруты. Консольный CLI снят.
+Приложение находится **в стадии активной разработки**. Текущая версия — **routes-first MVP**: сервис собирает три маршрута; **факт о городе** подгружается **параллельно** (маршруты показываются сразу, блок «О городе» — по готовности). **Веб-интерфейс и REST API** на [progulyai.ru](https://progulyai.ru) позволяют создавать прогулки и пересобирать маршруты. Консольный CLI снят.
 
 **Ближайшие планы:**
 
@@ -20,7 +20,7 @@
 ### Требования
 
 - Python **3.10+** (работает на 3.9+)
-- Ключ **OpenRouter** ([openrouter.ai/keys](https://openrouter.ai/keys))
+- API-ключ **LLM-провайдера** (по умолчанию [ProxyAPI](https://proxyapi.ru); также OpenRouter и др.)
 
 ### Быстрый старт (Docker)
 
@@ -39,7 +39,7 @@ UI: [http://localhost:5173](http://localhost:5173) — **локальный** `n
 
 ### Локальная разработка (API + React)
 
-Требования: Python 3.10+, Node.js 20+, Postgres и Redis. В `.env`: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). Ключ OpenRouter каждый пользователь задаёт в **Настройках** (BYOK). Для `python -m eval --with-llm` нужен `LLM_API_KEY` в `.env`.
+Требования: Python 3.10+, Node.js 20+, Postgres и Redis. В `.env`: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). API-ключ LLM каждый пользователь задаёт в **Настройках** (BYOK). Для `python -m eval --with-llm` нужен `LLM_API_KEY` в `.env`.
 
 **Инфра + API + worker в Docker, фронт локально (рекомендуется для разработки UI):**
 
@@ -81,7 +81,7 @@ npm install
 npm run dev
 ```
 
-Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — ключ [OpenRouter](https://openrouter.ai/keys). Список поездок — `/trips`.
+Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг **Прогуляй**; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — API-ключ LLM (Base URL, модель). Список прогулок — `/trips`.
 
 **Проверка с телефона (PWA):**
 
@@ -91,7 +91,8 @@ npm run dev
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
 5. **Чёрный экран:** перезапустите `npm run dev` (Vite прописывает HMR на IP Mac). На iPhone: Настройки → Safari → «Дополнения» → «Данные веб-сайтов» → удалите сайт `192.168.x.x`. Не используйте гостевую Wi‑Fi (изоляция клиентов).
 6. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой» (после того как сайт открылся в Safari по IP).
-7. **Геолокация:** только на **новой поездке** — выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута — iframe без геолокации.
+7. **Геолокация:** только при **новой прогулке** — выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута — iframe без геолокации.
+8. **Google OAuth:** при HTTPS dev callback — `https://<host>:5173/api/auth/google/callback` (добавьте URI в Google Cloud Console; origin передаётся автоматически).
 
 ### City pack (POI из OSM-выжимки)
 
@@ -144,10 +145,10 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 | Экран | Действие |
 |-------|----------|
 | **Вход / регистрация** | Email+пароль или Google; JWT в `localStorage` |
-| **Настройки** | BYOK: OpenRouter API key (шифруется в Postgres) |
-| **Список поездок** | Только поездки текущего пользователя |
-| **Новая поездка** | Wizard: поездка → запуск → фоновая сборка (polling 1–2 мин) |
-| **Карточка поездки** | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`); пересбор маршрутов одной кнопкой |
+| **Настройки** | BYOK: API key LLM, Base URL, модель (шифруется в Postgres) |
+| **Список прогулок** | Только прогулки текущего пользователя |
+| **Новая прогулка** | Wizard: город → запуск → фоновая сборка (polling 1–2 мин) |
+| **Карточка прогулки** | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`); пересбор маршрутов одной кнопкой |
 
 Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
@@ -211,11 +212,11 @@ Packages → каждый образ → **Change visibility → Private** (ес
 ```bash
 sudo mkdir -p /opt/tourist-assistant/data
 sudo cp deploy/env.example /opt/tourist-assistant/.env
-# Заполните JWT_SECRET, SETTINGS_ENCRYPTION_KEY, FRONTEND_URL, CORS_ORIGINS, …
+# Заполните JWT_SECRET, SETTINGS_ENCRYPTION_KEY, FRONTEND_URL, CORS_ORIGINS, POSTGRES_PASSWORD, …
 sudo docker login ghcr.io -u <GHCR_USER> -p <GHCR_READ_TOKEN>
 ```
 
-Существующий `.env` с `docker-compose.yml` можно оставить: добавьте `POSTGRES_PASSWORD=tourist` (если пароль БД не меняли). Дальнейшие релизы — только через CI после merge в `main`.
+Существующий `.env` с `docker-compose.yml` можно оставить: добавьте `POSTGRES_PASSWORD=…` (на prod — **обязательно**, без дефолта `tourist`). Дальнейшие релизы — только через CI после merge в `main`.
 
 Ручной деплой с сервера (если нужно):
 
@@ -344,12 +345,13 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `JWT_SECRET` | Да** | Секрет подписи JWT (api-node) |
 | `SETTINGS_ENCRYPTION_KEY` | Да** | Fernet-ключ шифрования BYOK в БД (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
 | `JWT_ACCESS_TTL_MINUTES` | Нет | Срок жизни access token (по умолчанию 60) |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет | Google OAuth (опционально) |
-| `GOOGLE_REDIRECT_URI` | Нет | Callback OAuth, по умолчанию `http://localhost:8001/api/auth/google/callback` |
-| `CORS_ORIGINS` | Нет | Доп. origins через запятую для прод-домена |
-| `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openrouter.ai/api/v1` |
-| `LLM_MODEL` | Нет | Slug модели на OpenRouter. По умолчанию `openai/gpt-4.1-mini` (см. [Модели LLM](#модели-llm)) |
-| `LLM_OPENROUTER_PROVIDERS` | Нет | Белый список провайдеров (порядок = приоритет). По умолчанию: `Azure` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет | Google OAuth (опционально). Один OAuth client — несколько **Authorized redirect URIs** в Google Console |
+| `GOOGLE_REDIRECT_URI` | Нет | Fallback; в OAuth `redirect_uri` = `{origin фронта}/api/auth/google/callback` (см. ниже) |
+| `FRONTEND_URL` | Нет | Origin фронта (prod: `https://progulyai.ru`; локально: `https://localhost:5173` при HTTPS dev) |
+| `CORS_ORIGINS` | Нет | Доп. origins через запятую; для OAuth — тот же домен, что и `FRONTEND_URL` на проде |
+| `LLM_BASE_URL` | Нет | OpenAI-compatible endpoint, по умолчанию `https://openai.api.proxyapi.ru/v1` |
+| `LLM_MODEL` | Нет | Slug модели. По умолчанию `gemini/gemini-2.5-flash` (см. [Модели LLM](#модели-llm)) |
+| `LLM_OPENROUTER_PROVIDERS` | Нет | **Только worker**, и **только** если Base URL содержит `openrouter.ai`. При ProxyAPI (`openai.api.proxyapi.ru`) игнорируется |
 | `DATABASE_URL` | Да** | PostgreSQL (обязателен для API и worker) |
 | `TEST_DATABASE_URL` | Для тестов | Отдельная БД `tourist_test` для `unittest` (`TRUNCATE`); создаётся `scripts/ensure_test_database.py` |
 | `REDIS_URL` | Да** | Redis: JSON worker queue, locks, лимиты прогонов |
@@ -365,82 +367,114 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 
 **Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
+#### Google OAuth (prod + local)
+
+Фронт передаёт `?frontend=` (текущий `window.location.origin`); api-node строит callback `{origin}/api/auth/google/callback`. В **Google Cloud Console → OAuth client → Authorized redirect URIs** укажите **оба** (один client на prod и dev):
+
+| Окружение | Redirect URI |
+|-----------|----------------|
+| **Prod** | `https://progulyai.ru/api/auth/google/callback` |
+| **Local HTTPS dev** | `https://localhost:5173/api/auth/google/callback` |
+| **Local LAN (телефон)** | `https://<IP-вашего-Mac>:5173/api/auth/google/callback` — только если входите с телефона по IP |
+
+Строка должна **совпадать посимвольно** (https, без слэша в конце, порт `:5173`). Старые `http://localhost:5173/...` или `http://localhost:8001/...` **не подходят**, если Vite на HTTPS.
+
+**Ошибка `redirect_uri_mismatch`:** откройте ссылку «Войти через Google», в адресной строке Google найдите `redirect_uri=` — этот URI добавьте в Console. На Mac чаще всего не хватает `https://localhost:5173/...`; при входе с телефона по IP — добавьте URI с вашим `192.168.x.x`.
+
+**Безопасность:** параметр `?frontend=` и cookie `oauth_frontend` принимаются только из whitelist (`FRONTEND_URL`, `CORS_ORIGINS`, localhost / 127.0.0.1 / LAN IPv4). Произвольные домены (например `attacker.com`) отклоняются — редирект с JWT идёт на `FRONTEND_URL`.
+
 ### Модели LLM
 
-#### Модель по умолчанию: `openai/gpt-4.1-mini`
+#### ProxyAPI (по умолчанию) vs OpenRouter
 
-Значение задано в [`config/settings.py`](config/settings.py) (`LLM_MODEL`) и [`.env.example`](.env.example).
+| | **ProxyAPI** (дефолт) | **OpenRouter** (альтернатива) |
+|--|----------------------|------------------------------|
+| `LLM_BASE_URL` | `https://openai.api.proxyapi.ru/v1` | `https://openrouter.ai/api/v1` |
+| `LLM_MODEL` | `gemini/gemini-2.5-flash` | например `openai/gpt-4.1-mini` или `google/gemini-2.5-flash` |
+| `LLM_OPENROUTER_PROVIDERS` | **Не используется** | Только worker: `Azure`, `Google`, … |
+| BYOK в UI | Base URL + модель + ключ пользователя | То же; `provider` уходит только при `openrouter.ai` в Base URL |
+| Из РФ без VPN | Обычно да | Часто нужен VPN или провайдеры вроде Azure/Google |
 
-Почему именно она:
+#### Модель по умолчанию: `gemini/gemini-2.5-flash` через ProxyAPI
 
-1. **Работает из РФ без VPN** — на OpenRouter у `openai/gpt-4.1-mini` есть endpoint **Azure** с `tools` и `structured_outputs` (в отличие от `openai/gpt-4o-mini`, где tools есть только у провайдера OpenAI → 403 из РФ).
-2. **Покрывает весь граф** — planner (tools) и writer (structured output) на одной модели.
-3. **Баланс цена/качество** — ~$0.40 / $1.60 за 1M токенов (in/out), дешевле флагманов `gpt-4.1` / `gpt-4o`.
-4. **Провайдер по умолчанию** — `LLM_OPENROUTER_PROVIDERS=Azure` (белый список в `get_llm_extra_body()`).
-
-Минимальный `.env` без VPN:
+Значения заданы в [`config/settings.py`](config/settings.py) (`LLM_MODEL`, `DEFAULT_LLM_BASE_URL`) и [`.env.example`](.env.example):
 
 ```env
-LLM_MODEL=openai/gpt-4.1-mini
-LLM_OPENROUTER_PROVIDERS=Azure
+LLM_BASE_URL=https://openai.api.proxyapi.ru/v1
+LLM_MODEL=gemini/gemini-2.5-flash
 ```
 
-**Альтернатива из РФ (ProxyAPI и др.):** если OpenRouter недоступен, в **Настройках** задайте Base URL (например `https://api.proxyapi.ru/openai/v1`), ключ прокси и модель в формате OpenAI (`gpt-4.1-mini`). Параметр `provider` (маршрутизация OpenRouter) отправляется только при Base URL с `openrouter.ai` — из BYOK, а не из `LLM_BASE_URL` в `.env` worker.
+Почему именно эта связка:
 
-#### Если OpenRouter всё равно недоступен (403 «Access denied by security policy»)
+1. **Работает из РФ без VPN** — ProxyAPI доступен с российских хостингов; OpenRouter с 2026 года часто блокируется на edge без VPN.
+2. **Покрывает весь граф** — `gemini/gemini-2.5-flash` поддерживает tool calling и `structured_output` (`method="json_schema"`) для узлов `researcher` и `writer`.
+3. **BYOK в профиле** — каждый пользователь задаёт свой ключ ProxyAPI (или другого провайдера), Base URL и модель в **Настройках**.
 
-Иногда блокировка происходит на edge-уровне самого `openrouter.ai` для IP из РФ — до выбора провайдера, поэтому смена `LLM_OPENROUTER_PROVIDERS` не всегда помогает. Два рабочих обхода:
+Минимальные BYOK-настройки в веб-интерфейсе:
 
-**1. Модель Google через OpenRouter (без смены Base URL).** Провайдеры Google на OpenRouter из РФ обычно доступны:
+- Base URL: `https://openai.api.proxyapi.ru/v1`
+- Модель: `gemini/gemini-2.5-flash`
+- API key: ключ [ProxyAPI](https://proxyapi.ru)
+
+Параметр `provider` (маршрутизация OpenRouter) отправляется **только** при Base URL с `openrouter.ai` — из BYOK пользователя, а не из `LLM_BASE_URL` в `.env` worker.
+
+#### Альтернатива: OpenRouter
+
+Если нужен доступ к каталогу моделей OpenRouter (и есть VPN или хостинг вне РФ), в **Настройках** укажите:
+
+```env
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_MODEL=openai/gpt-4.1-mini
+```
+
+Для OpenRouter на worker можно задать `LLM_OPENROUTER_PROVIDERS=Azure` — белый список в `get_llm_extra_body()`.
+
+**OpenRouter из РФ без VPN** (если edge не блокирует): модели Google обычно доступны:
 
 ```env
 LLM_MODEL=google/gemini-2.5-flash
 LLM_OPENROUTER_PROVIDERS=Google,Google AI Studio
 ```
 
-`LLM_OPENROUTER_PROVIDERS` — переменная окружения **worker**, общая для всех пользователей инстанса, а не часть персональных BYOK-настроек. Если инстанс глобально настроен на `LLM_OPENROUTER_PROVIDERS=Azure` (дефолт для `openai/gpt-4.1-mini`), один пользователь не сможет просто сменить у себя в **Настройках** модель на `google/gemini-2.5-flash` — Azure не хостит Gemini, запрос упадёт. Чтобы модели разных провайдеров работали одновременно у разных пользователей, расширьте список: `LLM_OPENROUTER_PROVIDERS=Azure,Google,Google AI Studio`.
+`LLM_OPENROUTER_PROVIDERS` — переменная окружения **worker**, общая для всех пользователей инстанса. Чтобы разным пользователям одновременно работали модели разных провайдеров, расширьте список: `LLM_OPENROUTER_PROVIDERS=Azure,Google,Google AI Studio`.
 
-**2. Полный обход OpenRouter — ProxyAPI, модели не-OpenAI.** У ProxyAPI есть отдельный единый OpenAI-совместимый шлюз (помимо OpenAI-only пути из примера выше) с доступом к моделям других провайдеров, включая Gemini. Проверено: `gemini/gemini-2.5-flash` через него поддерживает и tool calling, и `structured_output` (`method="json_schema"`) — то есть покрывает оба узла графа (`researcher`, `writer`) без изменений кода. В **Настройках** профиля:
-
-- Base URL: `https://openai.api.proxyapi.ru/v1`
-- Модель: `gemini/gemini-2.5-flash` (формат `<провайдер>/<модель>`)
-- API key: ключ ProxyAPI (не OpenRouter)
-
-Это не зависит от `LLM_OPENROUTER_PROVIDERS` — параметр `provider` добавляется только при Base URL с `openrouter.ai`.
-
-#### Рекомендуемые альтернативы (5 моделей)
+#### Рекомендуемые альтернативы (OpenRouter)
 
 Проверено по OpenRouter API (март 2026): у каждой модели на указанных провайдерах есть `tools` и `structured_outputs`. Константа — `RECOMMENDED_ALTERNATIVE_LLM_MODELS` в [`config/settings.py`](config/settings.py); автопроверка — `python3 -m unittest tests.test_recommended_llm_models`.
 
 | Модель | Производитель | Провайдер OpenRouter | ~Цена in/out | VPN |
 |--------|---------------|----------------------|--------------|-----|
+| `openai/gpt-4.1-mini` | OpenAI | `Azure` | $0.40 / $1.60 | Обычно не нужен (Azure) |
 | `openai/gpt-4o-mini` | OpenAI | `OpenAI` | $0.15 / $0.60 | **Да** (403 из РФ без VPN) |
 | `google/gemini-2.5-flash-lite` | Google | `Google`, `Google AI Studio` | $0.10 / $0.40 | Обычно не нужен |
 | `deepseek/deepseek-chat-v3.1` | DeepSeek | `DeepInfra` | $0.21 / $0.80 | Обычно не нужен |
 | `meta-llama/llama-3.3-70b-instruct` | Meta | `DeepInfra`, `Together` | $0.10 / $0.32 | Обычно не нужен |
 | `mistralai/mistral-nemo` | Mistral | `Mistral` | $0.02 / $0.15 | Обычно не нужен |
 
-Примеры `.env`:
+Примеры `.env` для OpenRouter:
 
 ```env
-# OpenAI — только с VPN из РФ
-LLM_MODEL=openai/gpt-4o-mini
-LLM_OPENROUTER_PROVIDERS=OpenAI
+# OpenAI через Azure — без VPN из РФ
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_MODEL=openai/gpt-4.1-mini
+LLM_OPENROUTER_PROVIDERS=Azure
 ```
 
 ```env
 # Google — без VPN
+LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_MODEL=google/gemini-2.5-flash-lite
 LLM_OPENROUTER_PROVIDERS=Google,Google AI Studio
 ```
 
 ```env
 # DeepSeek
+LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_MODEL=deepseek/deepseek-chat-v3.1
 LLM_OPENROUTER_PROVIDERS=DeepInfra
 ```
 
-Проверка связи с OpenRouter: `python3 scripts/test_llm.py`.
+Проверка связи с LLM: `python3 scripts/test_llm.py`.
 
 ---
 
@@ -479,7 +513,7 @@ python3 scripts/render_graph.py
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
-**Стек:** LangGraph 0.2+, LangChain 0.3, OpenRouter `openai/gpt-4.1-mini` / Azure (`agents/llm.py`), Pydantic, SQLite, **ddgs** / Tavily, PyYAML (eval).
+**Стек:** LangGraph 0.2+, LangChain 0.3, ProxyAPI `gemini/gemini-2.5-flash` (`agents/llm.py`), Pydantic, SQLite, **ddgs** / Tavily, PyYAML (eval).
 
 ### Eval (уровни проверки)
 
@@ -502,13 +536,13 @@ python3 scripts/render_graph.py
 
 ### Кто будет пользоваться агентом?
 
-**Частные путешественники** через веб-приложение: регистрация, BYOK OpenRouter, создание поездки и пересбор маршрутов.
+**Частные путешественники** через [progulyai.ru](https://progulyai.ru): регистрация, BYOK LLM (ProxyAPI/OpenRouter и др.), создание прогулки и пересбор маршрутов.
 
 ### С какими внешними системами и данными работает агент?
 
 | Система | Назначение |
 |---------|------------|
-| **OpenRouter** | Researcher, writer, опционально LLM-judge в eval (`openai/gpt-4.1-mini` через Azure) |
+| **LLM (ProxyAPI / OpenRouter и др.)** | Researcher, writer, опционально LLM-judge в eval (`gemini/gemini-2.5-flash` по умолчанию) |
 | **PostgreSQL** (`DATABASE_URL`) | Поездки, программы, auth, graph_runs, audit |
 | **Redis** (`REDIS_URL`) | Очередь worker, locks, per-user run quotas |
 | **Tavily API** (опционально) | Веб-поиск с ответом-сводкой |

@@ -36,7 +36,7 @@ def run_llm_judge(
     judge = llm.with_structured_output(JudgeVerdict, method="json_schema")
     system = SystemMessage(
         content=(
-            "Ты — судья качества туристической программы. "
+            "Ты — судья качества маршрута прогулки. "
             "Проверь: цены только со ссылками или «уточните на сайте»; "
             f"город поездки {city}, вылет из {origin_city} — не перепутаны."
         )

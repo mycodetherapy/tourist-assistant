@@ -1,4 +1,4 @@
-"""LLM через OpenRouter: planner с tool_calls, finalize со structured output."""
+"""LLM через OpenAI-compatible API: planner с tool_calls, finalize со structured output."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _build_llm(config: LlmConfig, *, require_capabilities: bool = True) -> ChatO
     if "openrouter.ai" in config.base_url:
         extra["default_headers"] = {
             "HTTP-Referer": "https://github.com/tourist-assistant",
-            "X-OpenRouter-Title": "tourist-assistant",
+            "X-OpenRouter-Title": "progulyai",
         }
     extra_body = get_llm_extra_body(
         config.base_url,

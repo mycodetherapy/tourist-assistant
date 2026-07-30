@@ -19,7 +19,7 @@ if [[ ! -f "$COMPOSE_FILE" ]]; then
 fi
 
 missing=()
-for key in JWT_SECRET SETTINGS_ENCRYPTION_KEY FRONTEND_URL CORS_ORIGINS; do
+for key in JWT_SECRET SETTINGS_ENCRYPTION_KEY FRONTEND_URL CORS_ORIGINS POSTGRES_PASSWORD; do
   if ! grep -E "^${key}=.+" .env >/dev/null 2>&1; then
     missing+=("$key")
   fi
@@ -35,6 +35,7 @@ if [[ -n "${GHCR_TOKEN:-}" ]]; then
 fi
 
 export IMAGE_TAG
+echo "$IMAGE_TAG" > .deploy-image-tag
 
 compose() {
   docker compose --env-file .env -f "$COMPOSE_FILE" "$@"

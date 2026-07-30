@@ -20,7 +20,7 @@ def require_user_llm_config(user_id: int):
     row = get_user_settings(user_id)
     if row is None or not row.llm_api_key_enc:
         raise AuthError(
-            "Добавьте ключ OpenRouter в настройках профиля",
+            "Добавьте API-ключ LLM в настройках профиля",
             status_code=428,
         )
     try:

@@ -35,9 +35,8 @@ def _azure_supports_app_requirements(model_id: str) -> bool:
     "set RUN_OPENROUTER_MODEL_CHECKS=0 to skip live OpenRouter checks",
 )
 class TestRecommendedLlmModels(unittest.TestCase):
-    def test_default_model_on_azure(self) -> None:
-        self.assertEqual(LLM_MODEL, "openai/gpt-4.1-mini")
-        self.assertTrue(_azure_supports_app_requirements(LLM_MODEL))
+    def test_default_model(self) -> None:
+        self.assertEqual(LLM_MODEL, "gemini/gemini-2.5-flash")
 
     def test_alternative_models(self) -> None:
         self.assertEqual(len(RECOMMENDED_ALTERNATIVE_LLM_MODELS), 5)

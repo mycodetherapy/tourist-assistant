@@ -8,38 +8,39 @@ import {
 } from "@ant-design/icons";
 import { Button } from "antd";
 import { Link } from "react-router-dom";
+import { APP_DESCRIPTION, APP_DOMAIN, APP_HERO, APP_NAME, APP_TAGLINE } from "../brand";
 
 const STEPS = [
   {
-    title: "Создайте поездку",
-    text: "Укажите город, даты и пожелания — спокойный темп, музеи, прогулки у воды или что важно именно вам.",
+    title: "Выберите город",
+    text: "Укажите город и пожелания — спокойный темп, музеи, прогулки у воды или что важно именно вам.",
   },
   {
     title: "Получите три маршрута",
-    text: "Ассистент подбирает места из открытых данных (OSM, Wikidata) и собирает варианты A, B и C — разная длина и набор остановок.",
+    text: "Прогуляй подбирает места из открытых данных (OSM, Wikidata) и собирает варианты A, B и C — разная длина и набор остановок.",
   },
   {
     title: "Сравните на карте",
-    text: "Откройте варианты на интерактивной карте, задайте базовую точку старта (отель или адрес) и при необходимости пересоберите маршрут.",
+    text: "Откройте варианты на интерактивной карте, задайте точку старта (отель или адрес) и при необходимости пересоберите маршрут.",
   },
   {
     title: "Идите по маршруту",
-    text: "Линия прогулки, метки остановок и геолокация в реальном времени — плюс ссылка «Открыть в Яндекс.Картах» для навигации.",
+    text: "Линия прогулки и метки остановок на карте — для похода откройте маршрут в Яндекс.Картах по ссылке из приложения.",
   },
 ] as const;
 
 const FEATURES = [
   {
     title: "Три варианта A / B / C",
-    text: "Не один «идеальный» маршрут, а три пеших прогулки на выбор — от короткой до более насыщенной.",
+    text: "Не один «идеальный» маршрут, а три пешие прогулки на выбор — от короткой до более насыщенной.",
   },
   {
-    title: "Карта и геолокация",
-    text: "Маршрут на карте с линией по улицам; на телефоне можно включить отслеживание и смотреть расстояние до следующей остановки.",
+    title: "Карта маршрута",
+    text: "Маршрут на карте с линией и остановками. При выборе стартовой точки можно подставить текущую геолокацию — на телефоне для этого нужен HTTPS.",
   },
   {
-    title: "Базовая точка старта",
-    text: "Отель или адрес проживания — маршруты строятся от вашей точки, а не от центра города «в вакууме».",
+    title: "Старт от вашего адреса",
+    text: "Отель или адрес проживания — маршруты строятся от вашей точки, а не от абстрактного центра города.",
   },
   {
     title: "Пересбор и оценки",
@@ -54,7 +55,7 @@ export function LandingPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
           <Link to="/" className="flex items-center gap-2 text-lg font-semibold text-[#001529] no-underline">
             <CompassOutlined className="text-xl text-sky-600" />
-            <span>Tourist Assistant</span>
+            <span>{APP_NAME}</span>
           </Link>
           <div className="flex items-center gap-2 sm:gap-3">
             <Link to="/login">
@@ -73,21 +74,18 @@ export function LandingPage() {
         <div className="landing-hero-glow pointer-events-none absolute inset-0" aria-hidden />
         <div className="relative mx-auto max-w-6xl">
           <p className="mb-3 text-sm font-medium uppercase tracking-wider text-sky-700">
-            Маршруты по городу
+            {APP_DOMAIN} · {APP_TAGLINE.toLowerCase()}
           </p>
           <h1 className="mb-5 max-w-3xl text-3xl font-bold leading-tight text-[#001529] sm:text-4xl lg:text-5xl">
-            Три пеших маршрута на поездку — с картой и геолокацией в пути
+            Собери прогулку по городу — три маршрута на выбор
           </h1>
           <p className="mb-8 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-            Tourist Assistant — ассистент для самостоятельных путешественников: выбираете город и
-            интересы, получаете варианты прогулок A, B и C по реальным местам, смотрите их на карте и
-            идёте по маршруту с телефоном. Не агрегатор билетов и не «план на каждый час» — фокус на
-            продуманных маршрутах по городу.
+            <strong className="font-semibold text-slate-800">{APP_NAME}</strong> — {APP_HERO}
           </p>
           <div className="flex flex-wrap gap-3">
             <Link to="/register">
               <Button type="primary" size="large" icon={<UserAddOutlined />}>
-                Создать аккаунт
+                Начать бесплатно
               </Button>
             </Link>
             <Link to="/login">
@@ -101,11 +99,8 @@ export function LandingPage() {
 
       <section className="border-y border-slate-200 bg-white px-4 py-14 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-6xl">
-          <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Что внутри</h2>
-          <p className="mb-10 max-w-2xl text-slate-600">
-            Сервис в активной разработке (routes-first MVP): ядро — маршруты и карта; блок «О городе»
-            подгружается параллельно после сборки.
-          </p>
+          <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Зачем {APP_NAME}</h2>
+          <p className="mb-10 max-w-2xl text-slate-600">{APP_DESCRIPTION}</p>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {FEATURES.map((item) => (
               <article
@@ -124,7 +119,7 @@ export function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Как это работает</h2>
           <p className="mb-10 max-w-2xl text-slate-600">
-            Регистрация, ключ OpenRouter в настройках — и можно собирать первую поездку.
+            Регистрация, API-ключ LLM в настройках — и можно собрать первую прогулку.
           </p>
           <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step, index) => (
@@ -150,7 +145,7 @@ export function LandingPage() {
             <div className="rounded-2xl border border-slate-200 p-6 sm:p-8">
               <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-[#001529]">
                 <UserAddOutlined className="text-sky-600" />
-                Аккаунт в сервисе
+                Аккаунт на {APP_DOMAIN}
               </h3>
               <ul className="m-0 list-none space-y-3 p-0 text-slate-600">
                 <li className="flex gap-2">
@@ -159,13 +154,13 @@ export function LandingPage() {
                 </li>
                 <li className="flex gap-2">
                   <span className="text-sky-600">•</span>
-                  <span>Поездки и версии маршрутов хранятся в вашем личном кабинете.</span>
+                  <span>Прогулки и версии маршрутов хранятся в вашем личном кабинете.</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-sky-600">•</span>
                   <span>
                     <EnvironmentOutlined className="mr-1 text-sky-600" />
-                    Для геолокации на карте в дороге удобнее открывать сайт по HTTPS (в т.ч. с телефона).
+                    Чтобы подставить текущее местоположение при выборе стартовой точки, открывайте сайт по HTTPS (в т.ч. с телефона).
                   </span>
                 </li>
               </ul>
@@ -179,34 +174,34 @@ export function LandingPage() {
             <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6 sm:p-8">
               <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-[#001529]">
                 <KeyOutlined className="text-amber-600" />
-                Ключ OpenRouter
+                Ключ LLM-провайдера
               </h3>
               <p className="mb-4 text-sm leading-relaxed text-slate-700">
-                Для сборки маршрутов нужен API-ключ от{" "}
+                Для сборки маршрутов нужен API-ключ от OpenAI-compatible провайдера
+                (по умолчанию —{" "}
                 <a
-                  href="https://openrouter.ai/keys"
+                  href="https://proxyapi.ru"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-sky-700 underline decoration-sky-300 underline-offset-2 hover:text-sky-900"
                 >
-                  OpenRouter
+                  ProxyAPI
                 </a>
-                . Через него работает языковая модель: она читает ваши пожелания и формирует варианты
-                A/B/C по пулу мест в городе.
+                ). Модель читает ваши пожелания и формирует варианты A/B/C по пулу мест в городе.
               </p>
               <ul className="m-0 list-none space-y-3 p-0 text-sm text-slate-700">
                 <li className="flex gap-2">
                   <span className="text-amber-600">•</span>
                   <span>
-                    <strong>Зачем:</strong> без ключа ассистент не соберёт маршруты. Оплата модели —
-                    напрямую в OpenRouter (BYOK).
+                    <strong>Зачем:</strong> без ключа {APP_NAME} не соберёт маршруты. Оплата модели —
+                    напрямую у провайдера (BYOK).
                   </span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-amber-600">•</span>
                   <span>
-                    <strong>Где взять:</strong> регистрация на openrouter.ai, ключ в разделе Keys,
-                    небольшого баланса обычно хватает на несколько пересборов.
+                    <strong>Где взять:</strong> регистрация на proxyapi.ru или другом провайдере,
+                    ключ в личном кабинете; небольшого баланса обычно хватает на несколько пересборов.
                   </span>
                 </li>
                 <li className="flex gap-2">
@@ -231,10 +226,10 @@ export function LandingPage() {
           <div>
             <p className="mb-1 flex items-center gap-2 text-base font-semibold text-white">
               <CompassOutlined className="text-sky-400" />
-              Tourist Assistant
+              {APP_NAME}
             </p>
             <p className="m-0 text-sm text-slate-400">
-              Три маршрута по городу — выберите свой и идите с картой в руках.
+              {APP_TAGLINE} — выберите свой вариант и идите с картой в руках.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
