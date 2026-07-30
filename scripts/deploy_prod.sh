@@ -18,27 +18,43 @@ if [[ ! -f "$COMPOSE_FILE" ]]; then
   exit 1
 fi
 
+missing=()
+for key in JWT_SECRET SETTINGS_ENCRYPTION_KEY FRONTEND_URL CORS_ORIGINS; do
+  if ! grep -E "^${key}=.+" .env >/dev/null 2>&1; then
+    missing+=("$key")
+  fi
+done
+if ((${#missing[@]} > 0)); then
+  echo "ERROR: .env missing or empty: ${missing[*]}" >&2
+  echo "Add them to $DEPLOY_DIR/.env (see deploy/env.example)." >&2
+  exit 1
+fi
+
 if [[ -n "${GHCR_TOKEN:-}" ]]; then
   echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER:?GHCR_USER required with GHCR_TOKEN}" --password-stdin
 fi
 
 export IMAGE_TAG
 
+compose() {
+  docker compose --env-file .env -f "$COMPOSE_FILE" "$@"
+}
+
 echo "=== Pull images (tag=${IMAGE_TAG}) ==="
-docker compose -f "$COMPOSE_FILE" pull worker api-node web
+compose pull worker api-node web
 
 echo "=== Ensure infra (postgres, redis) ==="
-docker compose -f "$COMPOSE_FILE" up -d postgres redis
+compose up -d postgres redis
 
 echo "=== Apply migrations and restart worker ==="
-docker compose -f "$COMPOSE_FILE" up -d --force-recreate worker api-node
+compose up -d --force-recreate worker api-node
 
 echo "=== Restart web (refresh nginx upstream after api-node recreate) ==="
-docker compose -f "$COMPOSE_FILE" up -d web
-docker compose -f "$COMPOSE_FILE" restart web
+compose up -d web
+compose restart web
 
 echo "=== Status ==="
-docker compose -f "$COMPOSE_FILE" ps
+compose ps
 
 if [[ -x ./verify_prod_env.sh ]]; then
   COMPOSE_FILE="$COMPOSE_FILE" DEPLOY_DIR="$DEPLOY_DIR" ./verify_prod_env.sh
