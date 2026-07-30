@@ -95,6 +95,19 @@ describe("googleOAuth", () => {
     );
   });
 
+  it("allows www variant when apex is configured", async () => {
+    process.env.FRONTEND_URL = "https://progulyai.ru";
+    process.env.CORS_ORIGINS = "https://progulyai.ru";
+    const { isAllowedFrontendOrigin, oauthCookieDomain, oauthLoginErrorUrl } =
+      await loadGoogleOAuth();
+
+    expect(isAllowedFrontendOrigin("https://www.progulyai.ru")).toBe(true);
+    expect(oauthCookieDomain("https://progulyai.ru")).toBe(".progulyai.ru");
+    expect(oauthLoginErrorUrl("https://progulyai.ru", "oauth_state")).toBe(
+      "https://progulyai.ru/login?error=oauth_state",
+    );
+  });
+
   it("oauth cookie secure flag follows frontend protocol", async () => {
     process.env.FRONTEND_URL = "https://localhost:5173";
     const { oauthCookieSecure, resolveOAuthRedirectUri } = await loadGoogleOAuth();

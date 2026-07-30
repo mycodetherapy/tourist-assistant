@@ -1,14 +1,33 @@
 import { GoogleOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, Typography, notification } from "antd";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { googleLoginUrl } from "../api/auth";
 import { getErrorMessage } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
+const OAUTH_ERRORS: Record<string, string> = {
+  oauth_state: "Сессия Google истекла или cookies заблокированы. Попробуйте снова.",
+  oauth_denied: "Вход через Google отменён.",
+  oauth_failed: "Не удалось войти через Google. Проверьте настройки на сервере или попробуйте позже.",
+};
+
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [form] = Form.useForm<{ email: string; password: string }>();
+
+  useEffect(() => {
+    const code = params.get("error");
+    if (!code) return;
+    notification.error({
+      title: "Google",
+      description: OAUTH_ERRORS[code] ?? "Ошибка авторизации Google.",
+    });
+    params.delete("error");
+    setParams(params, { replace: true });
+  }, [params, setParams]);
 
   const onFinish = async (values: { email: string; password: string }) => {
     try {
