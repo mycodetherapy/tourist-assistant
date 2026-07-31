@@ -17,14 +17,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
 from sqlalchemy import text
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-load_dotenv(ROOT / ".env")
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env")
+except ImportError:
+    pass
 
 from db.session import get_engine, is_postgres_enabled  # noqa: E402
 
