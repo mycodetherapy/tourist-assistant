@@ -11,10 +11,9 @@
 ## Поток изменений
 
 1. Создайте ветку от `develop`: `git checkout develop && git pull && git checkout -b feat/my-feature`
-2. Откройте **PR в `develop`** — запустится [CI](.github/workflows/ci.yml) (тесты + smoke-сборка Docker).
+2. Откройте **PR в `develop`** — CI **не** запускается; при необходимости прогоните [локальные проверки](#локальные-проверки-перед-pr).
 3. После ревью смержите в `develop`.
-4. Для релиза откройте **PR `develop` → `main`**. После merge в `main`:
-   - CI уже пройден на PR;
+4. Для релиза откройте **PR `develop` → `main`** — запустится [CI](.github/workflows/ci.yml) (тесты + smoke-сборка Docker). После merge в `main`:
    - [Deploy](.github/workflows/deploy.yml) собирает образы, пушит в **GHCR** и обновляет VPS.
 
 ## Защита веток (GitHub)
@@ -28,7 +27,7 @@
 Для `develop`:
 
 - Require pull request (опционально)
-- Require status checks: те же job CI
+- Status checks CI **не обязательны** (CI только на PR в `main`)
 
 ## Локальные проверки перед PR
 

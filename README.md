@@ -2,7 +2,7 @@
 
 **Сразу попробовать:** [https://progulyai.ru](https://progulyai.ru) — регистрация, три маршрута A/B/C и карта в браузере, без установки.
 
-[![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
+[![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
 
 **Прогуляй** — веб-сервис пеших прогулок по городу: три альтернативных маршрута A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 6–8 предложений с историческими фактами). Центральная функция — маршруты и базовая точка старта (`route_anchor`). Прогулки, предпочтения и версии программы хранятся в **PostgreSQL**.
 
@@ -128,6 +128,8 @@ bash scripts/city_pack_batch.sh
 - Prod (через nginx web): [https://progulyai.ru/docs](https://progulyai.ru/docs)
 - JSON: `/docs/json` на том же хосте
 
+После первого деплоя с прокси `/docs`: если открывается лендинг в обычной вкладке, а в инкогнито — Swagger, очистите данные сайта (Service Worker PWA кэшировал старый `index.html`). Либо дождитесь обновления PWA с `navigateFallbackDenylist` для `/docs`.
+
 На `:5173/docs` (Vite dev) откроется SPA, не Swagger — используйте `:8001/docs` или prod-домен после деплоя web-образа.
 
 Схема в репозитории (`docs/openapi.json`) генерируется из тех же маршрутов:
@@ -185,7 +187,8 @@ docker compose --profile docker-web up -d --build
 
 | Этап                    | Что происходит                                                                                                 |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------- |
-| PR → `develop` / `main` | [`.github/workflows/ci.yml`](.github/workflows/ci.yml): Python-тесты, api-node, сборка web, smoke Docker build |
+| PR → `main`      | [`.github/workflows/ci.yml`](.github/workflows/ci.yml): Python-тесты, api-node, сборка web, smoke Docker build |
+| Push → `develop` | CI **не** запускается (только локальные проверки или PR в `main`)                                              |
 | Merge → `main`          | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): push образов в GHCR + SSH-деплой на VPS        |
 | VPS                     | `docker compose -f docker-compose.prod.yml pull` и перезапуск (`scripts/deploy_prod.sh`)                       |
 
