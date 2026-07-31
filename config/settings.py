@@ -207,7 +207,7 @@ RECOMMENDED_ALTERNATIVE_LLM_MODELS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("google/gemini-2.5-flash-lite", ("Google", "Google AI Studio")),
     ("deepseek/deepseek-chat-v3.1", ("DeepInfra",)),
     ("meta-llama/llama-3.3-70b-instruct", ("DeepInfra", "Together")),
-    ("mistralai/mistral-nemo", ("Mistral",)),
+    ("google/gemma-3-12b-it", ("DeepInfra",)),
 )
 
 

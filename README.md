@@ -467,7 +467,7 @@ LLM_OPENROUTER_PROVIDERS=Google,Google AI Studio
 
 #### Рекомендуемые альтернативы (OpenRouter)
 
-Проверено по OpenRouter API (март 2026): у каждой модели на указанных провайдерах есть `tools` и `structured_outputs`. Константа — `RECOMMENDED_ALTERNATIVE_LLM_MODELS` в [`config/settings.py`](config/settings.py); автопроверка — `python3 -m unittest tests.test_recommended_llm_models`.
+Проверено по OpenRouter API (`/models/{id}/endpoints`): у каждой модели на указанных провайдерах есть `tools` и `structured_outputs` (или `response_format`). Поддержка на endpoint может меняться — автопроверка: `python3 -m unittest tests.test_recommended_llm_models`.
 
 | Модель                              | Производитель | Провайдер OpenRouter         | ~Цена in/out  | VPN                        |
 | ----------------------------------- | ------------- | ---------------------------- | ------------- | -------------------------- |
@@ -476,7 +476,7 @@ LLM_OPENROUTER_PROVIDERS=Google,Google AI Studio
 | `google/gemini-2.5-flash-lite`      | Google        | `Google`, `Google AI Studio` | $0.10 / $0.40 | Обычно не нужен            |
 | `deepseek/deepseek-chat-v3.1`       | DeepSeek      | `DeepInfra`                  | $0.21 / $0.80 | Обычно не нужен            |
 | `meta-llama/llama-3.3-70b-instruct` | Meta          | `DeepInfra`, `Together`      | $0.10 / $0.32 | Обычно не нужен            |
-| `mistralai/mistral-nemo`            | Mistral       | `Mistral`                    | $0.02 / $0.15 | Обычно не нужен            |
+| `google/gemma-3-12b-it`                  | Google        | `DeepInfra`                  | $0.05 / $0.10 | Обычно не нужен            |
 
 Примеры `.env` для OpenRouter:
 
