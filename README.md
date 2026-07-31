@@ -124,8 +124,11 @@ bash scripts/city_pack_batch.sh
 
 **Swagger (живой, из кода):**
 
-- Swagger UI: [http://localhost:8001/docs](http://localhost:8001/docs)
-- JSON: [http://localhost:8001/docs/json](http://localhost:8001/docs/json)
+- Локально (api-node): [http://localhost:8001/docs](http://localhost:8001/docs)
+- Prod (через nginx web): [https://progulyai.ru/docs](https://progulyai.ru/docs)
+- JSON: `/docs/json` на том же хосте
+
+На `:5173/docs` (Vite dev) откроется SPA, не Swagger — используйте `:8001/docs` или prod-домен после деплоя web-образа.
 
 Схема в репозитории (`docs/openapi.json`) генерируется из тех же маршрутов:
 
@@ -464,7 +467,7 @@ LLM_OPENROUTER_PROVIDERS=Google,Google AI Studio
 
 #### Рекомендуемые альтернативы (OpenRouter)
 
-Проверено по OpenRouter API (март 2026): у каждой модели на указанных провайдерах есть `tools` и `structured_outputs`. Константа — `RECOMMENDED_ALTERNATIVE_LLM_MODELS` в [`config/settings.py`](config/settings.py); автопроверка — `python3 -m unittest tests.test_recommended_llm_models`.
+Проверено по OpenRouter API (`/models/{id}/endpoints`): у каждой модели на указанных провайдерах есть `tools` и `structured_outputs` (или `response_format`). Поддержка на endpoint может меняться — автопроверка: `python3 -m unittest tests.test_recommended_llm_models`.
 
 | Модель                              | Производитель | Провайдер OpenRouter         | ~Цена in/out  | VPN                        |
 | ----------------------------------- | ------------- | ---------------------------- | ------------- | -------------------------- |
@@ -473,7 +476,7 @@ LLM_OPENROUTER_PROVIDERS=Google,Google AI Studio
 | `google/gemini-2.5-flash-lite`      | Google        | `Google`, `Google AI Studio` | $0.10 / $0.40 | Обычно не нужен            |
 | `deepseek/deepseek-chat-v3.1`       | DeepSeek      | `DeepInfra`                  | $0.21 / $0.80 | Обычно не нужен            |
 | `meta-llama/llama-3.3-70b-instruct` | Meta          | `DeepInfra`, `Together`      | $0.10 / $0.32 | Обычно не нужен            |
-| `mistralai/mistral-nemo`            | Mistral       | `Mistral`                    | $0.02 / $0.15 | Обычно не нужен            |
+| `google/gemma-3-12b-it`                  | Google        | `DeepInfra`                  | $0.05 / $0.10 | Обычно не нужен            |
 
 Примеры `.env` для OpenRouter:
 
@@ -672,16 +675,21 @@ python3 -m scripts.metrics_report --trip-id 12
 
 ### Статистика пользователей (консоль, без админки)
 
-После миграции (`alembic upgrade head`) и деплоя api-node с audit на auth:
+**Одна команда** — локально и на VPS (сама выбирает prod Docker / dev Docker / `.venv`):
 
 ```bash
-python3 scripts/admin_stats.py summary
-python3 scripts/admin_stats.py registrations --days 30
-python3 scripts/admin_stats.py logins --days 30
-python3 scripts/admin_stats.py online --minutes 5
-python3 scripts/admin_stats.py activity --limit 20
-python3 scripts/admin_stats.py user --email user@example.com
+./stats.sh summary
+./stats.sh registrations --days 30
+./stats.sh logins --days 30
+./stats.sh online --minutes 5
+./stats.sh activity --limit 20
+./stats.sh user --email user@example.com
 ```
+
+- **VPS:** `cd /opt/tourist-assistant && ./stats.sh summary` (скрипт деплоится как `/opt/tourist-assistant/stats.sh`)
+- **Из репозитория:** `bash scripts/stats.sh summary`
+
+После миграции (`alembic upgrade head`) и деплоя api-node с audit на auth.
 
 Источники данных:
 
@@ -699,7 +707,8 @@ tourist-assistant/
 ├── api-node/               # Node.js REST API (Fastify, Postgres + Redis)
 ├── Dockerfile.api-node     # Docker: Node API + Python repair_program_cli
 ├── scripts/repair_program_cli.py  # repair_program_routes для GET program
-├── scripts/admin_stats.py         # консольная статистика пользователей
+├── scripts/admin_stats.py         # логика статистики (Postgres)
+├── scripts/stats.sh               # единая команда: ./stats.sh summary
 ├── auth/                   # BYOK crypto, require_user_llm_config (worker)
 ├── docs/openapi.json       # OpenAPI 3 (npm run export:openapi)
 ├── services/               # TripService, RunManager, json_job_queue
