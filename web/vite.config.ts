@@ -83,6 +83,8 @@ export default defineConfig(({ mode }) => {
       includeAssets: ["favicon.svg", "apple-touch-icon.png", "icons/icon-192.png", "icons/icon-512.png"],
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // /docs — Swagger на api-node; без denylist SW отдаёт старый index.html (лендинг)
+        navigateFallbackDenylist: [/^\/docs/, /^\/api\//, /^\/health$/],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith("/api/"),

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import "./loadEnv.js";
-import Fastify from "fastify";
+import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
@@ -21,8 +21,35 @@ export type BuildAppOptions = {
   enableSwaggerUi?: boolean;
 };
 
+/** Ошибки JSON Schema → 400 с `{ detail }`, иначе Fastify падает с 500 (FST_ERR_FAILED_ERROR_SERIALIZATION). */
+function registerErrorHandler(app: FastifyInstance): void {
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error.validation) {
+      return reply.code(400).send({ detail: "Некорректные данные" });
+    }
+    if (
+      error.code === "FST_ERR_RESPONSE_SERIALIZATION" ||
+      error.code === "FST_ERR_FAILED_ERROR_SERIALIZATION"
+    ) {
+      request.log.error({ err: error }, "Response serialization failed");
+      return reply.code(500).send({ detail: "Внутренняя ошибка сервера" });
+    }
+    const status = error.statusCode ?? 500;
+    if (status >= 500) {
+      request.log.error(error);
+      return reply.code(500).send({ detail: "Внутренняя ошибка сервера" });
+    }
+    const detail =
+      typeof error.message === "string" && error.message
+        ? error.message
+        : "Ошибка запроса";
+    return reply.code(status).send({ detail });
+  });
+}
+
 export async function buildApp(options: BuildAppOptions = {}) {
   const app = Fastify({ logger: true });
+  registerErrorHandler(app);
 
   await app.register(cors, {
     origin: config.corsOrigins.length ? config.corsOrigins : true,

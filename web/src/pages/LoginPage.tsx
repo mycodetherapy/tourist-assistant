@@ -52,7 +52,10 @@ export function LoginPage() {
           <Form.Item
             name="password"
             label="Пароль"
-            rules={[{ required: true, message: "Введите пароль" }]}
+            rules={[
+              { required: true, message: "Введите пароль" },
+              { min: 8, message: "Минимум 8 символов" },
+            ]}
           >
             <Input.Password autoComplete="current-password" />
           </Form.Item>

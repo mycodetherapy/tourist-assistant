@@ -2,7 +2,7 @@
 
 **Сразу попробовать:** [https://progulyai.ru](https://progulyai.ru) — регистрация, три маршрута A/B/C и карта в браузере, без установки.
 
-[![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
+[![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
 
 **Прогуляй** — веб-сервис пеших прогулок по городу: три альтернативных маршрута A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 6–8 предложений с историческими фактами). Центральная функция — маршруты и базовая точка старта (`route_anchor`). Прогулки, предпочтения и версии программы хранятся в **PostgreSQL**.
 
@@ -83,7 +83,7 @@ npm install
 npm run dev
 ```
 
-Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг **Прогуляй**; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — API-ключ LLM (Base URL, модель). Список прогулок — `/trips`.
+Откройте **https://localhost:5173** (Vite dev — HTTPS; `http://` не работает). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг **Прогуляй**; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — API-ключ LLM (Base URL, модель). Список прогулок — `/trips`.
 
 **Проверка с телефона (PWA):**
 
@@ -127,6 +127,8 @@ bash scripts/city_pack_batch.sh
 - Локально (api-node): [http://localhost:8001/docs](http://localhost:8001/docs)
 - Prod (через nginx web): [https://progulyai.ru/docs](https://progulyai.ru/docs)
 - JSON: `/docs/json` на том же хосте
+
+После первого деплоя с прокси `/docs`: если открывается лендинг в обычной вкладке, а в инкогнито — Swagger, очистите данные сайта (Service Worker PWA кэшировал старый `index.html`). Либо дождитесь обновления PWA с `navigateFallbackDenylist` для `/docs`.
 
 На `:5173/docs` (Vite dev) откроется SPA, не Swagger — используйте `:8001/docs` или prod-домен после деплоя web-образа.
 
@@ -185,7 +187,8 @@ docker compose --profile docker-web up -d --build
 
 | Этап                    | Что происходит                                                                                                 |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------- |
-| PR → `develop` / `main` | [`.github/workflows/ci.yml`](.github/workflows/ci.yml): Python-тесты, api-node, сборка web, smoke Docker build |
+| PR → `main`      | [`.github/workflows/ci.yml`](.github/workflows/ci.yml): Python-тесты, api-node, сборка web, smoke Docker build |
+| Push → `develop` | CI **не** запускается (только локальные проверки или PR в `main`)                                              |
 | Merge → `main`          | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): push образов в GHCR + SSH-деплой на VPS        |
 | VPS                     | `docker compose -f docker-compose.prod.yml pull` и перезапуск (`scripts/deploy_prod.sh`)                       |
 
@@ -243,7 +246,17 @@ NEW_POSTGRES_PASSWORD='…' bash rotate_postgres_password.sh
 
 `deploy_prod.sh` не пропустит деплой с `POSTGRES_PASSWORD=tourist` или `FRONTEND_URL=localhost`.
 
-Если Google OAuth падает после выбора аккаунта — на VPS: `docker compose -f docker-compose.prod.yml logs api-node --tail 80` и `docker compose … exec -T worker alembic current` (нужна ревизия `c4e1f8a92d10`).
+Если email-login или Google OAuth падают с 500 — на VPS проверьте миграции и логи:
+
+```bash
+cd /opt/tourist-assistant
+docker compose -f docker-compose.prod.yml exec -T worker alembic current   # head: c4e1f8a92d10
+docker compose -f docker-compose.prod.yml exec -T worker alembic upgrade head
+docker compose -f docker-compose.prod.yml up -d --force-recreate worker api-node
+docker compose -f docker-compose.prod.yml logs api-node --tail 80
+```
+
+Колонка `users.last_seen_at` нужна для audit при входе (ревизия `c4e1f8a92d10`). Worker применяет `alembic upgrade head` при каждом старте; при отставании схемы — команды выше.
 
 Ручной деплой с сервера (если нужно):
 
