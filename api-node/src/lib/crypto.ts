@@ -17,7 +17,7 @@ export function createAccessToken(userId: number, email: string): string {
   return jwt.sign(
     { sub: String(userId), email },
     config.jwtSecret(),
-    { algorithm: "HS256", expiresIn: `${config.jwtTtlMinutes}m` },
+    { algorithm: "HS256", expiresIn: config.jwtTtlMinutes * 60 },
   );
 }
 

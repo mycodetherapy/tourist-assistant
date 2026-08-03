@@ -7,6 +7,9 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./auth/AuthContext";
 import "./index.css";
+import { initYandexMetrika } from "./utils/analytics";
+
+initYandexMetrika();
 
 if (import.meta.env.PROD) {
   const { registerSW } = await import("virtual:pwa-register");

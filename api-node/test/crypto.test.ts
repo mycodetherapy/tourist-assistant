@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 process.env.JWT_SECRET = "test-jwt-secret-for-unit-tests-only";
 process.env.SETTINGS_ENCRYPTION_KEY = randomBytes(32).toString("base64url");
@@ -19,5 +19,16 @@ describe("crypto", () => {
     const payload = decodeAccessToken(token);
     expect(payload.sub).toBe("42");
     expect(payload.email).toBe("user@example.com");
+  });
+
+  it("jwt tolerates invalid JWT_ACCESS_TTL_MINUTES", async () => {
+    vi.resetModules();
+    process.env.JWT_ACCESS_TTL_MINUTES = "not-a-number";
+    process.env.JWT_SECRET = "test-jwt-secret-for-unit-tests-only";
+    process.env.SETTINGS_ENCRYPTION_KEY = randomBytes(32).toString("base64url");
+    const { createAccessToken: create, decodeAccessToken: decode } =
+      await import("../src/lib/crypto.js");
+    const token = create(1, "a@b.co");
+    expect(decode(token).sub).toBe("1");
   });
 });
