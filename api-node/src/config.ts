@@ -15,10 +15,20 @@ function parseDatabaseUrl(raw: string): string {
   return raw.replace(/^postgresql\+psycopg:/, "postgresql:");
 }
 
+/** Как auth/jwt_tokens.py: невалидный JWT_ACCESS_TTL_MINUTES → 60 мин. */
+function parseJwtTtlMinutes(raw: string | undefined): number {
+  const trimmed = (raw ?? "60").trim();
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) {
+    return 60;
+  }
+  return Math.max(5, Math.floor(n));
+}
+
 export const config = {
   port: Number(process.env.API_NODE_PORT ?? process.env.PORT ?? 8001),
   jwtSecret: () => required("JWT_SECRET", process.env.JWT_SECRET),
-  jwtTtlMinutes: Math.max(5, Number(process.env.JWT_ACCESS_TTL_MINUTES ?? 60)),
+  jwtTtlMinutes: parseJwtTtlMinutes(process.env.JWT_ACCESS_TTL_MINUTES),
   settingsEncryptionKey: () =>
     required("SETTINGS_ENCRYPTION_KEY", process.env.SETTINGS_ENCRYPTION_KEY),
   databaseUrl: () =>
