@@ -83,7 +83,7 @@ npm install
 npm run dev
 ```
 
-Откройте [http://localhost:5173](http://localhost:5173). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг **Прогуляй**; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — API-ключ LLM (Base URL, модель). Список прогулок — `/trips`.
+Откройте **https://localhost:5173** (Vite dev — HTTPS; `http://` не работает). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг **Прогуляй**; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — API-ключ LLM (Base URL, модель). Список прогулок — `/trips`.
 
 **Проверка с телефона (PWA):**
 
@@ -246,7 +246,17 @@ NEW_POSTGRES_PASSWORD='…' bash rotate_postgres_password.sh
 
 `deploy_prod.sh` не пропустит деплой с `POSTGRES_PASSWORD=tourist` или `FRONTEND_URL=localhost`.
 
-Если Google OAuth падает после выбора аккаунта — на VPS: `docker compose -f docker-compose.prod.yml logs api-node --tail 80` и `docker compose … exec -T worker alembic current` (нужна ревизия `c4e1f8a92d10`).
+Если email-login или Google OAuth падают с 500 — на VPS проверьте миграции и логи:
+
+```bash
+cd /opt/tourist-assistant
+docker compose -f docker-compose.prod.yml exec -T worker alembic current   # head: c4e1f8a92d10
+docker compose -f docker-compose.prod.yml exec -T worker alembic upgrade head
+docker compose -f docker-compose.prod.yml up -d --force-recreate worker api-node
+docker compose -f docker-compose.prod.yml logs api-node --tail 80
+```
+
+Колонка `users.last_seen_at` нужна для audit при входе (ревизия `c4e1f8a92d10`). Worker применяет `alembic upgrade head` при каждом старте; при отставании схемы — команды выше.
 
 Ручной деплой с сервера (если нужно):
 

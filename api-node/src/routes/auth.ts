@@ -34,6 +34,27 @@ import {
   recordUserLogin,
   recordUserRegister,
 } from "../services/authAudit.js";
+import type { User } from "../repos/users.js";
+
+function trimAuthBody(body: unknown): unknown {
+  if (!body || typeof body !== "object") return body;
+  const record = body as { email?: unknown; password?: unknown };
+  if (typeof record.email === "string") {
+    record.email = record.email.trim();
+  }
+  return record;
+}
+
+function authResponsePayload(user: User, token: string) {
+  return {
+    access_token: token,
+    token_type: "bearer" as const,
+    user: {
+      id: Number(user.id),
+      email: user.email.trim().toLowerCase(),
+    },
+  };
+}
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post(
@@ -49,6 +70,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           409: ref("ErrorDetail"),
         },
       },
+      preValidation: async (request) => {
+        request.body = trimAuthBody(request.body);
+      },
     },
     async (request, reply) => {
       const body = registerBodySchema.safeParse(request.body);
@@ -60,18 +84,19 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           body.data.email,
           body.data.password,
         );
-        await recordUserRegister(user.id, { method: "email" });
-        await recordUserLogin(user.id, { method: "email" });
-        return reply.code(201).send({
-          access_token: token,
-          token_type: "bearer",
-          user: { id: user.id, email: user.email },
-        });
+        try {
+          await recordUserRegister(user.id, { method: "email" });
+          await recordUserLogin(user.id, { method: "email" });
+        } catch (auditErr) {
+          request.log.warn({ err: auditErr }, "Register audit failed");
+        }
+        return reply.code(201).send(authResponsePayload(user, token));
       } catch (err) {
         if (err instanceof AuthError) {
           const code = err.statusCode === 409 ? 409 : 400;
           return reply.code(code).send({ detail: err.message });
         }
+        request.log.error({ err }, "Register failed");
         throw err;
       }
     },
@@ -90,6 +115,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           401: ref("ErrorDetail"),
         },
       },
+      preValidation: async (request) => {
+        request.body = trimAuthBody(request.body);
+      },
     },
     async (request, reply) => {
       const body = loginBodySchema.safeParse(request.body);
@@ -101,16 +129,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           body.data.email,
           body.data.password,
         );
-        await recordUserLogin(user.id, { method: "email" });
-        return {
-          access_token: token,
-          token_type: "bearer",
-          user: { id: user.id, email: user.email },
-        };
+        try {
+          await recordUserLogin(user.id, { method: "email" });
+        } catch (auditErr) {
+          request.log.warn({ err: auditErr }, "Login audit failed");
+        }
+        return reply.code(200).send(authResponsePayload(user, token));
       } catch (err) {
         if (err instanceof AuthError) {
           return reply.code(401).send({ detail: err.message });
         }
+        request.log.error({ err }, "Login failed");
         throw err;
       }
     },
