@@ -77,6 +77,7 @@ jobs:
           build-args: |
             NGINX_CONF=nginx.pg.conf
             VITE_YANDEX_MAPS_API_KEY=${{ secrets.VITE_YANDEX_MAPS_API_KEY }}
+            VITE_YANDEX_METRIKA_ID=${{ secrets.VITE_YANDEX_METRIKA_ID }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 

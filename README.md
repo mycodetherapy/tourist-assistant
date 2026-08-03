@@ -96,6 +96,34 @@ npm run dev
 7. **Геолокация:** только при **новой прогулке** — выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута — iframe без геолокации.
 8. **Google OAuth:** при HTTPS dev callback — `https://<host>:5173/api/auth/google/callback` (добавьте URI в Google Cloud Console; origin передаётся автоматически).
 
+### Аналитика (Яндекс Метрика)
+
+Лендинг и воронка регистрации отправляют события в [Яндекс Метрику](https://metrika.yandex.ru/) через `VITE_YANDEX_METRIKA_ID` (сборка web, см. [`web/src/utils/analytics.ts`](web/src/utils/analytics.ts)).
+
+**Подключение:**
+
+1. [metrika.yandex.ru](https://metrika.yandex.ru/) → **Добавить счётчик** → сайт `progulyai.ru`.
+2. Скопируйте **номер счётчика** (только цифры) в `.env` или `web/.env`:
+   ```bash
+   VITE_YANDEX_METRIKA_ID=12345678
+   ```
+3. Локально: перезапустите `npm run dev`. Prod/CI: секрет `VITE_YANDEX_METRIKA_ID` в GitHub Actions + пересборка образа `web`.
+4. В Метрике создайте **6 целей** типа «JavaScript-событие» с идентификаторами:
+
+| Идентификатор цели     | Когда срабатывает                                      |
+| ---------------------- | ------------------------------------------------------ |
+| `landing_view`         | Открыт лендинг `/`                                     |
+| `cta_register_click`   | Клик «Регистрация» / «Начать бесплатно» на лендинге    |
+| `cta_login_click`      | Клик «Войти» на лендинге                               |
+| `register_page_view`   | Открыта страница `/register`                           |
+| `register_success`     | Успешная регистрация по email                          |
+| `proxyapi_link_click`  | Клик по ссылке proxyapi.ru на лендинге                 |
+
+5. **Отчёты → Конверсии** — воронка: `landing_view` → `cta_register_click` → `register_page_view` → `register_success`.
+6. **Вебвизор** и **Карта кликов** включены в коде (`webvisor`, `clickmap`).
+
+Без `VITE_YANDEX_METRIKA_ID` счётчик не загружается (no-op в dev).
+
 ### City pack (POI из OSM-выжимки)
 
 POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Статусы каталога — таблица `city_packs` в Postgres. **Pack готов** → POI из OSM; **pack не готов или пустой** → Wikidata; оба пусты → demo. Карта маршрута — **iframe-виджет** Яндекса по `maps_route_url` (пеший режим `rtt=pd`).
@@ -212,6 +240,7 @@ docker compose --profile docker-web up -d --build
 | `GHCR_USER`                | GitHub **username** владельца пакетов (обычно `mycodetherapy`)                                                        |
 | `GHCR_READ_TOKEN`          | Classic PAT с scope **`read:packages`** (или fine-grained: Packages → Read). Без него pull на VPS → **403 Forbidden** |
 | `VITE_YANDEX_MAPS_API_KEY` | Ключ Яндекс.Карт для **сборки** web в CI                                                                              |
+| `VITE_YANDEX_METRIKA_ID`   | ID счётчика Яндекс Метрики для **сборки** web в CI                                                                    |
 
 Packages → каждый образ → **Change visibility → Private** (если репозиторий публичный).
 
@@ -405,7 +434,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY`                       | Нет         | Public key проекта LangFuse                                                                                                    |
 | `LANGFUSE_SECRET_KEY`                       | Нет         | Secret key проекта LangFuse                                                                                                    |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 #### Google OAuth (prod + local)
 

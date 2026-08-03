@@ -3,6 +3,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_TP_YANDEX_TRAVEL_WIDGET_SRC?: string;
+  readonly VITE_YANDEX_METRIKA_ID?: string;
 }
 
 interface ImportMeta {

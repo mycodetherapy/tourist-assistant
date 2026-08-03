@@ -7,8 +7,10 @@ import {
   UserAddOutlined,
 } from "@ant-design/icons";
 import { Button } from "antd";
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { APP_DESCRIPTION, APP_DOMAIN, APP_HERO, APP_NAME, APP_TAGLINE } from "../brand";
+import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
 
 const STEPS = [
   {
@@ -49,6 +51,10 @@ const FEATURES = [
 ] as const;
 
 export function LandingPage() {
+  useEffect(() => {
+    reachGoal(METRIKA_GOALS.LANDING_VIEW);
+  }, []);
+
   return (
     <div className="landing min-h-dvh bg-[#f8fafc] text-slate-800">
       <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
@@ -58,10 +64,10 @@ export function LandingPage() {
             <span>{APP_NAME}</span>
           </Link>
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link to="/login">
+            <Link to="/login" onClick={() => reachGoal(METRIKA_GOALS.CTA_LOGIN_CLICK)}>
               <Button icon={<LoginOutlined />}>Войти</Button>
             </Link>
-            <Link to="/register">
+            <Link to="/register" onClick={() => reachGoal(METRIKA_GOALS.CTA_REGISTER_CLICK)}>
               <Button type="primary" icon={<UserAddOutlined />}>
                 Регистрация
               </Button>
@@ -83,12 +89,12 @@ export function LandingPage() {
             <strong className="font-semibold text-slate-800">{APP_NAME}</strong> — {APP_HERO}
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link to="/register">
+            <Link to="/register" onClick={() => reachGoal(METRIKA_GOALS.CTA_REGISTER_CLICK)}>
               <Button type="primary" size="large" icon={<UserAddOutlined />}>
                 Начать бесплатно
               </Button>
             </Link>
-            <Link to="/login">
+            <Link to="/login" onClick={() => reachGoal(METRIKA_GOALS.CTA_LOGIN_CLICK)}>
               <Button size="large" icon={<LoginOutlined />}>
                 Уже есть аккаунт
               </Button>
@@ -165,7 +171,7 @@ export function LandingPage() {
                 </li>
               </ul>
               <div className="mt-6">
-                <Link to="/register">
+                <Link to="/register" onClick={() => reachGoal(METRIKA_GOALS.CTA_REGISTER_CLICK)}>
                   <Button type="primary">Зарегистрироваться</Button>
                 </Link>
               </div>
@@ -184,6 +190,7 @@ export function LandingPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-sky-700 underline decoration-sky-300 underline-offset-2 hover:text-sky-900"
+                  onClick={() => reachGoal(METRIKA_GOALS.PROXYAPI_LINK_CLICK)}
                 >
                   ProxyAPI
                 </a>
@@ -233,10 +240,10 @@ export function LandingPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link to="/login">
+            <Link to="/login" onClick={() => reachGoal(METRIKA_GOALS.CTA_LOGIN_CLICK)}>
               <Button ghost>Войти</Button>
             </Link>
-            <Link to="/register">
+            <Link to="/register" onClick={() => reachGoal(METRIKA_GOALS.CTA_REGISTER_CLICK)}>
               <Button type="primary">Регистрация</Button>
             </Link>
           </div>

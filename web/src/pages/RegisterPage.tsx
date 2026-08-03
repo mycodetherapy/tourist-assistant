@@ -1,18 +1,25 @@
 import { GoogleOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, Typography, notification } from "antd";
+import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { googleLoginUrl } from "../api/auth";
 import { getErrorMessage } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
 
 export function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [form] = Form.useForm<{ email: string; password: string; confirm: string }>();
 
+  useEffect(() => {
+    reachGoal(METRIKA_GOALS.REGISTER_PAGE_VIEW);
+  }, []);
+
   const onFinish = async (values: { email: string; password: string }) => {
     try {
       await register(values.email, values.password);
+      reachGoal(METRIKA_GOALS.REGISTER_SUCCESS);
       navigate("/settings", { replace: true, state: { onboarding: true } });
     } catch (error) {
       notification.error({ title: "Ошибка регистрации", description: getErrorMessage(error) });

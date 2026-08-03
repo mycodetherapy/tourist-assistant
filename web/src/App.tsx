@@ -1,7 +1,8 @@
 import { CompassOutlined, LogoutOutlined, MenuOutlined, SettingOutlined } from "@ant-design/icons";
 import { Button, Drawer, Grid, Layout, Menu, Popconfirm } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { hitPage } from "./utils/analytics";
 import { useAuth } from "./auth/AuthContext";
 import { APP_NAME } from "./brand";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -37,6 +38,10 @@ export default function App() {
     location.pathname === "/register" ||
     location.pathname === "/auth/callback";
   const hideAppHeader = isLandingPage || isAuthPage;
+
+  useEffect(() => {
+    hitPage(`${location.pathname}${location.search}`, document.title);
+  }, [location.pathname, location.search]);
 
   const selectedKey = location.pathname.startsWith("/settings")
     ? "settings"
