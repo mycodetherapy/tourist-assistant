@@ -92,12 +92,49 @@ LIMIT 150
 """.strip()
 
 
+def _sparql_for_city_direct(wikidata_id: str) -> str:
+    """Fallback для крупных городов: P131* на query.wikidata.org часто таймаутится."""
+    classes = " ".join(_PLACE_CLASSES)
+    return f"""
+SELECT ?item ?itemLabel ?coord ?sitelinks WHERE {{
+  ?item wdt:P131 wd:{wikidata_id}.
+  ?item wdt:P625 ?coord.
+  ?item wikibase:sitelinks ?sitelinks.
+  ?item wdt:P31/wdt:P279* ?class.
+  VALUES ?class {{ {classes} }}
+  SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ru,en". }}
+}}
+ORDER BY DESC(?sitelinks)
+LIMIT 150
+""".strip()
+
+
 def _sparql_embankments_for_city(wikidata_id: str) -> str:
     """Набережные и променады по подписи (река/канал в городе)."""
     return f"""
 SELECT ?item ?itemLabel ?coord ?sitelinks WHERE {{
   BIND(wd:{wikidata_id} AS ?city)
   ?item wdt:P131* ?city.
+  ?item wdt:P625 ?coord.
+  ?item wikibase:sitelinks ?sitelinks.
+  SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ru,en". }}
+  FILTER(
+    CONTAINS(LCASE(?itemLabel), "набереж") ||
+    CONTAINS(LCASE(?itemLabel), "embankment") ||
+    CONTAINS(LCASE(?itemLabel), "promenade") ||
+    CONTAINS(LCASE(?itemLabel), "waterfront") ||
+    CONTAINS(LCASE(?itemLabel), "riverside")
+  )
+}}
+ORDER BY DESC(?sitelinks)
+LIMIT 30
+""".strip()
+
+
+def _sparql_embankments_for_city_direct(wikidata_id: str) -> str:
+    return f"""
+SELECT ?item ?itemLabel ?coord ?sitelinks WHERE {{
+  ?item wdt:P131 wd:{wikidata_id}.
   ?item wdt:P625 ?coord.
   ?item wikibase:sitelinks ?sitelinks.
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ru,en". }}
@@ -159,8 +196,19 @@ def _dedupe_sparql_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _fetch_city_rows(wikidata_id: str) -> list[dict[str, Any]]:
-    main = _run_sparql(_sparql_for_city(wikidata_id))
-    embankments = _run_sparql(_sparql_embankments_for_city(wikidata_id))
+    direct = _run_sparql(_sparql_for_city_direct(wikidata_id))
+    if len(direct) >= 15:
+        main = direct
+    else:
+        transitive = _run_sparql(_sparql_for_city(wikidata_id))
+        main = _dedupe_sparql_rows(transitive + direct)
+
+    direct_emb = _run_sparql(_sparql_embankments_for_city_direct(wikidata_id))
+    if direct_emb:
+        embankments = direct_emb
+    else:
+        embankments = _run_sparql(_sparql_embankments_for_city(wikidata_id))
+
     return _dedupe_sparql_rows(main + embankments)
 
 

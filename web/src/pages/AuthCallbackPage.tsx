@@ -10,12 +10,19 @@ export function AuthCallbackPage() {
 
   useEffect(() => {
     const token = params.get("token");
+    const claimedTripId = params.get("trip");
     if (!token) {
       navigate("/login", { replace: true });
       return;
     }
     void setTokenFromOAuth(token)
-      .then(() => navigate("/settings", { replace: true, state: { onboarding: true } }))
+      .then(() => {
+        if (claimedTripId) {
+          navigate(`/trips/${claimedTripId}`, { replace: true });
+          return;
+        }
+        navigate("/settings", { replace: true, state: { onboarding: true } });
+      })
       .catch(() => navigate("/login", { replace: true }));
   }, [params, navigate, setTokenFromOAuth]);
 

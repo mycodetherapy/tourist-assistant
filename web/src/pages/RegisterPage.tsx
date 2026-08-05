@@ -1,7 +1,7 @@
 import { GoogleOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, Typography, notification } from "antd";
 import { useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { googleLoginUrl } from "../api/auth";
 import { getErrorMessage } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -10,6 +10,8 @@ import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
 export function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get("return");
   const [form] = Form.useForm<{ email: string; password: string; confirm: string }>();
 
   useEffect(() => {
@@ -18,8 +20,16 @@ export function RegisterPage() {
 
   const onFinish = async (values: { email: string; password: string }) => {
     try {
-      await register(values.email, values.password);
+      const claimedTripId = await register(values.email, values.password);
       reachGoal(METRIKA_GOALS.REGISTER_SUCCESS);
+      if (claimedTripId) {
+        navigate(`/trips/${claimedTripId}`, { replace: true });
+        return;
+      }
+      if (returnTo?.startsWith("/")) {
+        navigate(returnTo, { replace: true });
+        return;
+      }
       navigate("/settings", { replace: true, state: { onboarding: true } });
     } catch (error) {
       notification.error({ title: "Ошибка регистрации", description: getErrorMessage(error) });

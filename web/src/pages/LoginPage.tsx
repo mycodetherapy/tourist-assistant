@@ -31,7 +31,11 @@ export function LoginPage() {
 
   const onFinish = async (values: { email: string; password: string }) => {
     try {
-      await login(values.email, values.password);
+      const claimedTripId = await login(values.email, values.password);
+      if (claimedTripId) {
+        navigate(`/trips/${claimedTripId}`, { replace: true });
+        return;
+      }
       navigate("/trips", { replace: true });
     } catch (error) {
       notification.error({ title: "Ошибка входа", description: getErrorMessage(error) });

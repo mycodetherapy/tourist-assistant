@@ -15,10 +15,10 @@ interface AuthContextValue {
   user: UserInfo | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<number | undefined>;
+  register: (email: string, password: string) => Promise<number | undefined>;
   logout: () => void;
-  setTokenFromOAuth: (token: string) => Promise<void>;
+  setTokenFromOAuth: (token: string, claimedTripId?: number) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -73,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string) => {
       const data = await apiLogin(email, password);
       await applySession(data.access_token);
+      return data.claimed_trip_id;
     },
     [applySession],
   );
@@ -81,12 +82,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string) => {
       const data = await apiRegister(email, password);
       await applySession(data.access_token);
+      return data.claimed_trip_id;
     },
     [applySession],
   );
 
   const setTokenFromOAuth = useCallback(
-    async (accessToken: string) => {
+    async (accessToken: string, _claimedTripId?: number) => {
       await applySession(accessToken);
     },
     [applySession],

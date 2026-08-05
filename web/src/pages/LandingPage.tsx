@@ -89,14 +89,9 @@ export function LandingPage() {
             <strong className="font-semibold text-slate-800">{APP_NAME}</strong> — {APP_HERO}
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link to="/register" onClick={() => reachGoal(METRIKA_GOALS.CTA_REGISTER_CLICK)}>
+            <Link to="/try" onClick={() => reachGoal(METRIKA_GOALS.CTA_TRY_CLICK)}>
               <Button type="primary" size="large" icon={<UserAddOutlined />}>
-                Начать бесплатно
-              </Button>
-            </Link>
-            <Link to="/login" onClick={() => reachGoal(METRIKA_GOALS.CTA_LOGIN_CLICK)}>
-              <Button size="large" icon={<LoginOutlined />}>
-                Уже есть аккаунт
+                Собрать маршрут
               </Button>
             </Link>
           </div>
@@ -125,7 +120,8 @@ export function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Как это работает</h2>
           <p className="mb-10 max-w-2xl text-slate-600">
-            Регистрация, API-ключ LLM в настройках — и можно собрать первую прогулку.
+            Укажите город — получите три маршрута на карте. Аккаунт нужен, чтобы сохранить прогулки; ключ
+            LLM — по желанию для AI-персонализации.
           </p>
           <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step, index) => (
@@ -154,6 +150,16 @@ export function LandingPage() {
                 Аккаунт на {APP_DOMAIN}
               </h3>
               <ul className="m-0 list-none space-y-3 p-0 text-slate-600">
+                <li className="flex gap-2">
+                  <span className="text-sky-600">•</span>
+                  <span>
+                    Можно{" "}
+                    <Link to="/try" className="font-medium text-sky-700 underline" onClick={() => reachGoal(METRIKA_GOALS.CTA_TRY_CLICK)}>
+                      собрать маршрут без регистрации
+                    </Link>
+                    ; аккаунт — чтобы сохранить прогулку и собирать новые города.
+                  </span>
+                </li>
                 <li className="flex gap-2">
                   <span className="text-sky-600">•</span>
                   <span>Регистрация по email и паролю или вход через Google.</span>
@@ -200,8 +206,8 @@ export function LandingPage() {
                 <li className="flex gap-2">
                   <span className="text-amber-600">•</span>
                   <span>
-                    <strong>Зачем:</strong> LLM учитывает пожелания; без ключа маршруты строятся
-                    бесплатно алгоритмом (до 30 сборок в сутки).
+                    <strong>Зачем:</strong> LLM учитывает пожелания; без ключа маршруты строятся алгоритмом
+                    по открытым данным (до 30 сборок в сутки).
                   </span>
                 </li>
                 <li className="flex gap-2">

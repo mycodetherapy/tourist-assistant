@@ -26,14 +26,21 @@ export async function createUser(params: {
   email: string;
   password_hash?: string | null;
   google_sub?: string | null;
+  is_guest?: boolean;
 }): Promise<User> {
   const email = params.email.trim().toLowerCase();
   const now = new Date();
   const { rows } = await query<User>(
-    `INSERT INTO users (email, password_hash, google_sub, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $4)
+    `INSERT INTO users (email, password_hash, google_sub, is_guest, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $5)
      RETURNING id, email, password_hash, google_sub, created_at, updated_at`,
-    [email, params.password_hash ?? null, params.google_sub ?? null, now],
+    [
+      email,
+      params.password_hash ?? null,
+      params.google_sub ?? null,
+      params.is_guest ?? false,
+      now,
+    ],
   );
   const row = rows[0]!;
   return {
@@ -208,4 +215,21 @@ export async function touchUserLastSeen(userId: number): Promise<void> {
        AND (last_seen_at IS NULL OR last_seen_at < NOW() - INTERVAL '1 minute')`,
     [userId],
   );
+}
+
+export async function createGuestUser(): Promise<User> {
+  const { randomUUID } = await import("node:crypto");
+  const suffix = randomUUID().replace(/-/g, "").slice(0, 16);
+  const email = `guest+${suffix}@guest.progulyai.local`;
+  const user = await createUser({ email, is_guest: true });
+  await upsertUserSettings(user.id, { llm_mode: "none" });
+  return user;
+}
+
+export async function isGuestUser(userId: number): Promise<boolean> {
+  const { rows } = await query<{ is_guest: boolean }>(
+    `SELECT is_guest FROM users WHERE id = $1`,
+    [userId],
+  );
+  return Boolean(rows[0]?.is_guest);
 }

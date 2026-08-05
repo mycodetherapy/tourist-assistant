@@ -14,6 +14,8 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { TripDetailPage } from "./pages/TripDetailPage";
 import { HomeRoute } from "./pages/HomeRoute";
 import { TripListPage } from "./pages/TripListPage";
+import { TryPage } from "./pages/TryPage";
+import { GuestTripDetailPage } from "./pages/GuestTripDetailPage";
 
 const { Header, Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -33,11 +35,13 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const isLandingPage = location.pathname === "/";
+  const isGuestPage =
+    location.pathname === "/try" || location.pathname.startsWith("/try/");
   const isAuthPage =
     location.pathname === "/login" ||
     location.pathname === "/register" ||
     location.pathname === "/auth/callback";
-  const hideAppHeader = isLandingPage || isAuthPage;
+  const hideAppHeader = isLandingPage || isAuthPage || isGuestPage;
 
   useEffect(() => {
     hitPage(`${location.pathname}${location.search}`, document.title);
@@ -141,6 +145,8 @@ export default function App() {
       >
         <Routes>
           <Route path="/" element={<HomeRoute />} />
+          <Route path="/try" element={<TryPage />} />
+          <Route path="/try/:id" element={<GuestTripDetailPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />

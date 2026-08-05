@@ -8,12 +8,14 @@ import rateLimit from "@fastify/rate-limit";
 import { config } from "./config.js";
 import { closePool } from "./db/pool.js";
 import { closeRedis } from "./db/redis.js";
+import { startGuestCleanupScheduler, stopGuestCleanupScheduler } from "./services/guestCleanup.js";
 import {
   registerAuthRoutes,
   registerProfileRoutes,
 } from "./routes/auth.js";
 import { registerRunsRoutes } from "./routes/runs.js";
 import { registerTripsRoutes } from "./routes/trips.js";
+import { registerGuestRoutes } from "./routes/guest.js";
 import { registerSwagger } from "./plugins/swagger.js";
 
 export type BuildAppOptions = {
@@ -92,6 +94,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await registerAuthRoutes(app);
   await registerProfileRoutes(app);
   await registerTripsRoutes(app);
+  await registerGuestRoutes(app);
   await registerRunsRoutes(app);
 
   return app;
@@ -106,7 +109,9 @@ async function main() {
     process.exit(1);
   }
   const app = await buildApp();
+  startGuestCleanupScheduler((msg) => app.log.info(msg));
   const shutdown = async () => {
+    stopGuestCleanupScheduler();
     await app.close();
     await closeRedis();
     await closePool();

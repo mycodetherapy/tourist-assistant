@@ -1,6 +1,6 @@
 # Прогуляй (progulyai.ru)
 
-**Сразу попробовать:** [https://progulyai.ru](https://progulyai.ru) — регистрация, три маршрута A/B/C и карта в браузере, без установки.
+**Сразу попробовать:** [https://progulyai.ru/try](https://progulyai.ru/try) — без регистрации (1 сборка + 1 пересбор); или [https://progulyai.ru](https://progulyai.ru) с аккаунтом — до 30 сборок/сутки.
 
 [![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
 
@@ -84,7 +84,7 @@ npm install
 npm run dev
 ```
 
-Откройте **https://localhost:5173** (Vite dev — HTTPS; `http://` не работает). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг **Прогуляй**; **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth) — и можно сразу создавать прогулки. В **Настройках** — режим AI: бесплатный алгоритм (по умолчанию) или BYOK. Список прогулок — `/trips`.
+Откройте **https://localhost:5173** (Vite dev — HTTPS; `http://` не работает). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг **Прогуляй**; **«Собрать маршрут»** → `/try` (без регистрации: 1 сборка и 1 пересбор). **Регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth) — прогулка из `/try` переносится в аккаунт. В **Настройках** — режим AI: алгоритм по открытым данным (до 30 сборок/сутки) или BYOK. Список прогулок — `/trips`.
 
 **Проверка с телефона (PWA):**
 
@@ -109,18 +109,26 @@ npm run dev
    VITE_YANDEX_METRIKA_ID=12345678
    ```
 3. Локально: перезапустите `npm run dev`. Prod/CI: секрет `VITE_YANDEX_METRIKA_ID` в GitHub Actions + пересборка образа `web`.
-4. В Метрике создайте **6 целей** типа «JavaScript-событие» с идентификаторами:
+4. В Метрике создайте **цели** типа «JavaScript-событие» с идентификаторами:
 
-| Идентификатор цели     | Когда срабатывает                                      |
-| ---------------------- | ------------------------------------------------------ |
-| `landing_view`         | Открыт лендинг `/`                                     |
-| `cta_register_click`   | Клик «Регистрация» / «Начать бесплатно» на лендинге    |
-| `cta_login_click`      | Клик «Войти» на лендинге                               |
-| `register_page_view`   | Открыта страница `/register`                           |
-| `register_success`     | Успешная регистрация по email                          |
-| `proxyapi_link_click`  | Клик по ссылке proxyapi.ru на лендинге                 |
+| Идентификатор цели       | Когда срабатывает                                              |
+| ------------------------ | -------------------------------------------------------------- |
+| `landing_view`           | Открыт лендинг `/`                                             |
+| `cta_try_click`          | Клик «Собрать маршрут» → `/try` на лендинге                    |
+| `cta_register_click`     | Клик «Регистрация» на лендинге                                 |
+| `cta_login_click`        | Клик «Войти» на лендинге                                       |
+| `try_page_view`          | Открыта страница `/try`                                        |
+| `try_trip_created`       | Гостевая прогулка создана (параметр `trip_id`)                 |
+| `try_build_success`      | Гостевая сборка завершена (`trip_id`, `scope`)                 |
+| `guest_register_gate`    | Показан soft gate — лимит гостя (`trip_id`, `message`)       |
+| `guest_register_click`   | Клик «Регистрация» из гостевого потока (`source`, `trip_id`)  |
+| `register_page_view`     | Открыта страница `/register`                                   |
+| `register_success`       | Успешная регистрация по email                                  |
+| `proxyapi_link_click`    | Клик по ссылке proxyapi.ru на лендинге                         |
 
-5. **Отчёты → Конверсии** — воронка: `landing_view` → `cta_register_click` → `register_page_view` → `register_success`.
+5. **Отчёты → Конверсии** — воронки:
+   - регистрация: `landing_view` → `cta_register_click` → `register_page_view` → `register_success`;
+   - гость: `landing_view` → `cta_try_click` → `try_page_view` → `try_trip_created` → `try_build_success` → `guest_register_click` → `register_success`.
 6. **Вебвизор** и **Карта кликов** включены в коде (`webvisor`, `clickmap`).
 
 Без `VITE_YANDEX_METRIKA_ID` счётчик не загружается (no-op в dev).
@@ -242,6 +250,7 @@ docker compose --profile docker-web up -d --build
 | `GHCR_READ_TOKEN`          | Classic PAT с scope **`read:packages`** (или fine-grained: Packages → Read). Без него pull на VPS → **403 Forbidden** |
 | `VITE_YANDEX_MAPS_API_KEY` | Ключ Яндекс.Карт для **сборки** web в CI                                                                              |
 | `VITE_YANDEX_METRIKA_ID`   | ID счётчика Яндекс Метрики для **сборки** web в CI                                                                    |
+| `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` | Клиентский ключ SmartCaptcha для guest `/try` (сборка web в CI)                                              |
 
 Packages → каждый образ → **Change visibility → Private** (если репозиторий публичный).
 
@@ -353,7 +362,7 @@ cd api-node && npm run dev
 
 Фоновые прогоны: **JSON Redis queue** (`tourist:queue:*`, `worker/tasks.py`, таблица `graph_runs`).
 
-Бэкап prod (cron на VPS): [`scripts/pg_backup.sh`](scripts/pg_backup.sh).
+Бэкап prod (cron на VPS): [`scripts/pg_backup.sh`](scripts/pg_backup.sh). Очистка истёкших guest-сессий: [`scripts/guest_cleanup_cron.sh`](scripts/guest_cleanup_cron.sh) (или in-process `GUEST_CLEANUP_INTERVAL_SEC` в api-node).
 
 ### Repair program в Docker
 
@@ -414,7 +423,15 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LLM_API_KEY`                               | Нет\*       | Для `python -m eval --with-llm` и dev-скриптов; в prod worker использует BYOK пользователя или алгоритм (free)                  |
 | `JWT_SECRET`                                | Да\*\*      | Секрет подписи JWT (api-node)                                                                                                  |
 | `SETTINGS_ENCRYPTION_KEY`                   | Да\*\*      | Fernet-ключ шифрования BYOK в БД (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
-| `FREE_RUN_QUOTA_PER_DAY`                    | Нет         | Лимит бесплатных сборок/сутки на пользователя (default 30)                                                                     |
+| `FREE_RUN_QUOTA_PER_DAY`                    | Нет         | Лимит бесплатных сборок/сутки на зарегистрированного пользователя (default 30)                                                 |
+| `GUEST_SESSION_TTL_DAYS`                    | Нет         | Срок жизни гостевой cookie-сессии `/try` (default 7)                                                                           |
+| `GUEST_GEOCODE_QUOTA_PER_HOUR`              | Нет         | Лимит geocode/reverse-geocode для guest на сессию (default 40/ч)                                                               |
+| `GUEST_GEOCODE_QUOTA_WINDOW_SEC`            | Нет         | Окно лимита geocode guest (default 3600)                                                                                       |
+| `GUEST_GEOCODE_QUOTAS_ENABLED`              | Нет         | `false` — отключить cap geocode для guest (нужен Redis)                                                                        |
+| `GUEST_CLEANUP_INTERVAL_SEC`              | Нет         | In-process cleanup в api-node (default 21600 = 6 ч; `0` — только cron/CLI)                                                     |
+| `GUEST_CLEANUP_ORPHAN_GRACE_HOURS`        | Нет         | Удалять guest-user без session row через N часов (default 24)                                                                  |
+| `YANDEX_SMARTCAPTCHA_SERVER_KEY`          | Нет         | Серверный ключ SmartCaptcha для guest-сборок (`/try`); без ключа проверка отключена                                              |
+| `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY`     | Нет         | Клиентский ключ SmartCaptcha (сборка web); нужен вместе с server key                                                           |
 | `ESTIMATED_AI_RUN_COST_RUB`                 | Нет         | Оценка стоимости AI-прогона для UI (default 4)                                                                                   |
 | `JWT_ACCESS_TTL_MINUTES`                    | Нет         | Срок жизни access token (по умолчанию 60)                                                                                      |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет         | Google OAuth (опционально). Один OAuth client — несколько **Authorized redirect URIs** в Google Console                        |
@@ -437,7 +454,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY`                       | Нет         | Public key проекта LangFuse                                                                                                    |
 | `LANGFUSE_SECRET_KEY`                       | Нет         | Secret key проекта LangFuse                                                                                                    |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `YANDEX_SMARTCAPTCHA_SERVER_KEY` + `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` (CAPTCHA на guest `/try`); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 #### Google OAuth (prod + local)
 
@@ -608,7 +625,7 @@ python3 scripts/render_graph.py
 
 ### Кто будет пользоваться агентом?
 
-**Частные путешественники** через [progulyai.ru](https://progulyai.ru): регистрация, бесплатные маршруты из коробки; опционально BYOK LLM (ProxyAPI/OpenRouter) для AI-персонализации.
+**Частные путешественники** через [progulyai.ru](https://progulyai.ru): пробный режим `/try` без регистрации (1 сборка + 1 partial rebuild); после регистрации — бесплатные маршруты из коробки (до 30 сборок/сутки); опционально BYOK LLM (ProxyAPI/OpenRouter) для AI-персонализации.
 
 ### С какими внешними системами и данными работает агент?
 
@@ -657,11 +674,12 @@ python3 scripts/render_graph.py
 | **Critic не прошёл**                | До 2 повторов: проблемы tools/POI → `researcher`, проблемы маршрутов → `writer`; факт о городе critic не блокирует, пока `city_fact_status=pending`                                         |
 | **Повторный запуск**                | `user_profile` + `trip_preferences` из SQLite                                                                                                                                               |
 | **Город в каталоге, pack не готов** | **Free:** только Wikidata, pack не ставится в очередь. **LLM:** worker ставит `prepare_city_pack`; пока пустой пул — Wikidata или demo + предупреждение                                                                                   |
-| **Демо-точки вместо POI**           | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
+| **Демо-точки вместо POI**           | Wikidata SPARQL не ответила (таймаут/сеть) — retry + fallback `P131` без `*` для крупных городов (Москва и др.); центр — Nominatim. Проверка: `python3 scripts/test_yandex_maps.py Москва` |
 | **Одинаковые маршруты A/B/C**       | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → retry `writer`                                                   |
 | **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`)                                                                    |
 | **Кольцевой маршрут**               | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км            |
 | **Дизлайк остановки и пересборка**  | 👎 на `route_stops` не сбрасывается после rebuild; `banned_poi_ids` в snapshot + `enforce_route_poi_policy` исключают POI даже при готовых `maps_route_url`                                 |
+| **Гостевая сессия `/try`**          | HttpOnly cookie; лимит **1× full** + **1× routes**; geocode **40/ч** на сессию (Redis); SmartCaptcha перед сборкой/пересбором (если задан `YANDEX_SMARTCAPTCHA_SERVER_KEY`); cleanup истёкших guest-user; soft gate → register; claim trip при login |
 
 ### Как понять, что агент работает хорошо?
 

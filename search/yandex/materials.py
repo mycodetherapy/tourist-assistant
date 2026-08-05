@@ -37,8 +37,8 @@ def _materials_warnings(
         wd_count = int(poi_sources.get("wikidata_count") or 0)
         if osm_count == 0 and wd_count == 0:
             warnings.append(
-                "Wikidata не вернула POI — проверьте сеть, WIKIDATA_SPARQL_URL "
-                "или название города."
+                "Wikidata не вернула POI — для крупных городов возможен таймаут SPARQL; "
+                "проверьте сеть, WIKIDATA_SPARQL_URL или название города."
             )
     if leisure_count == 0:
         warnings.append("Пул мест пуст — маршруты соберутся из демо-точек.")

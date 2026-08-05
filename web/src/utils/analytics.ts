@@ -2,8 +2,14 @@
 
 export const METRIKA_GOALS = {
   LANDING_VIEW: "landing_view",
+  CTA_TRY_CLICK: "cta_try_click",
   CTA_REGISTER_CLICK: "cta_register_click",
   CTA_LOGIN_CLICK: "cta_login_click",
+  TRY_PAGE_VIEW: "try_page_view",
+  TRY_TRIP_CREATED: "try_trip_created",
+  TRY_BUILD_SUCCESS: "try_build_success",
+  GUEST_REGISTER_GATE: "guest_register_gate",
+  GUEST_REGISTER_CLICK: "guest_register_click",
   REGISTER_PAGE_VIEW: "register_page_view",
   REGISTER_SUCCESS: "register_success",
   PROXYAPI_LINK_CLICK: "proxyapi_link_click",

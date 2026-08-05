@@ -106,6 +106,7 @@ export interface CreateTripPayload {
   route_anchor?: RouteAnchor | null;
   preferences?: TripPreferences | null;
   start_run: boolean;
+  captcha_token?: string;
 }
 
 export interface CreateTripResponse {
@@ -135,6 +136,7 @@ export interface AuthResponse {
   access_token: string;
   token_type: string;
   user: UserInfo;
+  claimed_trip_id?: number;
 }
 
 export type LlmMode = "none" | "platform" | "byok";

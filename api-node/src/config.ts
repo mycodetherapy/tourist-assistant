@@ -53,6 +53,20 @@ export const config = {
   ),
   estimatedAiRunCostRub: Number(process.env.ESTIMATED_AI_RUN_COST_RUB ?? 4),
   graphRunStaleSec: Number(process.env.GRAPH_RUN_STALE_SEC ?? 600),
+  guestSessionTtlDays: Number(process.env.GUEST_SESSION_TTL_DAYS ?? 7),
+  guestCookieSecure: !["0", "false", "no", "off"].includes(
+    (process.env.GUEST_COOKIE_SECURE ?? "").trim().toLowerCase(),
+  ) && process.env.NODE_ENV === "production",
+  guestGeocodeQuotaPerHour: Number(process.env.GUEST_GEOCODE_QUOTA_PER_HOUR ?? 40),
+  guestGeocodeQuotaWindowSec: Number(process.env.GUEST_GEOCODE_QUOTA_WINDOW_SEC ?? 3600),
+  guestGeocodeQuotasEnabled: !["0", "false", "no", "off"].includes(
+    (process.env.GUEST_GEOCODE_QUOTAS_ENABLED ?? "true").trim().toLowerCase(),
+  ),
+  /** In-process guest cleanup; 0 = только CLI/cron. Default 6h. */
+  guestCleanupIntervalSec: Number(process.env.GUEST_CLEANUP_INTERVAL_SEC ?? 21600),
+  guestCleanupOrphanGraceHours: Number(process.env.GUEST_CLEANUP_ORPHAN_GRACE_HOURS ?? 24),
+  yandexSmartCaptchaServerKey: () =>
+    (process.env.YANDEX_SMARTCAPTCHA_SERVER_KEY ?? "").trim(),
   yandexMapsApiKey: (process.env.YANDEX_MAPS_API_KEY ?? "").trim(),
   googleClientId: (process.env.GOOGLE_CLIENT_ID ?? "").trim(),
   googleClientSecret: (process.env.GOOGLE_CLIENT_SECRET ?? "").trim(),

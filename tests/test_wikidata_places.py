@@ -202,10 +202,41 @@ class FetchWikidataLeisureTests(unittest.TestCase):
     def test_sparql_query_orders_by_sitelinks(self, run_sparql) -> None:
         run_sparql.return_value = []
         fetch_wikidata_leisure("Ярославль", _yaroslavl_center(), pool_target=5)
-        main_query = run_sparql.call_args_list[0][0][0]
-        self.assertIn("ORDER BY DESC(?sitelinks)", main_query)
-        emb_query = run_sparql.call_args_list[1][0][0]
+        direct_query = run_sparql.call_args_list[0][0][0]
+        self.assertIn("ORDER BY DESC(?sitelinks)", direct_query)
+        self.assertIn("wdt:P131 wd:", direct_query)
+        transitive_query = run_sparql.call_args_list[1][0][0]
+        self.assertIn("P131*", transitive_query)
+        emb_query = run_sparql.call_args_list[2][0][0]
         self.assertIn("набереж", emb_query)
+
+    @patch("search.wikidata.places._run_sparql")
+    def test_skips_transitive_when_direct_pool_is_large_enough(self, run_sparql) -> None:
+        run_sparql.return_value = [_row(f"Q{i}", f"Музей {i}", 39.85 + i * 0.01, 57.625, 10) for i in range(20)]
+        fetch_wikidata_leisure("Москва", _yaroslavl_center(), pool_target=5)
+        queries = [call[0][0] for call in run_sparql.call_args_list]
+        self.assertFalse(any("P131*" in q and "набереж" not in q for q in queries))
+
+    @patch("search.wikidata.places._run_sparql")
+    def test_falls_back_to_direct_p131_when_transitive_empty(self, run_sparql) -> None:
+        def side_effect(query: str) -> list[dict]:
+            if "P131*" in query and "набереж" not in query:
+                return []
+            if "wdt:P131 wd:Q649" in query and "набереж" not in query:
+                return [_row("Q183334", "Государственная Третьяковская галерея", 37.62, 55.74, 50)]
+            return []
+
+        run_sparql.side_effect = side_effect
+        center = CityCenter(
+            city="Москва",
+            lon=37.6174782,
+            lat=55.7505412,
+            bbox=(37.290502, 55.516684, 37.9674277, 55.9577717),
+            wikidata_id="Q649",
+        )
+        points = fetch_wikidata_leisure("Москва", center, pool_target=5)
+        self.assertEqual(len(points), 1)
+        self.assertEqual(points[0].poi_id, "Q183334")
 
 
 if __name__ == "__main__":
