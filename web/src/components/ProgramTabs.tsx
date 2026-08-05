@@ -181,7 +181,7 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
               return routeCase && String(routeCase.case_id) === activeRouteCaseId;
             })
             .map((item) => {
-              const routeCase = routeCaseAtIndex(routeCases, item.index);
+              const routeCase = routeCaseAtIndex(routeCasesRaw, item.index);
               const useRouteCard =
                 !!routeCase && Boolean(routeCase.maps_route_url || routeCase.stops.length);
               const hasMap = Boolean(routeCase?.maps_route_url);

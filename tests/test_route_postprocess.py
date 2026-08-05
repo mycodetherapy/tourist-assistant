@@ -510,5 +510,94 @@ class TestRoutePostprocess(unittest.TestCase):
         )
 
 
+def _yaroslavl_materials() -> RouteMaterials:
+    specs = [
+        ("Q1", "temples", "Благовещенский собор (Ярославль)", 39.893, 57.626),
+        ("Q2", "temples", "Церковь Ильи Пророка (Ярославль)", 39.894, 57.627),
+        ("Q3", "landmarks", "Стрелка Волги и Которосли (Ярославль)", 39.895, 57.625),
+        ("Q4", "museums", "Ярославский музей-заповедник (Ярославль)", 39.892, 57.628),
+        ("Q5", "theaters", "Ярославский театр (Ярославль)", 39.891, 57.627),
+        ("Q6", "monuments", "Памятник Ярославу Мудрому (Ярославль)", 39.896, 57.626),
+        ("Q7", "embankments", "Набережная Волги (Ярославль)", 39.897, 57.624),
+        ("Q8", "landmarks", "Волжская башня (Ярославль)", 39.890, 57.625),
+        ("Q9", "museums", "Музей истории города (Ярославль)", 39.889, 57.629),
+        ("Q10", "parks", "Парк Тысячелетия (Ярославль)", 39.900, 57.630),
+        ("Q11", "temples", "Никольский собор (Ярославль)", 39.888, 57.624),
+        ("Q12", "landmarks", "Спасо-Преображенский монастырь (Ярославль)", 39.885, 57.623),
+    ]
+    return RouteMaterials(
+        city="Ярославль",
+        dates="август",
+        provider="fallback",
+        leisure_points=[
+            PoiPoint(
+                poi_id=pid,
+                tag=tag,
+                name=name,
+                coordinates=GeoPoint(lon=lon, lat=lat),
+                maps_url=f"https://example.com/{pid}",
+            )
+            for pid, tag, name, lon, lat in specs
+        ],
+        dining_options=[],
+    )
+
+
+class YaroslavlPartialRebuildTests(unittest.TestCase):
+    def test_liked_route_and_dislikes_yield_diverse_routes(self) -> None:
+        from agents.route_postprocess import build_new_routes_respecting_likes
+        from program.route_feedback import expand_similar_banned_poi
+
+        materials = _yaroslavl_materials()
+        preserved = [
+            TripRouteCase(
+                case_id="A",
+                title="Лёгкая",
+                summary="5",
+                preserved=True,
+                stops=[
+                    RouteStop(order=i + 1, kind="leisure", poi_id=pid, narrative=n)
+                    for i, (pid, n) in enumerate(
+                        [
+                            ("Q1", "Собор"),
+                            ("Q2", "Илья"),
+                            ("Q3", "Стрелка"),
+                            ("Q4", "Музей"),
+                            ("Q5", "Театр"),
+                        ]
+                    )
+                ],
+            )
+        ]
+        banned = expand_similar_banned_poi(materials.leisure_points, {"Q1", "Q6"})
+        program = build_new_routes_respecting_likes(
+            materials,
+            None,
+            preserved,
+            banned_poi_ids=banned,
+        )
+        self.assertEqual(len(program.cases), 3)
+        stop_sets: list[set[str]] = []
+        for case in program.cases:
+            pids = {s.poi_id for s in case.stops if s.kind == "leisure" and s.poi_id}
+            stop_sets.append(pids)
+            self.assertGreaterEqual(len(pids), 2)
+            self.assertFalse(pids & banned)
+            self.assertLessEqual(
+                leisure_overlap_ratio(case, preserved[0]),
+                0.5,
+            )
+        self.assertGreaterEqual(sum(1 for s in stop_sets if len(s) >= 3), 2)
+        self.assertLess(
+            leisure_overlap_ratio(
+                TripRouteCase(case_id="X", title="", summary="", stops=program.cases[0].stops),
+                TripRouteCase(case_id="Y", title="", summary="", stops=program.cases[1].stops),
+            ),
+            1.0,
+        )
+        self.assertNotEqual(stop_sets[0], stop_sets[1])
+        self.assertNotEqual(stop_sets[1], stop_sets[2])
+
+
 if __name__ == "__main__":
     unittest.main()

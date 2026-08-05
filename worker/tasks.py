@@ -1,4 +1,4 @@
-"""RQ worker tasks (LangGraph + city fact)."""
+"""Worker tasks (LangGraph + city fact)."""
 
 from __future__ import annotations
 
@@ -7,10 +7,12 @@ import uuid
 from typing import Any
 
 from agents.llm_context import LlmConfig, run_with_llm_config
+from auth.service import resolve_run_context
 from db.postgres import graph_runs as pg_runs
 from db.postgres._helpers import utc_now
 from db.session import is_postgres_enabled
 from search.context import search_context_scope
+from services.deterministic_runner import run_deterministic_build
 from services.errors import format_runtime_error
 from services.trip_service import TripService
 
@@ -18,15 +20,6 @@ from services.trip_service import TripService
 def _require_pg() -> None:
     if not is_postgres_enabled():
         raise RuntimeError("worker requires DATABASE_URL")
-
-
-def _llm_config_for_user(user_id: int) -> LlmConfig:
-    from auth.service import AuthError, require_user_llm_config
-
-    try:
-        return require_user_llm_config(user_id)
-    except AuthError as exc:
-        raise RuntimeError(str(exc)) from exc
 
 
 def build_routes_task(graph_run_id: str, payload: dict[str, Any]) -> None:
@@ -49,11 +42,15 @@ def build_routes_task(graph_run_id: str, payload: dict[str, Any]) -> None:
     service = TripService()
 
     try:
-        llm_config = _llm_config_for_user(user_id)
+        run_ctx = resolve_run_context(user_id)
         state = service.prepare_continue_trip(trip_id, scope)
         with search_context_scope():
-            with run_with_llm_config(llm_config):
-                result = service.run_graph(state, graph_run_id=graph_run_id)
+            if run_ctx.mode == "none":
+                result = run_deterministic_build(state, graph_run_id=graph_run_id)
+            else:
+                assert run_ctx.llm_config is not None
+                with run_with_llm_config(run_ctx.llm_config):
+                    result = service.run_graph(state, graph_run_id=graph_run_id)
         version_id = result.version_id
         pg_runs.update_graph_run(
             run_uuid,
@@ -73,6 +70,7 @@ def build_routes_task(graph_run_id: str, payload: dict[str, Any]) -> None:
                     "user_id": user_id,
                     "version_id": version_id,
                     "city": str(state.get("city") or ""),
+                    "use_llm": run_ctx.mode != "none",
                 },
             )
     except Exception as exc:
@@ -96,10 +94,15 @@ def city_fact_task(graph_run_id: str, payload: dict[str, Any]) -> None:
     user_id = int(payload["user_id"])
     version_id = int(payload["version_id"])
     city = str(payload["city"])
+    use_llm = bool(payload.get("use_llm", True))
     try:
-        llm_config = _llm_config_for_user(user_id)
-        with run_with_llm_config(llm_config):
-            fact = generate_city_fact(city=city, use_llm=True)
+        if use_llm:
+            run_ctx = resolve_run_context(user_id)
+            assert run_ctx.llm_config is not None
+            with run_with_llm_config(run_ctx.llm_config):
+                fact = generate_city_fact(city=city, use_llm=True)
+        else:
+            fact = generate_city_fact(city=city, use_llm=False)
         patch_itinerary_program(
             version_id,
             {"lifehacks": fact, "city_fact_status": "ready"},
@@ -114,7 +117,7 @@ def city_fact_task(graph_run_id: str, payload: dict[str, Any]) -> None:
 def poi_fact_task(job_id: str, payload: dict[str, Any]) -> None:
     """Async справка по POI (on-demand, глобальный кэш poi_facts)."""
     _require_pg()
-    from agents.poi_fact import generate_poi_fact
+    from agents.poi_fact import POI_FACT_NOT_FOUND, generate_poi_fact, looks_like_city_article
     from db.postgres import poi_facts as pg_poi_facts
     from search.poi_fact_sources import resolve_poi_context
 
@@ -126,15 +129,22 @@ def poi_fact_task(job_id: str, payload: dict[str, Any]) -> None:
     name = str(payload.get("name") or "")
 
     try:
-        llm_config = _llm_config_for_user(user_id)
+        use_llm = resolve_run_context(user_id).mode == "byok"
         ctx = resolve_poi_context(
             trip_id=trip_id,
             city=city,
             poi_id=poi_id or None,
             name=name,
         )
-        with run_with_llm_config(llm_config):
-            result = generate_poi_fact(ctx, use_llm=True)
+        if use_llm:
+            run_ctx = resolve_run_context(user_id)
+            assert run_ctx.llm_config is not None
+            with run_with_llm_config(run_ctx.llm_config):
+                result = generate_poi_fact(ctx, use_llm=True)
+        else:
+            result = generate_poi_fact(ctx, use_llm=False)
+        if not ctx.wikidata_qid and looks_like_city_article(result.text):
+            raise RuntimeError(POI_FACT_NOT_FOUND)
         pg_poi_facts.mark_poi_fact_ready(
             cache_key=cache_key,
             text=result.text,

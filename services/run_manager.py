@@ -6,11 +6,12 @@ import uuid
 from dataclasses import dataclass
 from typing import Literal
 
-from agents.llm_context import LlmConfig
+from auth.service import resolve_run_context
 from db.repository import get_trip
 from db.session import is_postgres_enabled
 from models.state import AgentState
 from services.errors import format_runtime_error
+from services.free_run_quotas import check_and_consume_free_run_quota
 from services.run_quotas import check_and_consume_run_quota
 from services.saas_events import audit
 from services.trip_service import TripService
@@ -84,7 +85,11 @@ class RunManager:
         if trip is None:
             raise ValueError(f"Поездка #{trip_id} не найдена")
         user_id = int(trip["user_id"])
-        check_and_consume_run_quota(user_id=user_id, scope=scope)
+        run_ctx = resolve_run_context(user_id)
+        if run_ctx.mode == "none":
+            check_and_consume_free_run_quota(user_id=user_id)
+        else:
+            check_and_consume_run_quota(user_id=user_id, scope=scope)
         audit(
             action="graph_run.start",
             entity_type="trip",

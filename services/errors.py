@@ -8,6 +8,8 @@ from db.session import is_postgres_enabled
 def format_runtime_error(exc: Exception) -> str:
     """Преобразует типичные сбои LLM API в понятный текст."""
     text = str(exc)
+    if text.startswith("Справка по месту"):
+        return text
     if "length" in text.lower() or "LengthFinishReason" in type(exc).__name__:
         return (
             "Ответ LLM обрезан по лимиту токенов (слишком большой контекст или программа).\n"

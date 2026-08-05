@@ -73,7 +73,36 @@ def _sitelink_title(entity: dict[str, Any], site: str) -> str:
     return ""
 
 
-def fetch_wikipedia_lead(*, title: str, lang: str = "ru") -> str:
+_WIKI_SECTION_RE = re.compile(r"^=+\s*.+?\s*=+$", re.M)
+
+
+def normalize_wiki_title(title: str) -> str:
+    return re.sub(r"\s+", " ", (title or "").strip().casefold().replace("ё", "е"))
+
+
+def clean_wikipedia_plain(text: str) -> str:
+    """Убирает заголовки разделов Wikipedia (== … ==) и лишние пробелы."""
+    blob = _WIKI_SECTION_RE.sub("", (text or "").strip())
+    blob = re.sub(r"\n{3,}", "\n\n", blob)
+    return re.sub(r" +", " ", blob).strip()
+
+
+def trim_wikipedia_text(text: str, max_chars: int, *, ellipsis: bool = True) -> str:
+    blob = clean_wikipedia_plain(text)
+    if len(blob) <= max_chars:
+        return blob
+    trimmed = blob[: max_chars - 1].rsplit(" ", 1)[0].strip()
+    if trimmed.endswith((".", "!", "?", "…")):
+        return trimmed
+    if ellipsis:
+        return trimmed + "…"
+    if trimmed and trimmed[-1].isalnum():
+        trimmed = trimmed.rstrip(".,;:")
+        return trimmed + "."
+    return trimmed
+
+
+def fetch_wikipedia_lead(*, title: str, lang: str = "ru", max_chars: int | None = None) -> str:
     """Первый абзац статьи Wikipedia (REST summary API)."""
     title = (title or "").strip()
     if not title:
@@ -89,9 +118,8 @@ def fetch_wikipedia_lead(*, title: str, lang: str = "ru") -> str:
     if not isinstance(payload, dict):
         return ""
     extract = str(payload.get("extract") or "").strip()
-    if len(extract) > _WIKI_LEAD_MAX:
-        extract = extract[:_WIKI_LEAD_MAX].rsplit(" ", 1)[0] + "…"
-    return extract
+    cap = max_chars if max_chars is not None else _WIKI_LEAD_MAX
+    return trim_wikipedia_text(extract, cap, ellipsis=cap < len(extract))
 
 
 def search_wikipedia_titles(
@@ -128,11 +156,110 @@ def search_wikipedia_titles(
     return titles
 
 
+def city_wikipedia_titles(city: str) -> set[str]:
+    """Названия статей города — их нельзя подставлять как справку по POI."""
+    titles = {normalize_wiki_title(city)}
+    center = resolve_city_center(city)
+    if center is not None:
+        if center.city:
+            titles.add(normalize_wiki_title(center.city))
+        wikidata_id = (center.wikidata_id or "").strip()
+        if wikidata_id:
+            entity = _fetch_entity(wikidata_id)
+            if entity is not None:
+                for site in ("ruwiki", "enwiki"):
+                    title = _sitelink_title(entity, site)
+                    if title:
+                        titles.add(normalize_wiki_title(title))
+    return titles
+
+
+def fetch_wikipedia_for_wikidata(
+    wikidata_id: str,
+    *,
+    lang: str = "ru",
+    max_chars: int = 1400,
+) -> str:
+    """Lead или extract статьи, привязанной к Wikidata QID."""
+    qid = (wikidata_id or "").strip()
+    if not qid:
+        return ""
+    entity = _fetch_entity(qid)
+    if entity is None:
+        return ""
+    for site in ("ruwiki", "enwiki"):
+        title = _sitelink_title(entity, site)
+        if not title:
+            continue
+        page_lang = "ru" if site.startswith("ru") else "en"
+        lead = fetch_wikipedia_lead(title=title, lang=page_lang, max_chars=max_chars)
+        if lead and len(lead) >= 40:
+            return lead
+        extract = fetch_wikipedia_extract(
+            title=title,
+            lang=page_lang,
+            max_chars=max_chars,
+            ellipsis=False,
+        )
+        if extract and len(extract) >= 40:
+            return extract
+    desc = fetch_wikidata_description(qid, lang=lang)
+    return desc if desc and len(desc) >= 40 else ""
+
+
+def fetch_wikipedia_poi_text(
+    *,
+    title: str,
+    lang: str = "ru",
+    max_chars: int = 2200,
+) -> str:
+    """Развёрнутый фрагмент статьи для справки по месту (не только lead)."""
+    extract = fetch_wikipedia_extract(
+        title=title,
+        lang=lang,
+        max_chars=max_chars,
+        ellipsis=False,
+    )
+    if extract and len(extract) >= 40:
+        return extract
+    return fetch_wikipedia_lead(title=title, lang=lang, max_chars=max_chars)
+
+
+def fetch_wikipedia_poi_for_wikidata(
+    wikidata_id: str,
+    *,
+    lang: str = "ru",
+    max_chars: int = 2200,
+) -> str:
+    """Extract статьи по Wikidata QID для справки по POI."""
+    qid = (wikidata_id or "").strip()
+    if not qid:
+        return ""
+    entity = _fetch_entity(qid)
+    if entity is None:
+        return ""
+    for site in ("ruwiki", "enwiki"):
+        title = _sitelink_title(entity, site)
+        if not title:
+            continue
+        page_lang = "ru" if site.startswith("ru") else "en"
+        text = fetch_wikipedia_poi_text(
+            title=title,
+            lang=page_lang,
+            max_chars=max_chars,
+        )
+        if text and len(text) >= 40:
+            return text
+    desc = fetch_wikidata_description(qid, lang=lang)
+    return desc if desc and len(desc) >= 40 else ""
+
+
 def fetch_wikipedia_extract(
     *,
     title: str,
     lang: str = "ru",
     max_chars: int = 1200,
+    ellipsis: bool = True,
 ) -> str:
     """Вводный фрагмент статьи Wikipedia (plain text, включая «История»)."""
     title = (title or "").strip()
@@ -157,9 +284,8 @@ def fetch_wikipedia_extract(
     if not isinstance(page, dict):
         return ""
     extract = str(page.get("extract") or "").strip()
-    if len(extract) > max_chars:
-        extract = extract[:max_chars].rsplit(" ", 1)[0] + "…"
-    return extract
+    extract = clean_wikipedia_plain(extract)
+    return trim_wikipedia_text(extract, max_chars, ellipsis=ellipsis)
 
 
 def _is_admin_only_description(text: str) -> bool:
@@ -193,13 +319,18 @@ def fetch_raw_city_fact(city: str) -> str:
                 if not title:
                     continue
                 lang = "ru" if site.startswith("ru") else "en"
-                wiki_text = fetch_wikipedia_extract(
+                wiki_text = fetch_wikipedia_lead(
                     title=title,
                     lang=lang,
-                    max_chars=1800,
+                    max_chars=2200,
                 )
                 if not wiki_text:
-                    wiki_text = fetch_wikipedia_lead(title=title, lang=lang)
+                    wiki_text = fetch_wikipedia_extract(
+                        title=title,
+                        lang=lang,
+                        max_chars=2800,
+                        ellipsis=False,
+                    )
                 if wiki_text:
                     break
 

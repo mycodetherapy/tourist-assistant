@@ -180,10 +180,10 @@ export function LandingPage() {
             <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6 sm:p-8">
               <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-[#001529]">
                 <KeyOutlined className="text-amber-600" />
-                Ключ LLM-провайдера
+                Ключ LLM-провайдера (опционально)
               </h3>
               <p className="mb-4 text-sm leading-relaxed text-slate-700">
-                Для сборки маршрутов нужен API-ключ от OpenAI-compatible провайдера
+                Для AI-персонализации укажите API-ключ OpenAI-compatible провайдера
                 (по умолчанию —{" "}
                 <a
                   href="https://proxyapi.ru"
@@ -200,8 +200,8 @@ export function LandingPage() {
                 <li className="flex gap-2">
                   <span className="text-amber-600">•</span>
                   <span>
-                    <strong>Зачем:</strong> без ключа {APP_NAME} не соберёт маршруты. Оплата модели —
-                    напрямую у провайдера (BYOK).
+                    <strong>Зачем:</strong> LLM учитывает пожелания; без ключа маршруты строятся
+                    бесплатно алгоритмом (до 30 сборок в сутки).
                   </span>
                 </li>
                 <li className="flex gap-2">

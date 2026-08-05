@@ -14,8 +14,9 @@ import {
 } from "../lib/itemKey.js";
 import {
   AuthError,
-  requireUserLlmConfigured,
+  assertCanStartRun,
 } from "../services/auth.js";
+import { FreeRunQuotaError } from "../services/freeQuotas.js";
 import { RunQuotaError } from "../services/quotas.js";
 import {
   hasActiveRunForTrip,
@@ -27,7 +28,7 @@ import { repairProgramForTrip } from "../services/repairProgram.js";
 import {
   collectRouteStopPoiIds,
   parseNumberedSection,
-  parseRoutesSection,
+  parseProgramRoutes,
 } from "../services/parseProgram.js";
 import {
   geocodePlaces,
@@ -185,6 +186,7 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
           409: ref("ErrorDetail"),
           428: ref("ErrorDetail"),
           429: ref("ErrorDetail"),
+          503: ref("ErrorDetail"),
         },
       },
     },
@@ -200,11 +202,14 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
       const preferences = normalizeTripPreferences(rawPrefs);
       if (body.data.start_run) {
         try {
-          await requireUserLlmConfigured(request.user!.id);
+          await assertCanStartRun(request.user!.id);
         } catch (err) {
           if (err instanceof AuthError) {
-            return reply.code(428).send({
-              detail: { code: "llm_key_required", message: err.message },
+            const code =
+              err.statusCode === 503 ? "ai_platform_unavailable" : "llm_key_required";
+            const status = err.statusCode === 503 ? 503 : 428;
+            return reply.code(status).send({
+              detail: { code, message: err.message },
             });
           }
           throw err;
@@ -243,6 +248,11 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
         try {
           runId = await startRun(tripId, "full");
         } catch (err) {
+          if (err instanceof FreeRunQuotaError) {
+            return reply.code(429).send({
+              detail: { code: "free_run_quota_exceeded", message: err.message },
+            });
+          }
           if (err instanceof RunQuotaError) {
             return reply.code(429).send({
               detail: { code: "run_quota_exceeded", message: err.message },
@@ -452,13 +462,21 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ detail: "Некорректные данные" });
       }
       try {
-        await requireUserLlmConfigured(request.user!.id);
+        await assertCanStartRun(request.user!.id);
         const runId = await startRun(tripId, body.data.scope);
         return { trip_id: tripId, run_id: runId };
       } catch (err) {
         if (err instanceof AuthError) {
-          return reply.code(err.statusCode).send({
-            detail: { code: "llm_key_required", message: err.message },
+          const code =
+            err.statusCode === 503 ? "ai_platform_unavailable" : "llm_key_required";
+          const status = err.statusCode === 503 ? 503 : 428;
+          return reply.code(status).send({
+            detail: { code, message: err.message },
+          });
+        }
+        if (err instanceof FreeRunQuotaError) {
+          return reply.code(429).send({
+            detail: { code: "free_run_quota_exceeded", message: err.message },
           });
         }
         if (err instanceof RunQuotaError) {
@@ -542,11 +560,14 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        await requireUserLlmConfigured(request.user!.id);
+        await assertCanStartRun(request.user!.id);
       } catch (err) {
         if (err instanceof AuthError) {
-          return reply.code(err.statusCode).send({
-            detail: { code: "llm_key_required", message: err.message },
+          const code =
+            err.statusCode === 503 ? "ai_platform_unavailable" : "llm_key_required";
+          const status = err.statusCode === 503 ? 503 : 428;
+          return reply.code(status).send({
+            detail: { code, message: err.message },
           });
         }
         throw err;
@@ -597,6 +618,19 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
       if (!row) {
         return reply.code(404).send({ detail: "Справка не найдена" });
       }
+      if (
+        row.status === "ready" &&
+        row.text &&
+        poiFactsRepo.looksLikeSearchGarbage(row.text)
+      ) {
+        return {
+          cache_key: row.cache_key,
+          name: row.poi_name,
+          status: "failed" as const,
+          text: null,
+          error: poiFactsRepo.POI_FACT_NOT_FOUND,
+        };
+      }
       return poiFactsRepo.toPoiFactResponse(row);
     },
   );
@@ -638,10 +672,7 @@ async function setItemFeedback(
       resolvedKey = makeRouteStopKey(poiId);
     }
   } else {
-    const routesText = String(program.routes_text ?? "");
-    const parsed = routesText
-      ? parseRoutesSection(routesText)
-      : parseNumberedSection(routesText);
+    const parsed = parseProgramRoutes(program);
     const normalizedKey = (body.item_key ?? "").trim();
     if (normalizedKey) {
       for (let i = 0; i < parsed.items.length; i++) {

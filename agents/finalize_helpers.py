@@ -262,8 +262,12 @@ def resolve_routes_program(
         if rebuild_scope == "routes":
             for raw in route_feedback_snapshot.get("liked_cases") or []:
                 preserved.append(TripRouteCase.model_validate(raw))
-    elif rebuild_scope == "routes" and base_program and trip_id is not None:
-        preserved = extract_liked_routes(base_program, int(trip_id))
+    if rebuild_scope == "routes" and base_program and trip_id is not None:
+        seen_ids = {c.case_id for c in preserved}
+        for case in extract_liked_routes(base_program, int(trip_id)):
+            if case.case_id not in seen_ids:
+                preserved.append(case)
+                seen_ids.add(case.case_id)
 
     if trip_id is not None:
         from search.route_materials_store import ensure_route_materials_for_trip

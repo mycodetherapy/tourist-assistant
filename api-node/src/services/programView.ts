@@ -4,7 +4,7 @@ import { listItemFeedback } from "../repos/trips.js";
 import {
   collectRouteStopPoiIds,
   parseNumberedSection,
-  parseRoutesSection,
+  parseProgramRoutes,
 } from "./parseProgram.js";
 
 export type CityFactStatus =
@@ -64,10 +64,19 @@ export async function buildProgramView(
   const programData = normalizeProgram({ ...latest.program });
   const votesByKey = await listItemFeedback(tripId);
 
-  const routesText = String(programData.routes_text ?? "");
-  const routesParsed = routesText
-    ? parseRoutesSection(routesText)
-    : { intro: "", items: [] as string[] };
+  const routesParsed = parseProgramRoutes(programData);
+  const preservedRouteIndices = new Set<number>();
+  const routesRaw = programData.routes;
+  if (routesRaw && typeof routesRaw === "object") {
+    const cases = (routesRaw as { cases?: Array<{ preserved?: boolean }> }).cases;
+    if (Array.isArray(cases)) {
+      cases.forEach((routeCase, index) => {
+        if (routeCase?.preserved) {
+          preservedRouteIndices.add(index);
+        }
+      });
+    }
+  }
   const routesItems: ProgramItemView[] = routesParsed.items.map((text, index) => {
     const key = makeItemKey("routes", text);
     const vote = votesByKey[key];
@@ -75,7 +84,12 @@ export async function buildProgramView(
       index,
       item_key: key,
       text,
-      vote: vote === 1 || vote === -1 ? vote : null,
+      vote:
+        vote === 1 || vote === -1
+          ? vote
+          : preservedRouteIndices.has(index)
+            ? 1
+            : null,
     };
   });
 

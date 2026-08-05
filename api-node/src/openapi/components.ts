@@ -30,6 +30,7 @@ export const errorDetailSchema = z.object({
 });
 
 export const settingsBodySchema = z.object({
+  llm_mode: z.enum(["none", "platform", "byok"]).optional(),
   llm_api_key: z.string().max(256).nullable().optional(),
   llm_base_url: z.string().max(512).nullable().optional(),
   llm_model: z.string().max(128).nullable().optional(),

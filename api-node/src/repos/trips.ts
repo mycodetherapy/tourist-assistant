@@ -286,15 +286,25 @@ export async function countLikedRoutes(
   program: Record<string, unknown>,
 ): Promise<number> {
   const votes = await listItemFeedback(tripId);
-  const routesText = String(program.routes_text ?? "");
-  if (!routesText.trim()) return 0;
-  const { parseRoutesSection } = await import("../services/parseProgram.js");
-  const parsed = parseRoutesSection(routesText);
+  const { parseProgramRoutes } = await import("../services/parseProgram.js");
+  const parsed = parseProgramRoutes(program);
   let count = 0;
   const { makeItemKey } = await import("../lib/itemKey.js");
-  for (const text of parsed.items) {
-    if (votes[makeItemKey("routes", text)] === 1) count += 1;
+  const routesRaw = program.routes;
+  const preservedFlags: boolean[] = [];
+  if (routesRaw && typeof routesRaw === "object") {
+    const cases = (routesRaw as { cases?: Array<{ preserved?: boolean }> }).cases;
+    if (Array.isArray(cases)) {
+      for (const routeCase of cases) {
+        preservedFlags.push(Boolean(routeCase?.preserved));
+      }
+    }
   }
+  parsed.items.forEach((text, index) => {
+    if (votes[makeItemKey("routes", text)] === 1 || preservedFlags[index]) {
+      count += 1;
+    }
+  });
   return count;
 }
 

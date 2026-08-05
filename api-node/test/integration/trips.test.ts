@@ -80,7 +80,7 @@ describe.skipIf(!hasDatabase)("trips integration", () => {
     expect(getB.statusCode).toBe(404);
   });
 
-  it("create trip with start_run requires llm key", async () => {
+  it("create trip with start_run works in free mode", async () => {
     const resp = await app.inject({
       method: "POST",
       url: "/api/trips",
@@ -89,6 +89,42 @@ describe.skipIf(!hasDatabase)("trips integration", () => {
         city: "Казань",
         start_run: true,
       },
+    });
+    expect(resp.statusCode).toBe(201);
+    const body = resp.json() as { trip_id: number; run_id: string | null };
+    expect(body.trip_id).toBeGreaterThan(0);
+    expect(body.run_id).toBeTruthy();
+  });
+
+  it("start run requires llm key in byok mode", async () => {
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/trips",
+      headers: { authorization: `Bearer ${tokenB}` },
+      payload: {
+        city: "Сочи",
+        start_run: false,
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const tripId = (create.json() as { trip_id: number }).trip_id;
+
+    const userRow = (
+      await query<{ id: number }>("SELECT id FROM users WHERE email = $1", [emailB])
+    ).rows[0];
+
+    await query(
+      `INSERT INTO user_settings (user_id, llm_mode, updated_at)
+       VALUES ($1, 'byok', NOW())
+       ON CONFLICT (user_id) DO UPDATE SET llm_mode = 'byok', updated_at = NOW()`,
+      [userRow.id],
+    );
+
+    const resp = await app.inject({
+      method: "POST",
+      url: `/api/trips/${tripId}/runs`,
+      headers: { authorization: `Bearer ${tokenB}` },
+      payload: { scope: "full" },
     });
     expect(resp.statusCode).toBe(428);
     const body = resp.json() as { detail: { code: string } };

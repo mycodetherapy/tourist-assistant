@@ -31,6 +31,10 @@ _TAG_LABELS: dict[str, str] = {
 }
 
 # Мягкие мотивы по ключевым словам в названиях (подсказка LLM, не жёсткое правило).
+# Суффикс «(Город)» в Wikidata/OSM — не тема места, иначе дизлайк одной точки
+# банит весь пул («… (Ярославль)» у всех POI).
+_CITY_SUFFIX_RE = re.compile(r"\s*\([^)]+\)\s*$")
+
 _NAME_THEME_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("собор", "храм", "церк", "монаст", "часовн", "мечет", "синагог"), "культовая архитектура"),
     (("музей", "галере", "выстав"), "музеи и выставки"),
@@ -68,6 +72,8 @@ def _route_votes_by_index(
     trip_id: int,
 ) -> dict[int, int]:
     """item_index -> vote для секции routes."""
+    from program.parse_items import _parse_routes_from_text
+
     votes_by_key = list_item_feedback(trip_id)
     parsed = parse_program_sections(program)
     out: dict[int, int] = {}
@@ -75,26 +81,54 @@ def _route_votes_by_index(
         key = make_item_key("routes", text)
         if key in votes_by_key:
             out[index] = int(votes_by_key[key])
+
+    # Legacy: голоса через api-node по routes_text (##) до выравнивания item_key.
+    routes_text = str(program.get("routes_text") or "").strip()
+    if routes_text:
+        text_items = _parse_routes_from_text(routes_text).items
+        cases = _program_route_cases(program)
+        for index, _case in enumerate(cases):
+            if index in out or index >= len(text_items):
+                continue
+            legacy_key = make_item_key("routes", text_items[index])
+            if legacy_key in votes_by_key:
+                out[index] = int(votes_by_key[legacy_key])
     return out
 
 
 def count_liked_routes(program: dict[str, Any], trip_id: int) -> int:
+    cases = _program_route_cases(program)
+    if not cases:
+        return 0
     votes = _route_votes_by_index(program, trip_id)
-    return sum(1 for vote in votes.values() if vote == 1)
+    return sum(
+        1
+        for index, case in enumerate(cases)
+        if _route_is_liked(case, index, votes)
+    )
+
+
+def _route_is_liked(
+    case: TripRouteCase,
+    index: int,
+    votes: dict[int, int],
+) -> bool:
+    """👍 в БД или preserved=True после частичного пересбора."""
+    return bool(case.preserved) or votes.get(index) == 1
 
 
 def extract_liked_routes(
     base_program: dict[str, Any],
     trip_id: int,
 ) -> list[TripRouteCase]:
-    """Маршруты с 👍 из текущей программы (порядок как в UI)."""
+    """Маршруты с 👍 или preserved из текущей программы (порядок как в UI)."""
     cases = _program_route_cases(base_program)
     if not cases:
         return []
     votes = _route_votes_by_index(base_program, trip_id)
     liked: list[TripRouteCase] = []
     for index, case in enumerate(cases):
-        if votes.get(index) == 1:
+        if _route_is_liked(case, index, votes):
             liked.append(case.model_copy(update={"preserved": True}))
     return liked[:MAX_LIKED_ROUTES_PER_TRIP]
 
@@ -279,7 +313,8 @@ def rebuild_poi_preferences(
         expanded_ban = expand_similar_banned_poi(
             materials.leisure_points, seed_disliked
         )
-    banned = expanded_ban | collect_leisure_poi_ids(preserved)
+    # Лайкнутый маршрут сохраняется отдельно; его POI не hard-ban — только 👎 и overlap <50%.
+    banned = expanded_ban
     preferred = set(poi_liked) - banned
     if materials is not None:
         pool = {p.poi_id for p in materials.leisure_points}
@@ -311,10 +346,14 @@ def expand_similar_banned_poi(
     return banned
 
 
+def _strip_city_suffix(name: str) -> str:
+    return _CITY_SUFFIX_RE.sub("", name).strip()
+
+
 def _name_tokens(name: str) -> set[str]:
     """Значимые токены названия (для связи «Собор … Ушакова» и «Памятник Ушакову»)."""
     tokens: set[str] = set()
-    for word in re.findall(r"[а-яёa-z]{4,}", name.lower()):
+    for word in re.findall(r"[а-яёa-z]{4,}", _strip_city_suffix(name).lower()):
         tokens.add(word)
         if len(word) >= 6 and word[-1] in "ауюыиь":
             tokens.add(word[:-1])
@@ -324,10 +363,9 @@ def _name_tokens(name: str) -> set[str]:
 
 
 def _names_share_theme(a: str, b: str) -> bool:
-    al, bl = a.lower(), b.lower()
+    al, bl = _strip_city_suffix(a).lower(), _strip_city_suffix(b).lower()
     for keywords, _theme in _NAME_THEME_HINTS:
-        hits = [kw for kw in keywords if kw in al or kw in bl]
-        if len(hits) >= 2 or (hits and any(kw in al and kw in bl for kw in keywords)):
+        if any(kw in al and kw in bl for kw in keywords):
             return True
     if _name_tokens(a) & _name_tokens(b):
         return True
@@ -408,7 +446,7 @@ def build_route_feedback_context(
     disliked: list[TripRouteCase] = []
     for index, case in enumerate(cases):
         vote = votes.get(index)
-        if vote == 1:
+        if _route_is_liked(case, index, votes):
             liked.append(case.model_copy(update={"preserved": True}))
         elif vote == -1:
             disliked.append(case)
@@ -426,9 +464,7 @@ def build_route_feedback_context(
         trip_id, materials, preserved_for_ban, disliked_routes=disliked
     )
     preserve_liked = rebuild_scope == "routes" and bool(liked)
-    forbidden_ids = sorted(
-        (collect_leisure_poi_ids(liked) | banned) if preserve_liked else banned
-    )
+    forbidden_ids = sorted(banned)
 
     parts: list[str] = [
         "\n--- Оценки пользователя по маршрутам и остановкам ---",
@@ -465,9 +501,9 @@ def build_route_feedback_context(
         aggregate = _aggregate_liked_themes(liked, poi_index)
         if aggregate:
             parts.append(aggregate)
-        if forbidden_ids and preserve_liked:
+        if forbidden_ids:
             parts.append(
-                "Запрещённые poi_id (уже в сохранённых маршрутах): "
+                "Запрещённые poi_id (дизлайк и похожие места): "
                 + ", ".join(forbidden_ids)
             )
         if preserve_liked:
@@ -500,6 +536,37 @@ def collect_leisure_poi_ids(cases: list[TripRouteCase]) -> set[str]:
             if stop.kind == "leisure" and stop.poi_id:
                 out.add(stop.poi_id)
     return out
+
+
+def sync_preserved_route_feedback(
+    trip_id: int,
+    program: dict[str, Any],
+    *,
+    itinerary_version_id: int | None = None,
+) -> None:
+    """Восстанавливает 👍 для preserved-маршрутов после смены item_key."""
+    from db import upsert_item_feedback
+    from program.item_key import make_item_key
+    from program.parse_items import parse_program_sections
+
+    cases = _program_route_cases(program)
+    if not cases:
+        return
+    parsed = parse_program_sections(program)
+    for index, case in enumerate(cases):
+        if not case.preserved:
+            continue
+        if index >= len(parsed.routes.items):
+            continue
+        key = make_item_key("routes", parsed.routes.items[index])
+        upsert_item_feedback(
+            trip_id,
+            itinerary_version_id,
+            "routes",
+            index,
+            key,
+            1,
+        )
 
 
 def merge_preserved_with_new_routes(

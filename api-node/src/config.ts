@@ -46,6 +46,12 @@ export const config = {
   runQuotasEnabled: !["0", "false", "no", "off"].includes(
     (process.env.RUN_QUOTAS_ENABLED ?? "true").trim().toLowerCase(),
   ),
+  freeRunQuotaPerDay: Number(process.env.FREE_RUN_QUOTA_PER_DAY ?? 30),
+  freeRunQuotaWindowSec: Number(process.env.FREE_RUN_QUOTA_WINDOW_SEC ?? 86400),
+  freeRunQuotasEnabled: !["0", "false", "no", "off"].includes(
+    (process.env.FREE_RUN_QUOTAS_ENABLED ?? "true").trim().toLowerCase(),
+  ),
+  estimatedAiRunCostRub: Number(process.env.ESTIMATED_AI_RUN_COST_RUB ?? 4),
   graphRunStaleSec: Number(process.env.GRAPH_RUN_STALE_SEC ?? 600),
   yandexMapsApiKey: (process.env.YANDEX_MAPS_API_KEY ?? "").trim(),
   googleClientId: (process.env.GOOGLE_CLIENT_ID ?? "").trim(),

@@ -13,7 +13,7 @@ from search.wikidata.city_description import fetch_raw_city_fact
 CityFactStatus = Literal["pending", "ready", "failed", "skipped"]
 
 _MIN_CHARS = 280
-_MAX_CHARS = 1400
+_MAX_CHARS = 2200
 
 _URL_RE = re.compile(r"https?://", re.I)
 _MUSEUM_LIST_RE = re.compile(
@@ -97,13 +97,17 @@ def looks_like_abstract_city_fact(text: str) -> bool:
 
 
 def _fallback_fact(city: str, raw: str) -> str:
-    """Без LLM: вырезает туристически полезный фрагмент из Wikipedia lead."""
+    """Без LLM: связный текст из Wikipedia lead без обрыва на «…»."""
+    from search.wikidata.city_description import clean_wikipedia_plain
+
     text = (raw or "").strip()
-    wiki_match = re.search(r"(?m)^Wikipedia:\s*(.+)$", text)
+    wiki_match = re.search(r"(?m)^Wikipedia:\s*(.+)$", text, re.S)
     if wiki_match:
         text = wiki_match.group(1).strip()
     else:
         text = re.sub(r"(?m)^(Город|Известные места|Wikidata|Регион):.*$", "", text).strip()
+
+    text = clean_wikipedia_plain(text)
 
     if not text:
         landmarks = re.search(r"Известные места \(Wikidata\):\s*(.+)$", raw or "", re.M)
@@ -120,12 +124,15 @@ def _fallback_fact(city: str, raw: str) -> str:
                 f"и знакомства с местной историей."
             )
 
-    parts = re.split(r"(?<=[.!?…])\s+", text)
-    short = " ".join(parts[:3]).strip()
-    if len(short) < _MIN_CHARS and len(parts) > 3:
-        short = " ".join(parts[:4]).strip()
+    parts = [p.strip() for p in re.split(r"(?<=[.!?…])\s+", text) if p.strip()]
+    parts = [p for p in parts if not p.startswith("==")]
+    short = " ".join(parts[:10]).strip()
+    if len(short) < _MIN_CHARS and len(parts) > 10:
+        short = " ".join(parts[:14]).strip()
     if len(short) > _MAX_CHARS:
-        short = short[: _MAX_CHARS - 1].rsplit(" ", 1)[0] + "."
+        short = short[:_MAX_CHARS].rsplit(" ", 1)[0].strip()
+        if short and short[-1].isalnum():
+            short = short.rstrip(".,;:") + "."
     if len(short) < _MIN_CHARS:
         short = f"{city}: {short}"[:_MAX_CHARS]
     return short.strip()

@@ -137,14 +137,19 @@ export interface AuthResponse {
   user: UserInfo;
 }
 
+export type LlmMode = "none" | "platform" | "byok";
+
 export interface SettingsResponse {
+  llm_mode: LlmMode;
   llm_key_configured: boolean;
   llm_key_preview: string | null;
   llm_base_url: string;
   llm_model: string;
+  estimated_ai_run_cost_rub: number;
 }
 
 export interface UpdateSettingsPayload {
+  llm_mode?: LlmMode;
   llm_api_key?: string;
   llm_base_url?: string;
   llm_model?: string;

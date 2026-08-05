@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import os
 import unittest
 
-from db import create_trip, save_itinerary_version, upsert_item_feedback
-from models.routes import GeoPoint, PoiPoint, RouteProgram, RouteStop, TripRouteCase
+from langchain_core.messages import ToolMessage
+
+from db import (
+    create_trip,
+    get_latest_itinerary,
+    save_itinerary_version,
+    save_section_artifact,
+    upsert_item_feedback,
+)
+from models.routes import GeoPoint, PoiPoint, RouteMaterials, RouteProgram, RouteStop, TripRouteCase
 from program.item_key import make_item_key
 from program.parse_items import parse_program_sections
 from program.route_feedback import (
@@ -15,9 +24,56 @@ from program.route_feedback import (
     count_liked_routes,
     extract_liked_routes,
     merge_preserved_with_new_routes,
+    snapshot_route_feedback,
 )
+from search.route_materials_store import ROUTE_MATERIALS_SECTION
 from services.trip_service import TripService
 from tests.db_test_helpers import skip_unless_pg, truncate_pg_tables
+from tests.test_item_feedback import _sample_routes_program
+
+
+def _route_materials() -> RouteMaterials:
+    base = [
+        ("l1", "museums", "Национальный музей", 45.20, 54.20),
+        ("l2", "landmarks", "Площадь", 45.21, 54.21),
+        ("l3", "parks", "Парк Победы", 45.22, 54.22),
+        ("l4", "landmarks", "Музей искусств", 45.23, 54.23),
+        ("l5", "embankments", "Набережная", 45.24, 54.24),
+        ("l6", "monuments", "Памятник", 45.25, 54.25),
+        ("l7", "theaters", "Театр", 45.26, 54.26),
+        ("l8", "landmarks", "Собор", 45.27, 54.27),
+    ]
+    return RouteMaterials(
+        city="Казань",
+        dates="июль",
+        provider="fallback",
+        leisure_points=[
+            PoiPoint(
+                poi_id=pid,
+                tag=tag,
+                name=name,
+                coordinates=GeoPoint(lon=lon, lat=lat),
+                maps_url=f"https://example.com/{pid}",
+            )
+            for pid, tag, name, lon, lat in base
+        ],
+        dining_options=[],
+    )
+
+
+def _tool_messages(materials: RouteMaterials) -> list[ToolMessage]:
+    payload = {
+        "materials": materials.model_dump(),
+        "materials_digest": ", ".join(p.name for p in materials.leisure_points[:5]),
+        "leisure_count": len(materials.leisure_points),
+    }
+    return [
+        ToolMessage(
+            content=json.dumps(payload, ensure_ascii=False),
+            tool_call_id="m",
+            name="search_route_materials",
+        )
+    ]
 
 
 def _sample_program() -> dict:
@@ -122,8 +178,6 @@ class TestRouteFeedback(unittest.TestCase):
         self.assertIn("Музей", ctx.llm_instructions)
         self.assertIn("Площадь", ctx.llm_instructions)
         self.assertIn("мотив", ctx.llm_instructions.lower())
-        self.assertIn("Запрещённые poi_id", ctx.llm_instructions)
-        self.assertIn("l1", ctx.llm_instructions)
         self.assertIn("вдохновения", ctx.llm_instructions)
 
     def test_full_rebuild_soft_route_like_hints(self) -> None:
@@ -172,6 +226,71 @@ class TestRouteFeedback(unittest.TestCase):
                     item_index=2,
                     vote=1,
                 )
+
+    def test_extract_liked_from_preserved_flag_without_vote(self) -> None:
+        program = dict(self.program)
+        routes = RouteProgram.model_validate(program["routes"])
+        cases = [
+            routes.cases[0].model_copy(update={"preserved": True}),
+            *routes.cases[1:],
+        ]
+        program["routes"] = RouteProgram(cases=cases).model_dump()
+        liked = extract_liked_routes(program, self.trip_id)
+        self.assertEqual(len(liked), 1)
+        self.assertEqual(liked[0].case_id, "A")
+
+    def test_double_partial_rebuild_keeps_liked_routes(self) -> None:
+        from agents.finalize_helpers import resolve_routes_program
+        from agents.route_postprocess import format_routes_text
+
+        materials = _route_materials()
+        save_section_artifact(
+            self.trip_id,
+            ROUTE_MATERIALS_SECTION,
+            {"schema_version": 1, "materials": materials.model_dump()},
+            digest="Казань POI",
+        )
+        self._like_route_index(0)
+        messages = _tool_messages(materials)
+
+        snap = snapshot_route_feedback(self.program, self.trip_id, "routes")
+        assert snap is not None
+        routes1, routes_text1 = resolve_routes_program(
+            messages,
+            None,
+            base_program=self.program,
+            trip_id=self.trip_id,
+            expected_city="Казань",
+            rebuild_scope="routes",
+            route_feedback_snapshot=snap,
+        )
+        prog1 = {
+            **self.program,
+            "routes": routes1.model_dump(),
+            "routes_text": routes_text1,
+        }
+        save_itinerary_version(self.trip_id, prog1, scope="routes")
+
+        base2 = get_latest_itinerary(self.trip_id)["program"]
+        self.assertTrue(any(c.get("preserved") for c in base2["routes"]["cases"]))
+        snap2 = snapshot_route_feedback(base2, self.trip_id, "routes")
+        assert snap2 is not None
+        self.assertGreaterEqual(len(snap2["liked_cases"]), 1)
+
+        routes2, _ = resolve_routes_program(
+            messages,
+            None,
+            base_program=base2,
+            trip_id=self.trip_id,
+            expected_city="Казань",
+            rebuild_scope="routes",
+            route_feedback_snapshot=snap2,
+        )
+        case_ids = [c.case_id for c in routes2.cases]
+        self.assertIn("A", case_ids)
+        self.assertGreaterEqual(len(routes2.cases), 4)
+        preserved_count = sum(1 for c in routes2.cases if c.preserved)
+        self.assertGreaterEqual(preserved_count, 1)
 
 
 class TestSectionQualityPreserved(unittest.TestCase):

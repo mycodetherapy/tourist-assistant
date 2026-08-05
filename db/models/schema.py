@@ -51,6 +51,7 @@ class UserSettings(Base):
     llm_api_key_enc: Mapped[str | None] = mapped_column(Text)
     llm_base_url: Mapped[str | None] = mapped_column(Text)
     llm_model: Mapped[str | None] = mapped_column(Text)
+    llm_mode: Mapped[str] = mapped_column(Text, nullable=False, server_default="none")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     user: Mapped[User] = relationship(back_populates="settings")

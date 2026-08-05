@@ -14,6 +14,7 @@ export interface UserSettingsRow {
   llm_api_key_enc: string | null;
   llm_base_url: string | null;
   llm_model: string | null;
+  llm_mode: string;
   updated_at: string;
 }
 
@@ -100,13 +101,17 @@ export async function getUserSettings(
   userId: number,
 ): Promise<UserSettingsRow | null> {
   const { rows } = await query<UserSettingsRow>(
-    `SELECT user_id, llm_api_key_enc, llm_base_url, llm_model, updated_at
+    `SELECT user_id, llm_api_key_enc, llm_base_url, llm_model, llm_mode, updated_at
      FROM user_settings WHERE user_id = $1`,
     [userId],
   );
   const row = rows[0];
   if (!row) return null;
-  return { ...row, updated_at: toIso(row.updated_at) };
+  return {
+    ...row,
+    llm_mode: row.llm_mode || "none",
+    updated_at: toIso(row.updated_at),
+  };
 }
 
 export async function upsertUserSettings(
@@ -115,6 +120,7 @@ export async function upsertUserSettings(
     llm_api_key_enc?: string | null;
     llm_base_url?: string | null;
     llm_model?: string | null;
+    llm_mode?: string | null;
     clear_llm_key?: boolean;
   },
 ): Promise<UserSettingsRow> {
@@ -130,16 +136,24 @@ export async function upsertUserSettings(
       : (existing?.llm_base_url ?? null);
   const model =
     fields.llm_model !== undefined ? fields.llm_model : (existing?.llm_model ?? null);
+  let llmMode =
+    fields.llm_mode !== undefined && fields.llm_mode !== null
+      ? fields.llm_mode
+      : (existing?.llm_mode ?? "none");
+  if (fields.clear_llm_key && llmMode === "byok") {
+    llmMode = "none";
+  }
   const now = new Date();
   await query(
-    `INSERT INTO user_settings (user_id, llm_api_key_enc, llm_base_url, llm_model, updated_at)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO user_settings (user_id, llm_api_key_enc, llm_base_url, llm_model, llm_mode, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (user_id) DO UPDATE SET
        llm_api_key_enc = EXCLUDED.llm_api_key_enc,
        llm_base_url = EXCLUDED.llm_base_url,
        llm_model = EXCLUDED.llm_model,
+       llm_mode = EXCLUDED.llm_mode,
        updated_at = EXCLUDED.updated_at`,
-    [userId, enc, baseUrl, model, now],
+    [userId, enc, baseUrl, model, llmMode, now],
   );
   const row = await getUserSettings(userId);
   if (!row) throw new Error("settings upsert failed");

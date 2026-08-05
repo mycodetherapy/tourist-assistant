@@ -6,8 +6,10 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from agents.poi_fact import (
+    POI_FACT_NOT_FOUND,
     generate_poi_fact,
     generate_poi_fact_llm,
+    fetch_poi_fact_wikipedia,
     is_valid_poi_fact,
     looks_like_city_article,
     poi_fact_user_prompt,
@@ -18,6 +20,7 @@ from search.poi_fact_sources import (
     infer_source_kind,
     normalize_cache_key,
 )
+from search.wikidata.city_description import normalize_wiki_title
 
 
 class TestPoiFactCacheKey(unittest.TestCase):
@@ -106,6 +109,85 @@ class TestPoiFactLlm(unittest.TestCase):
         self.assertTrue(result.used_llm)
         self.assertEqual(result.source_kind, "llm")
         self.assertIn("театр", result.text.lower())
+
+
+class TestPoiFactWikipedia(unittest.TestCase):
+    @patch("search.wikidata.city_description.search_wikipedia_titles")
+    @patch("search.wikidata.city_description.city_wikipedia_titles")
+    def test_skips_city_article_in_search(
+        self,
+        mock_city_titles,
+        mock_search,
+    ) -> None:
+        mock_city_titles.return_value = {normalize_wiki_title("Йошкар-Ола")}
+        mock_search.side_effect = [
+            [
+                "Йошкар-Ола",
+                "Национальный музей Республики Марий Эл",
+            ],
+            [],
+        ]
+
+        city_text = (
+            "город в России, столица Республики Марий Эл, административный центр "
+            "городского округа, население 285219"
+        )
+        museum_text = (
+            "Национальный музей Республики Марий Эл открыт в 1959 году в Йошкар-Оле. "
+            "Экспозиция рассказывает об истории марийского народа, ремёслах и "
+            "культуре региона; в фондах более 100000 предметов."
+        )
+
+        def _extract(*, title: str, max_chars: int = 2200, lang: str = "ru", ellipsis: bool = False):
+            if title == "Йошкар-Ола":
+                return city_text
+            if "музей" in title.lower():
+                return museum_text
+            return ""
+
+        ctx = PoiFactContext(
+            cache_key="search_test",
+            poi_id="osm_node_1",
+            name="Национальный музей",
+            city="Йошкар-Ола",
+            source_kind="osm",
+            wikidata_qid=None,
+        )
+        with patch("search.wikidata.city_description.fetch_wikipedia_extract", side_effect=_extract):
+            with patch("search.wikidata.city_description.fetch_wikipedia_lead", return_value=""):
+                text = fetch_poi_fact_wikipedia(ctx)
+        self.assertIn("музей", text.lower())
+        self.assertNotIn("столица республики", text.lower())
+
+    @patch("search.wikidata.city_description.fetch_wikipedia_poi_for_wikidata")
+    def test_wikidata_path_without_name_match(self, mock_wiki) -> None:
+        mock_wiki.return_value = (
+            "Академический русский театр драмы имени Георгия Константинова — "
+            "государственное автономное учреждение культуры Республики Марий Эл."
+        )
+        ctx = PoiFactContext(
+            cache_key="Q4059185",
+            poi_id="Q4059185",
+            name="Академический русский театр драмы им. Георгия Константинова",
+            city="Йошкар-Ола",
+            source_kind="wikidata",
+            wikidata_qid="Q4059185",
+        )
+        text = fetch_poi_fact_wikipedia(ctx)
+        self.assertIn("театр", text.lower())
+
+    @patch("search.wikidata.city_description.search_wikipedia_titles", return_value=[])
+    def test_search_without_article_fails(self, _mock_search) -> None:
+        ctx = PoiFactContext(
+            cache_key="search_test",
+            poi_id="osm_node_1",
+            name="М. Шкетану",
+            city="Йошкар-Ола",
+            source_kind="osm",
+            wikidata_qid=None,
+        )
+        with self.assertRaisesRegex(RuntimeError, POI_FACT_NOT_FOUND):
+            fetch_poi_fact_wikipedia(ctx)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,7 @@
 import { query } from "../db/pool.js";
 
+export const POI_FACT_NOT_FOUND = "Справка по месту не найдена в Wikipedia";
+
 export type PoiFactStatus = "pending" | "ready" | "failed";
 
 export interface PoiFactRow {
@@ -91,6 +93,7 @@ export function toPoiFactResponse(row: PoiFactRow) {
 export function looksLikeSearchGarbage(text: string): boolean {
   const blob = (text || "").trim();
   if (!blob) return true;
+  if (blob.length < 280) return true;
   if (
     /столица республики|административный центр городского округа|население города/i.test(
       blob,

@@ -22,7 +22,8 @@
 ### Требования
 
 - Python **3.10+** (работает на 3.9+)
-- API-ключ **LLM-провайдера** (по умолчанию [ProxyAPI](https://proxyapi.ru); также OpenRouter и др.)
+- PostgreSQL, Redis (для API/worker)
+- Опционально: API-ключ LLM в **Настройках** (BYOK) для AI-персонализации
 
 ### Быстрый старт (Docker)
 
@@ -41,7 +42,7 @@ UI: [http://localhost:5173](http://localhost:5173) — **локальный** `n
 
 ### Локальная разработка (API + React)
 
-Требования: Python 3.10+, Node.js 20+, Postgres и Redis. В `.env`: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). API-ключ LLM каждый пользователь задаёт в **Настройках** (BYOK). Для `python -m eval --with-llm` нужен `LLM_API_KEY` в `.env`.
+Требования: Python 3.10+, Node.js 20+, Postgres и Redis. В `.env`: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY` (см. `.env.example`). По умолчанию маршруты собираются **бесплатно алгоритмом** (до 30 сборок/сутки); опционально — **BYOK** (свой API-ключ LLM в **Настройках**). Для `python -m eval --with-llm` нужен `LLM_API_KEY` в `.env`.
 
 **Инфра + API + worker в Docker, фронт локально (рекомендуется для разработки UI):**
 
@@ -83,7 +84,7 @@ npm install
 npm run dev
 ```
 
-Откройте **https://localhost:5173** (Vite dev — HTTPS; `http://` не работает). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг **Прогуляй**; для работы нужны **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth), затем в **Настройках** — API-ключ LLM (Base URL, модель). Список прогулок — `/trips`.
+Откройте **https://localhost:5173** (Vite dev — HTTPS; `http://` не работает). Vite проксирует `/api` на `http://127.0.0.1:8001` (api-node). На главной (`/`) — лендинг **Прогуляй**; **регистрация** (`/register`) или **вход** (`/login`, в т.ч. Google OAuth) — и можно сразу создавать прогулки. В **Настройках** — режим AI: бесплатный алгоритм (по умолчанию) или BYOK. Список прогулок — `/trips`.
 
 **Проверка с телефона (PWA):**
 
@@ -180,7 +181,7 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 | Экран                  | Действие                                                                                                                                                                                                                                        |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Вход / регистрация** | Email+пароль или Google; JWT в `localStorage`                                                                                                                                                                                                   |
-| **Настройки**          | BYOK: API key LLM, Base URL, модель (шифруется в Postgres)                                                                                                                                                                                      |
+| **Настройки**          | Режим AI: `none` (бесплатный алгоритм, 30/сутки), `byok` (свой ключ), `platform` (скоро). BYOK: API key, Base URL, модель |
 | **Список прогулок**    | Только прогулки текущего пользователя                                                                                                                                                                                                           |
 | **Новая прогулка**     | Wizard: город → запуск → фоновая сборка (polling 1–2 мин)                                                                                                                                                                                       |
 | **Карточка прогулки**  | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`); пересбор маршрутов одной кнопкой |
@@ -410,9 +411,11 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 
 | Переменная                                  | Обязательно | Описание                                                                                                                       |
 | ------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `LLM_API_KEY`                               | Нет\*       | Для `python -m eval --with-llm` и dev-скриптов; веб-API использует BYOK в профиле                                              |
+| `LLM_API_KEY`                               | Нет\*       | Для `python -m eval --with-llm` и dev-скриптов; в prod worker использует BYOK пользователя или алгоритм (free)                  |
 | `JWT_SECRET`                                | Да\*\*      | Секрет подписи JWT (api-node)                                                                                                  |
 | `SETTINGS_ENCRYPTION_KEY`                   | Да\*\*      | Fernet-ключ шифрования BYOK в БД (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
+| `FREE_RUN_QUOTA_PER_DAY`                    | Нет         | Лимит бесплатных сборок/сутки на пользователя (default 30)                                                                     |
+| `ESTIMATED_AI_RUN_COST_RUB`                 | Нет         | Оценка стоимости AI-прогона для UI (default 4)                                                                                   |
 | `JWT_ACCESS_TTL_MINUTES`                    | Нет         | Срок жизни access token (по умолчанию 60)                                                                                      |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет         | Google OAuth (опционально). Один OAuth client — несколько **Authorized redirect URIs** в Google Console                        |
 | `GOOGLE_REDIRECT_URI`                       | Нет         | Fallback; в OAuth `redirect_uri` = `{origin фронта}/api/auth/google/callback` (см. ниже)                                       |
@@ -572,7 +575,7 @@ python3 scripts/render_graph.py
 | `writer`                 | `agents/nodes.py`                                  | Structured output → маршруты (`RoutesDraft`), merge; факт о городе — не здесь                        |
 | `critic`                 | `agents/critic.py`                                 | Детерминированные проверки; retry: tools → `researcher`, качество программы → `writer`               |
 | _(async)_ `city_fact`    | `agents/city_fact.py`, `services/city_fact_job.py` | Wikidata/Nominatim → LLM-polish; патч `lifehacks` + `city_fact_status` в SQLite параллельно с графом |
-| _(on-demand)_ `poi_fact` | `agents/poi_fact.py`, `poi_facts`                  | Клик по остановке → LLM-справка по промпту «В городе X есть Y…»; кэш в Postgres                      |
+| _(on-demand)_ `poi_fact` | `agents/poi_fact.py`, `poi_facts`                  | Клик по остановке → Wikipedia (free) или LLM (BYOK); кэш в Postgres                                 |
 
 **Инструменты** (`search/tools.py`):
 
@@ -605,7 +608,7 @@ python3 scripts/render_graph.py
 
 ### Кто будет пользоваться агентом?
 
-**Частные путешественники** через [progulyai.ru](https://progulyai.ru): регистрация, BYOK LLM (ProxyAPI/OpenRouter и др.), создание прогулки и пересбор маршрутов.
+**Частные путешественники** через [progulyai.ru](https://progulyai.ru): регистрация, бесплатные маршруты из коробки; опционально BYOK LLM (ProxyAPI/OpenRouter) для AI-персонализации.
 
 ### С какими внешними системами и данными работает агент?
 
@@ -664,7 +667,7 @@ python3 scripts/render_graph.py
 
 | Критерий                           | Приемлемый результат                                                                                                                                                                                                           |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Полнота программы**              | 3 варианта маршрута A/B/C; факт о городе 280–1400 символов с датами и местами; справка по POI 300–2200 символов (LLM, on-demand)                                                                                               |
+| **Полнота программы**              | 3 варианта маршрута A/B/C; факт о городе 280–2200 символов; справка по POI до 2200 символов (Wikipedia или LLM, on-demand)                                                                                                       |
 | **Опора на поиск**                 | Маршруты A/B/C: сложность по **протяжённости** (A ~2–3.5 км, B ~4–5.5, C ~6–8.5), до 8 плотных leisure-точек; без повторов названий; `maps_route_url` по координатам (иногда кольцевой); POI только из Wikidata/discovery-пула |
 | **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят                                                                                                                                          |
 

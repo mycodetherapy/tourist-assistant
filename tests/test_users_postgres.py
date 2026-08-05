@@ -57,6 +57,13 @@ class PostgresUsersTests(unittest.TestCase):
         cleared = get_user_settings(user.id)
         assert cleared is not None
         self.assertIsNone(cleared.llm_api_key_enc)
+        self.assertEqual(cleared.llm_mode, "none")
+
+    def test_default_llm_mode_none(self) -> None:
+        user = create_user(email="mode@test.local")
+        self.assertIsNone(get_user_settings(user.id))
+        row = upsert_user_settings(user.id, llm_mode="byok")
+        self.assertEqual(row.llm_mode, "byok")
 
 
 if __name__ == "__main__":
