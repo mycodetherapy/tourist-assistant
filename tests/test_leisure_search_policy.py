@@ -11,6 +11,49 @@ from search.yandex.leisure_search import search_leisure_points
 
 
 class LeisureSearchPolicyTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        from search.context import clear_search_context
+
+        clear_search_context()
+
+    @patch("search.yandex.leisure_search.fetch_wikidata_leisure")
+    @patch("search.yandex.leisure_search.fetch_city_pack_poi")
+    @patch("search.yandex.leisure_search.is_pack_ready", return_value=True)
+    @patch("search.yandex.leisure_search.resolve_city_center")
+    def test_free_tier_skips_city_pack(
+        self,
+        mock_center,
+        _mock_ready,
+        mock_pack_poi,
+        mock_wikidata,
+    ) -> None:
+        from search.context import set_poi_source_policy
+
+        mock_center.return_value = CityCenter(
+            city="Казань",
+            lon=49.12,
+            lat=55.79,
+            bbox=(48.9, 55.6, 49.3, 56.0),
+            wikidata_id="Q4240",
+            display_name="Казань",
+        )
+        mock_wikidata.return_value = [
+            PoiPoint(
+                poi_id="Q1",
+                tag="landmarks",
+                name="Кремль",
+                coordinates=GeoPoint(lon=49.12, lat=55.79),
+                maps_url="https://yandex.ru/maps",
+            )
+        ]
+        set_poi_source_policy(use_city_pack=False)
+        result = search_leisure_points(city="Казань", categories=[])
+        mock_pack_poi.assert_not_called()
+        mock_wikidata.assert_called_once()
+        self.assertIsNone(result.pack_status)
+        self.assertFalse(result.poi_sources["city_pack_enabled"])
+        self.assertEqual(result.points[0].poi_id, "Q1")
+
     @patch("search.yandex.leisure_search.fetch_wikidata_leisure")
     @patch("search.yandex.leisure_search.fetch_city_pack_poi")
     @patch("search.yandex.leisure_search.is_pack_ready", return_value=False)

@@ -11,7 +11,7 @@ from auth.service import resolve_run_context
 from db.postgres import graph_runs as pg_runs
 from db.postgres._helpers import utc_now
 from db.session import is_postgres_enabled
-from search.context import search_context_scope
+from search.context import search_context_scope, set_poi_source_policy
 from services.deterministic_runner import run_deterministic_build
 from services.errors import format_runtime_error
 from services.trip_service import TripService
@@ -44,7 +44,8 @@ def build_routes_task(graph_run_id: str, payload: dict[str, Any]) -> None:
     try:
         run_ctx = resolve_run_context(user_id)
         state = service.prepare_continue_trip(trip_id, scope)
-        with search_context_scope():
+        with search_context_scope(state):
+            set_poi_source_policy(use_city_pack=run_ctx.mode != "none")
             if run_ctx.mode == "none":
                 result = run_deterministic_build(state, graph_run_id=graph_run_id)
             else:

@@ -127,7 +127,7 @@ npm run dev
 
 ### City pack (POI из OSM-выжимки)
 
-POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). Статусы каталога — таблица `city_packs` в Postgres. **Pack готов** → POI из OSM; **pack не готов или пустой** → Wikidata; оба пусты → demo. Карта маршрута — **iframe-виджет** Яндекса по `maps_route_url` (пеший режим `rtt=pd`).
+POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута — **iframe-виджет** Яндекса по `maps_route_url` (пеший режим `rtt=pd`). Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
 
 **Первый запуск (Поволжский ФО, 8 городов):**
 
@@ -143,7 +143,7 @@ bash scripts/city_pack_batch.sh
 
 Каталог городов: [`config/city_packs.yaml`](config/city_packs.yaml); федеральные округа (Geofabrik): [`config/federal_districts.yaml`](config/federal_districts.yaml). Новый город — запись в YAML + `city_pack_prepare.sh` + `alembic upgrade head` (синхронизация `city_packs`).
 
-Города **в каталоге** без готового pack — worker ставит prepare в очередь, POI берутся из **Wikidata** до готовности pack. Если и OSM, и Wikidata пусты — demo-точки. `pip install osmium` нужен для `build_poi_index.py`.
+Города **в каталоге** без готового pack — при **LLM** worker ставит prepare в очередь; при **free** — только Wikidata (pack не запрашивается). Если Wikidata пуста — demo-точки. `pip install osmium` нужен для `build_poi_index.py`.
 
 Для стабильного PWA-теста без dev-сервера: `cd web && npm run build && npm run preview -- --host`.
 
@@ -581,7 +581,7 @@ python3 scripts/render_graph.py
 
 | Инструмент               | Что ищет                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------- |
-| `search_route_materials` | Пул POI: **city pack** (`poi.sqlite`) если готов; иначе Wikidata + discovery |
+| `search_route_materials` | Пул POI: **Wikidata** (free); **city pack** + Wikidata при BYOK/LLM |
 
 Запросы дополняются **`search_context`** из опросника (`search/context.py`). Постфильтрация сниппетов — `config/settings.py` → `SEARCH_FILTERS`.
 
@@ -656,7 +656,7 @@ python3 scripts/render_graph.py
 | **Галлюцинации мест**               | Маршруты — только `poi_id` из пула materials                                                                                                                                                |
 | **Critic не прошёл**                | До 2 повторов: проблемы tools/POI → `researcher`, проблемы маршрутов → `writer`; факт о городе critic не блокирует, пока `city_fact_status=pending`                                         |
 | **Повторный запуск**                | `user_profile` + `trip_preferences` из SQLite                                                                                                                                               |
-| **Город в каталоге, pack не готов** | Wikidata не подмешивается; worker ставит `prepare_city_pack`; пока пустой пул — demo-POI + предупреждение                                                                                   |
+| **Город в каталоге, pack не готов** | **Free:** только Wikidata, pack не ставится в очередь. **LLM:** worker ставит `prepare_city_pack`; пока пустой пул — Wikidata или demo + предупреждение                                                                                   |
 | **Демо-точки вместо POI**           | Wikidata SPARQL не ответила (таймаут/сеть) — до 3 повторов; центр города — Nominatim (для Москвы — `place/city`, не administrative). Проверка: `python3 scripts/test_yandex_maps.py Москва` |
 | **Одинаковые маршруты A/B/C**       | `finalize_route_program` разводит пары A–B, B–C, A–C по overlap POI; critic отклоняет совпадения и один `maps_route_url` → retry `writer`                                                   |
 | **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`)                                                                    |

@@ -68,6 +68,7 @@ def run_route_materials_search(
         discovery = LandmarkDiscoveryTrace(**search_result.landmark_discovery)
     dining: list = []
 
+    poi_sources = search_result.poi_sources
     if leisure and has_real_leisure(leisure):
         provider = "osm"
     else:
@@ -82,7 +83,7 @@ def run_route_materials_search(
     )
     return (
         materials,
-        _materials_warnings(len(leisure), poi_sources=search_result.poi_sources),
+        _materials_warnings(len(leisure), poi_sources=poi_sources),
         discovery,
-        search_result.poi_sources,
+        poi_sources,
     )
