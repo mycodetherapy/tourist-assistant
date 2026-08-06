@@ -78,6 +78,21 @@ services:
       - api-node
     restart: unless-stopped
 
+  # Опционально: пеший OSRM. Граф на VPS: data/cities/<slug>/osrm/
+  #   OSRM_DATASET=kazan docker compose -f deploy/docker-compose.prod.yml --profile osrm up -d osrm
+  osrm:
+    profiles:
+      - osrm
+    image: ${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v5.27.1}
+    command:
+      - osrm-routed
+      - --algorithm
+      - mld
+      - /data/${OSRM_DATASET:-kazan}/osrm/${OSRM_DATASET:-kazan}.osrm
+    volumes:
+      - ./data/cities:/data:ro
+    restart: unless-stopped
+
 volumes:
   pg_data:
     name: ${POSTGRES_VOLUME_NAME:-progulyai_pg_data}

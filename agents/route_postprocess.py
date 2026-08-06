@@ -66,7 +66,10 @@ def _maps_route_fields(
     close_loop: bool,
     route_anchor: Any | None = None,
 ) -> dict[str, Any]:
-    """maps_route_url и метаданные меток для карты."""
+    """maps_route_url, метки и (если OSRM доступен) пешая геометрия."""
+    from search.osrm.client import fetch_foot_route
+    from search.yandex.route_url import parse_maps_route_points
+
     anchor_kw = _route_anchor_kwargs(route_anchor)
     maps_url = build_maps_route_url(
         points,
@@ -82,11 +85,19 @@ def _maps_route_fields(
         anchor_lat=anchor_kw.get("anchor_lat"),  # type: ignore[arg-type]
         anchor_lon=anchor_kw.get("anchor_lon"),  # type: ignore[arg-type]
     )
-    return {
+    fields: dict[str, Any] = {
         "maps_route_url": maps_url,
         "route_map_anchor": anchor_pt,
         "route_map_leisure_coords": leisure_pts,
     }
+    # Те же waypoints, что в rtext — линия OSRM совпадает с deep link по остановкам.
+    waypoints = parse_maps_route_points(maps_url)
+    osrm = fetch_foot_route(waypoints)
+    if osrm is not None:
+        fields["route_geometry"] = osrm.geometry
+        fields["route_distance_m"] = osrm.distance_m
+        fields["route_duration_s"] = osrm.duration_s
+    return fields
 
 
 _ROUTE_MAX_STOPS = 8
