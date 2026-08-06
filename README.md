@@ -175,7 +175,7 @@ npm run dev
 
 ### City pack (POI из OSM-выжимки)
 
-POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута по умолчанию — **iframe-виджет** Яндекса (`maps_route_url`, `rtt=pd`); MapLibre — `VITE_MAP_PROVIDER=maplibre`. Пешая геометрия OSRM опциональна (`OSRM_BASE_URL`, `scripts/osrm_prepare.sh`) — без графа сборка не падает, `route_geometry` пустой (план: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md)). Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
+POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута по умолчанию — **iframe-виджет** Яндекса (`maps_route_url`, `rtt=pd`); MapLibre — `VITE_MAP_PROVIDER=maplibre`. Пешая геометрия OSRM опциональна: `bash scripts/osrm_prepare.sh <slug>` / `osrm_prepare_batch.sh`, `docker compose --profile osrm up -d osrm`, worker `OSRM_DOCKER_BASE_URL=http://osrm:5000` + `OSRM_DATASET` (один город на контейнер; multi — `OSRM_URL_BY_SLUG`). Без графа сборка не падает. RAM: ~150–400 MB на город. План: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md). Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
 
 **Первый запуск (Поволжский ФО, 8 городов):**
 
