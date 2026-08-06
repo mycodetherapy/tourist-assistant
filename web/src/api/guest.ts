@@ -185,7 +185,7 @@ export function isRegisterRequiredError(error: unknown): boolean {
   if (err.response?.status !== 403) {
     return false;
   }
-  const detail = err.response.data?.detail;
+  const detail = err.response?.data?.detail;
   return (
     typeof detail === "object" &&
     detail !== null &&
@@ -212,7 +212,7 @@ export function isCaptchaError(error: unknown): boolean {
   if (status !== 400 && status !== 403 && status !== 503) {
     return false;
   }
-  const detail = err.response.data?.detail;
+  const detail = err.response?.data?.detail;
   return (
     typeof detail === "object" &&
     detail !== null &&
