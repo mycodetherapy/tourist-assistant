@@ -1,8 +1,13 @@
 """Клиент OSRM /route (пеший профиль).
 
 Геометрия считается на сборке маршрута (worker), не в браузере:
-- без OSRM_BASE_URL — тихо возвращаем None (MapLibre рисует прямые);
+- без подходящего URL — тихо возвращаем None (MapLibre рисует прямые);
 - с OSRM — LineString GeoJSON [lon, lat] в route_geometry.
+
+URL резолв (multi-city):
+- OSRM_URL_BY_SLUG=kazan=http://osrm:5000,samara=http://osrm-samara:5000
+- иначе OSRM_BASE_URL; если задан OSRM_DATASET и slug города другой — skip
+  (один контейнер = один город, не слать Самару на граф Казани).
 """
 
 from __future__ import annotations
@@ -33,6 +38,61 @@ def osrm_base_url() -> str:
     return (os.getenv("OSRM_BASE_URL") or "").strip().rstrip("/")
 
 
+def parse_osrm_url_by_slug() -> dict[str, str]:
+    """OSRM_URL_BY_SLUG=kazan=http://osrm:5000,samara=http://osrm-samara:5000"""
+    raw = (os.getenv("OSRM_URL_BY_SLUG") or "").strip()
+    if not raw:
+        return {}
+    out: dict[str, str] = {}
+    for part in raw.split(","):
+        chunk = part.strip()
+        if not chunk or "=" not in chunk:
+            continue
+        slug, url = chunk.split("=", 1)
+        slug_key = slug.strip()
+        url_val = url.strip().rstrip("/")
+        if slug_key and url_val:
+            out[slug_key] = url_val
+    return out
+
+
+def resolve_osrm_base_url(city: str | None = None) -> str | None:
+    """
+    Базовый URL OSRM для города поездки.
+
+    Возвращает None, если роутинг для этого города не настроен
+    (не вызывать чужой граф).
+    """
+    slug: str | None = None
+    if city and str(city).strip():
+        try:
+            from config.city_catalog import resolve_city_slug
+
+            slug = resolve_city_slug(str(city))
+        except Exception:
+            logger.debug("resolve_city_slug failed for %r", city, exc_info=True)
+            slug = None
+
+    by_slug = parse_osrm_url_by_slug()
+    if slug and slug in by_slug:
+        return by_slug[slug]
+
+    base = osrm_base_url()
+    if not base:
+        return None
+
+    dataset = (os.getenv("OSRM_DATASET") or "").strip()
+    if dataset and slug and slug != dataset:
+        logger.info(
+            "OSRM skip city=%r slug=%s dataset=%s (single-graph instance)",
+            city,
+            slug,
+            dataset,
+        )
+        return None
+    return base
+
+
 def _waypoints_path(points: list[GeoPoint]) -> str:
     """OSRM: lon,lat;lon,lat — порядок важен."""
     return ";".join(f"{p.lon:.6f},{p.lat:.6f}" for p in points)
@@ -42,6 +102,7 @@ def fetch_foot_route(
     points: list[GeoPoint],
     *,
     base_url: str | None = None,
+    city: str | None = None,
     timeout_s: float = _DEFAULT_TIMEOUT_S,
 ) -> OsrmRouteResult | None:
     """
@@ -51,7 +112,10 @@ def fetch_foot_route(
     - None при отсутствии URL, <2 точек, сетевой/HTTP ошибке, пустой геометрии;
     - не бросает наружу (сборка маршрута должна продолжаться без линии).
     """
-    url_base = (base_url if base_url is not None else osrm_base_url()).strip().rstrip("/")
+    if base_url is not None:
+        url_base = base_url.strip().rstrip("/")
+    else:
+        url_base = (resolve_osrm_base_url(city) or "").strip().rstrip("/")
     if not url_base or len(points) < 2:
         return None
 

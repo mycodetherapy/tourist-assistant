@@ -114,6 +114,10 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
       center: lineCoords[0],
       zoom: 13,
       attributionControl: { compact: true },
+      // На мобиле: два пальца для pan/zoom — страница скроллится одним пальцем
+      cooperativeGestures: true,
+      dragRotate: false,
+      pitchWithRotate: false,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     mapRef.current = map;
@@ -281,6 +285,7 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
           locating={false}
           active={follow}
           topClassName="top-2"
+          ariaLabel={follow ? "Выключить следование" : "Следовать по маршруту"}
           onClick={() => setFollow((value) => !value)}
         />
         {geoError ? (

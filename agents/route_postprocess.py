@@ -92,7 +92,7 @@ def _maps_route_fields(
     }
     # Те же waypoints, что в rtext — линия OSRM совпадает с deep link по остановкам.
     waypoints = parse_maps_route_points(maps_url)
-    osrm = fetch_foot_route(waypoints)
+    osrm = fetch_foot_route(waypoints, city=city)
     if osrm is not None:
         fields["route_geometry"] = osrm.geometry
         fields["route_distance_m"] = osrm.distance_m

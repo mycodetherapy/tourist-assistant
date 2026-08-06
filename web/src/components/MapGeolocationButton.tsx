@@ -5,19 +5,26 @@ interface MapGeolocationButtonProps {
   active?: boolean;
   onClick: () => void;
   topClassName?: string;
+  /** Переопределение aria-label (например «Следовать по маршруту»). */
+  ariaLabel?: string;
 }
 
-/** Кнопка «моё местоположение» поверх карты Яндекс.Карт. */
+/** Кнопка «моё местоположение» / follow поверх карты. */
 export function MapGeolocationButton({
   locating,
   active = false,
   onClick,
   topClassName = "top-[72px]",
+  ariaLabel,
 }: MapGeolocationButtonProps) {
+  const label =
+    ariaLabel ??
+    (active ? "Скрыть моё местоположение" : "Показать моё местоположение");
   return (
     <button
       type="button"
-      aria-label={active ? "Скрыть моё местоположение" : "Показать моё местоположение"}
+      aria-label={label}
+      title={label}
       aria-pressed={active}
       disabled={locating}
       onClick={onClick}

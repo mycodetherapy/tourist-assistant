@@ -153,10 +153,10 @@ curl -s "http://127.0.0.1:5001/route/v1/foot/49.122,55.787;49.135,55.796?overvie
 2. [x] `OSRM_DATASET=kazan docker compose --profile osrm up -d osrm` (хост-порт **5001** — на macOS :5000 занят AirPlay)
 3. [x] `curl` / Python client → `code Ok`
 4. [x] Worker в Docker: `OSRM_DOCKER_BASE_URL=http://osrm:5000` (не `127.0.0.1` — это localhost контейнера). Хост-скрипты: `OSRM_BASE_URL=http://127.0.0.1:5001`
-5. [ ] Собрать тестовую прогулку по Казани; в JSON case проверить `route_geometry.coordinates.length > 2`
-6. [ ] Собрать прогулку по городу **без** графа (или с выключенным OSRM) — убедиться что сборка ок, `route_geometry` null
+5. [x] Собрать тестовую прогулку по Казани — geometry ок (после фикса docker URL)
+6. [x] Без OSRM / другой город при `OSRM_DATASET=kazan` — skip geometry, сборка не падает
 
-**Важно:** прямые линии на MapLibre = нет `route_geometry` в сохранённой программе (старая сборка или worker не достучался до OSRM). После фикса URL — **пересобрать** маршруты.
+**Done when:** Казань даёт geometry; другой город / down OSRM — тихий fallback без падения run. ✅
 
 **Оценка:** 0.5–1 день.
 
@@ -165,9 +165,9 @@ curl -s "http://127.0.0.1:5001/route/v1/foot/49.122,55.787;49.135,55.796?overvie
 **Задачи**
 
 1. [x] Включить локально `VITE_MAP_PROVIDER=maplibre` (корневой `.env`, Vite `envDir`)
-2. [ ] Полировка UX: высота карты, touch vs scroll страницы, легенда S / номера
+2. [x] Полировка UX: `cooperativeGestures`, punctир линии, aria follow
 3. [x] Клик по маркеру стопа → `poiFact.open` (через `ProgramTabs` → `RouteMapView`)
-4. [ ] Follow: кнопка геолокации включает/выключает `watchUserLocation`; ошибка HTTPS понятна (smoke на телефоне)
+4. [ ] Follow: smoke на телефоне по HTTPS (ручная проверка)
 5. [x] Нет `route_geometry` → прямые + hint «линия приближённая»
 6. [x] Регрессия: без флага снова iframe (дефолт `yandex`)
 
@@ -179,16 +179,15 @@ curl -s "http://127.0.0.1:5001/route/v1/foot/49.122,55.787;49.135,55.796?overvie
 
 **Задачи**
 
-1. [ ] `osrm_prepare.sh` для всех `default_packs` в `city_packs.yaml` (скрипт batch или цикл)
-2. [ ] Решение по деплою: **A** несколько сервисов compose **или** выбор URL по slug  
-   Рекомендация: compose template / отдельные сервисы `osrm-kazan`, `osrm-samara`, … за internal network; worker: `OSRM_BASE_URL` → map `slug → http://osrm-<slug>:5000` (env `OSRM_URL_TEMPLATE` или yaml)
-3. [ ] Worker: резолв slug города поездки → нужный OSRM base URL; unknown slug → skip geometry
+1. [x] `scripts/osrm_prepare_batch.sh` для default_packs
+2. [x] Резолв URL: `OSRM_URL_BY_SLUG` + `OSRM_DATASET` (один контейнер = один город; чужой slug → skip)
+3. [x] Worker передаёт `city` в `fetch_foot_route`
 4. [ ] Документировать в README объём RAM на VPS
-5. [ ] CI/prod: profile `osrm` опционален; графы на volume `data/cities` (как poi.sqlite)
+5. [ ] Поднять доп. контейнеры `osrm-<slug>` по мере нужды; пример URL в `.env.example`
+6. [ ] Прогнать `osrm_prepare_batch.sh` локально для городов с extract
 
-**Done when:** сборка Самара/НН даёт geometry при поднятых графах; неизвестный город — без падения.
-
-**Оценка:** 1–2 дня (+ время prepare на каждый город).
+**MVP сейчас:** один `osrm` + `OSRM_DATASET=kazan`. Остальные города — iframe/прямые, без ошибки.  
+**Масштаб:** `bash scripts/osrm_prepare_batch.sh` → добавить сервисы compose → `OSRM_URL_BY_SLUG=...`
 
 ### Фаза 4 — включение на prod
 
