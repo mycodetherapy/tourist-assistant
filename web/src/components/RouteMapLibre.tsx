@@ -131,8 +131,14 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
         id: "route-line",
         type: "line",
         source: "route",
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": "#0369a1", "line-width": 4, "line-opacity": 0.9 },
+        layout: { "line-join": "round", "line-cap": "butt" },
+        paint: {
+          "line-color": "#0369a1",
+          "line-width": 4,
+          "line-opacity": 0.9,
+          // Пунктир: длина штриха / пробела в единицах line-width
+          "line-dasharray": [2, 1.5],
+        },
       });
 
       const bounds = boundsFromCoords(lineCoords);
