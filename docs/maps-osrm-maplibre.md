@@ -152,11 +152,11 @@ curl -s "http://127.0.0.1:5001/route/v1/foot/49.122,55.787;49.135,55.796?overvie
 1. [x] Пересобрать граф: `bash scripts/osrm_prepare.sh kazan`
 2. [x] `OSRM_DATASET=kazan docker compose --profile osrm up -d osrm` (хост-порт **5001** — на macOS :5000 занят AirPlay)
 3. [x] `curl` / Python client → `code Ok`
-4. [x] В локальном `.env`: `OSRM_BASE_URL=http://127.0.0.1:5001` (не коммитить)
+4. [x] Worker в Docker: `OSRM_DOCKER_BASE_URL=http://osrm:5000` (не `127.0.0.1` — это localhost контейнера). Хост-скрипты: `OSRM_BASE_URL=http://127.0.0.1:5001`
 5. [ ] Собрать тестовую прогулку по Казани; в JSON case проверить `route_geometry.coordinates.length > 2`
 6. [ ] Собрать прогулку по городу **без** графа (или с выключенным OSRM) — убедиться что сборка ок, `route_geometry` null
 
-**Done when:** Казань даёт geometry; другой город / down OSRM — тихий fallback без падения run.
+**Важно:** прямые линии на MapLibre = нет `route_geometry` в сохранённой программе (старая сборка или worker не достучался до OSRM). После фикса URL — **пересобрать** маршруты.
 
 **Оценка:** 0.5–1 день.
 

@@ -79,7 +79,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required in .env}
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY required in .env}
       TOURIST_ASSISTANT_IN_DOCKER: "1"
-      OSRM_BASE_URL: ${OSRM_BASE_URL:-}
+      # Внутри compose-сети localhost хоста недоступен — всегда сервис osrm.
+      OSRM_BASE_URL: ${OSRM_DOCKER_BASE_URL:-http://osrm:5000}
     depends_on:
       postgres:
         condition: service_healthy
