@@ -44,6 +44,8 @@ export function GuestTripDetailPage() {
   const sessionQuery = useQuery({
     queryKey: ["guest", "session"],
     queryFn: fetchGuestSession,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const tripQuery = useQuery({
@@ -92,7 +94,6 @@ export function GuestTripDetailPage() {
     mutationFn: ({ scope, captcha_token }: { scope: RebuildScope; captcha_token?: string }) =>
       guestStartRun(tripId, scope, captcha_token),
     onSuccess: (data, { scope }) => {
-      captcha.resetToken();
       if (data.run_id) {
         setLastBuildError(null);
         setActiveRunId(data.run_id);
@@ -120,14 +121,16 @@ export function GuestTripDetailPage() {
 
   const startGuestRun = async (scope: RebuildScope) => {
     let captcha_token: string | undefined;
-    try {
-      captcha_token = await captcha.requestTokenIfRequired();
-    } catch (err) {
-      notification.error({
-        title: "Проверка CAPTCHA",
-        description: err instanceof Error ? err.message : "Не удалось пройти проверку",
-      });
-      return;
+    if (captcha.enabled) {
+      try {
+        captcha_token = await captcha.requestToken();
+      } catch (err) {
+        notification.error({
+          title: "Проверка CAPTCHA",
+          description: err instanceof Error ? err.message : "Не удалось пройти проверку",
+        });
+        return;
+      }
     }
     setActiveRunScope(scope);
     rebuildMutation.mutate({ scope, captcha_token });
@@ -297,7 +300,6 @@ export function GuestTripDetailPage() {
           <Button
             type="primary"
             loading={rebuildMutation.isPending}
-            disabled={captcha.enabled && !captcha.ready}
             onClick={() => void startGuestRun("full")}
           >
             Собрать маршруты
@@ -312,7 +314,6 @@ export function GuestTripDetailPage() {
               <Button
                 type="primary"
                 loading={rebuildMutation.isPending}
-                disabled={captcha.enabled && !captcha.ready}
                 onClick={() => void startGuestRun("routes")}
               >
                 Пересобрать маршруты
@@ -331,7 +332,6 @@ export function GuestTripDetailPage() {
               <Button
                 type="dashed"
                 loading={rebuildMutation.isPending}
-                disabled={captcha.enabled && !captcha.ready}
                 onClick={() => void startGuestRun("full")}
               >
                 Глубокий пересбор

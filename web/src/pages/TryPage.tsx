@@ -50,7 +50,6 @@ export function TryPage() {
   const createMutation = useMutation({
     mutationFn: guestCreateTrip,
     onSuccess: (data) => {
-      captcha.resetToken();
       reachGoal(METRIKA_GOALS.TRY_TRIP_CREATED, { trip_id: data.trip_id });
       const url = data.run_id
         ? `/try/${data.trip_id}?run=${data.run_id}`
@@ -82,14 +81,16 @@ export function TryPage() {
       return;
     }
     let captcha_token: string | undefined;
-    try {
-      captcha_token = await captcha.requestTokenIfRequired();
-    } catch (err) {
-      notification.error({
-        title: "Проверка CAPTCHA",
-        description: err instanceof Error ? err.message : "Не удалось пройти проверку",
-      });
-      return;
+    if (captcha.enabled) {
+      try {
+        captcha_token = await captcha.requestToken();
+      } catch (err) {
+        notification.error({
+          title: "Проверка CAPTCHA",
+          description: err instanceof Error ? err.message : "Не удалось пройти проверку",
+        });
+        return;
+      }
     }
     createMutation.mutate({
       city: values.city.trim(),
@@ -151,9 +152,9 @@ export function TryPage() {
               type="primary"
               block
               className="sm:!w-auto"
-              loading={createMutation.isPending}
-              disabled={!cityReady || (captcha.enabled && !captcha.ready)}
-              onClick={() => void handleSubmit()}
+            loading={createMutation.isPending}
+            disabled={!cityReady}
+            onClick={() => void handleSubmit()}
             >
               Собрать маршруты
             </Button>

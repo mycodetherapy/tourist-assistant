@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const SCRIPT_SRC =
   "https://smartcaptcha.cloud.yandex.ru/captcha.js?render=onload&onload=__smartCaptchaOnLoad";
 
-/** Контейнер в layout, но невидим — `display:none` ломает render/execute. */
 export const SMART_CAPTCHA_CONTAINER_CLASS =
   "pointer-events-none fixed bottom-0 right-0 h-px w-px overflow-hidden opacity-0";
 
@@ -55,57 +54,59 @@ export function smartCaptchaClientKey(): string {
   return clientKey();
 }
 
-export function useYandexSmartCaptcha(initWidget: boolean) {
+export function useYandexSmartCaptcha(enabled: boolean) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<number | null>(null);
   const pendingRef = useRef<{
     resolve: (token: string) => void;
     reject: (error: Error) => void;
   } | null>(null);
-  const readyResolveRef = useRef<(() => void) | null>(null);
-  const readyPromiseRef = useRef<Promise<void> | null>(null);
   const [ready, setReady] = useState(false);
 
+  const renderWidget = useCallback(() => {
+    const container = containerRef.current;
+    if (!enabled || !clientKey() || !container || !window.smartCaptcha) {
+      return false;
+    }
+    if (widgetIdRef.current != null) {
+      setReady(true);
+      return true;
+    }
+    widgetIdRef.current = window.smartCaptcha.render(container, {
+      sitekey: clientKey(),
+      invisible: true,
+      test: captchaTestMode(),
+      hl: "ru",
+      shieldPosition: "bottom-right",
+      callback: (token: string) => {
+        const pending = pendingRef.current;
+        pendingRef.current = null;
+        if (pending && token) {
+          pending.resolve(token);
+        }
+      },
+    });
+    setReady(true);
+    return true;
+  }, [enabled]);
+
   useEffect(() => {
-    if (!initWidget || !clientKey()) {
+    if (!enabled || !clientKey()) {
       setReady(false);
       widgetIdRef.current = null;
-      readyPromiseRef.current = null;
-      readyResolveRef.current = null;
       return;
     }
 
     let cancelled = false;
-    readyPromiseRef.current = new Promise<void>((resolve) => {
-      readyResolveRef.current = resolve;
-    });
-
     void loadSmartCaptchaScript()
       .then(() => {
-        if (cancelled || !containerRef.current || !window.smartCaptcha) {
-          return;
+        if (!cancelled) {
+          renderWidget();
         }
-        widgetIdRef.current = window.smartCaptcha.render(containerRef.current, {
-          sitekey: clientKey(),
-          invisible: true,
-          test: captchaTestMode(),
-          hl: "ru",
-          shieldPosition: "bottom-right",
-          callback: (token: string) => {
-            const pending = pendingRef.current;
-            pendingRef.current = null;
-            if (pending && token) {
-              pending.resolve(token);
-            }
-          },
-        });
-        setReady(true);
-        readyResolveRef.current?.();
       })
       .catch(() => {
         if (!cancelled) {
           setReady(false);
-          readyResolveRef.current?.();
         }
       });
 
@@ -114,35 +115,19 @@ export function useYandexSmartCaptcha(initWidget: boolean) {
       pendingRef.current?.reject(new Error("CAPTCHA сброшена"));
       pendingRef.current = null;
     };
-  }, [initWidget]);
-
-  const waitUntilReady = useCallback(async (timeoutMs = 15_000): Promise<void> => {
-    if (ready && window.smartCaptcha && widgetIdRef.current != null) {
-      return;
-    }
-    const pending = readyPromiseRef.current;
-    if (!pending) {
-      throw new Error("CAPTCHA не инициализирована");
-    }
-    await Promise.race([
-      pending,
-      new Promise<void>((_, reject) => {
-        window.setTimeout(
-          () => reject(new Error("CAPTCHA не загрузилась. Обновите страницу и попробуйте снова.")),
-          timeoutMs,
-        );
-      }),
-    ]);
-    if (!window.smartCaptcha || widgetIdRef.current == null) {
-      throw new Error("CAPTCHA не загрузилась. Обновите страницу и попробуйте снова.");
-    }
-  }, [ready]);
+  }, [enabled, renderWidget]);
 
   const requestToken = useCallback(async (): Promise<string> => {
-    if (!initWidget || !clientKey()) {
-      throw new Error("CAPTCHA не настроена");
+    if (!enabled || !clientKey()) {
+      return "";
     }
-    await waitUntilReady();
+    await loadSmartCaptchaScript();
+    if (!renderWidget()) {
+      throw new Error("CAPTCHA ещё загружается. Подождите секунду и попробуйте снова.");
+    }
+    if (!window.smartCaptcha || widgetIdRef.current == null) {
+      throw new Error("CAPTCHA ещё загружается. Подождите секунду и попробуйте снова.");
+    }
     return new Promise<string>((resolve, reject) => {
       pendingRef.current = { resolve, reject };
       try {
@@ -152,14 +137,7 @@ export function useYandexSmartCaptcha(initWidget: boolean) {
         reject(err instanceof Error ? err : new Error("CAPTCHA execute failed"));
       }
     });
-  }, [initWidget, waitUntilReady]);
+  }, [enabled, renderWidget]);
 
-  const resetToken = useCallback(() => {
-    pendingRef.current = null;
-    if (window.smartCaptcha && widgetIdRef.current != null) {
-      window.smartCaptcha.reset(widgetIdRef.current);
-    }
-  }, []);
-
-  return { containerRef, ready, requestToken, resetToken };
+  return { containerRef, ready, requestToken };
 }
