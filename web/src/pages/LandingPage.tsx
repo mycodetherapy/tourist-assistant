@@ -254,6 +254,17 @@ export function LandingPage() {
             </Link>
           </div>
         </div>
+        <div className="mx-auto mt-8 flex max-w-6xl flex-wrap gap-x-4 gap-y-2 border-t border-white/10 pt-6 text-sm text-slate-400">
+          <Link to="/terms" className="text-slate-400 no-underline hover:text-white">
+            Пользовательское соглашение
+          </Link>
+          <Link to="/privacy" className="text-slate-400 no-underline hover:text-white">
+            Политика конфиденциальности
+          </Link>
+          <Link to="/privacy#cookies" className="text-slate-400 no-underline hover:text-white">
+            Cookie и Метрика
+          </Link>
+        </div>
       </footer>
     </div>
   );

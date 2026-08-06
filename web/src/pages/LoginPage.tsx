@@ -1,6 +1,6 @@
 import { GoogleOutlined } from "@ant-design/icons";
-import { Button, Card, Form, Input, Typography, notification } from "antd";
-import { useEffect } from "react";
+import { Button, Card, Checkbox, Form, Input, Typography, notification } from "antd";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { googleLoginUrl } from "../api/auth";
 import { getErrorMessage } from "../api/client";
@@ -17,6 +17,9 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [form] = Form.useForm<{ email: string; password: string }>();
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+  const googleOk = acceptTerms && acceptPrivacy;
 
   useEffect(() => {
     const code = params.get("error");
@@ -68,7 +71,39 @@ export function LoginPage() {
           </Button>
         </Form>
         <div className="mt-4 flex flex-col gap-2">
-          <Button icon={<GoogleOutlined />} href={googleLoginUrl()} block>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+            <Checkbox
+              checked={acceptTerms}
+              onChange={(e) => setAcceptTerms(e.target.checked)}
+              className="!items-start"
+            >
+              Принимаю{" "}
+              <Link to="/terms" target="_blank" className="text-sky-700 underline">
+                Пользовательское соглашение
+              </Link>
+            </Checkbox>
+            <div className="mt-2">
+              <Checkbox
+                checked={acceptPrivacy}
+                onChange={(e) => setAcceptPrivacy(e.target.checked)}
+                className="!items-start"
+              >
+                Согласие на обработку ПДн по{" "}
+                <Link to="/privacy" target="_blank" className="text-sky-700 underline">
+                  Политике конфиденциальности
+                </Link>
+              </Checkbox>
+            </div>
+            <Typography.Text type="secondary" className="mt-2 block text-xs">
+              Нужно для входа через Google (в т.ч. при первом создании аккаунта).
+            </Typography.Text>
+          </div>
+          <Button
+            icon={<GoogleOutlined />}
+            href={googleOk ? googleLoginUrl() : undefined}
+            block
+            disabled={!googleOk}
+          >
             Войти через Google
           </Button>
           <Typography.Text type="secondary">

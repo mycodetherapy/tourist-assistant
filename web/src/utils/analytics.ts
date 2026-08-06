@@ -1,5 +1,7 @@
 /** Яндекс Метрика — лендинг и воронка регистрации (progulyai.ru). */
 
+import { hasAnalyticsConsent } from "./cookieConsent";
+
 export const METRIKA_GOALS = {
   LANDING_VIEW: "landing_view",
   CTA_TRY_CLICK: "cta_try_click",
@@ -38,10 +40,11 @@ export function isMetrikaEnabled(): boolean {
   return getCounterId() !== null;
 }
 
-/** Подключить счётчик (no-op без VITE_YANDEX_METRIKA_ID). */
+/** Подключить счётчик только после согласия на аналитику (no-op без ID / без согласия). */
 export function initYandexMetrika(): void {
   const counterId = getCounterId();
   if (!counterId || initialized || typeof window === "undefined") return;
+  if (!hasAnalyticsConsent()) return;
   initialized = true;
 
   window.ym =
@@ -67,7 +70,7 @@ export function initYandexMetrika(): void {
 
 export function reachGoal(goal: MetrikaGoal, params?: Record<string, unknown>): void {
   const counterId = getCounterId();
-  if (!counterId || typeof window.ym !== "function") return;
+  if (!counterId || !hasAnalyticsConsent() || typeof window.ym !== "function") return;
   if (params && Object.keys(params).length > 0) {
     window.ym(counterId, "reachGoal", goal, params);
   } else {
@@ -78,6 +81,6 @@ export function reachGoal(goal: MetrikaGoal, params?: Record<string, unknown>): 
 /** Виртуальный просмотр страницы (SPA). */
 export function hitPage(path: string, title?: string): void {
   const counterId = getCounterId();
-  if (!counterId || typeof window.ym !== "function") return;
+  if (!counterId || !hasAnalyticsConsent() || typeof window.ym !== "function") return;
   window.ym(counterId, "hit", path, title ? { title } : undefined);
 }

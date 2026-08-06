@@ -13,6 +13,7 @@ import {
 } from "../api/guest";
 import type { RouteAnchor } from "../api/types";
 import { RegisterGateModal } from "../components/RegisterGateModal";
+import { LegalConsentFields } from "../components/LegalConsentFields";
 import { NewTripAnchorFields } from "../components/NewTripAnchorFields";
 import { useGuestSmartCaptcha } from "../hooks/useGuestSmartCaptcha";
 import { SMART_CAPTCHA_CONTAINER_CLASS } from "../hooks/useYandexSmartCaptcha";
@@ -21,6 +22,8 @@ import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
 
 interface TripFormValues {
   city: string;
+  accept_terms: boolean;
+  accept_privacy: boolean;
 }
 
 export function TryPage() {
@@ -123,10 +126,11 @@ export function TryPage() {
         description="Одна полная сборка и один пересбор маршрутов. Новый город или дополнительные пересборы — после регистрации."
       />
 
-      <Form form={form} layout="vertical" preserve>
+      <Form form={form} layout="vertical" preserve initialValues={{ accept_terms: false, accept_privacy: false }}>
         <Form.Item name="city" label="Город маршрута" rules={[{ required: true }]}>
           <Input placeholder="Санкт-Петербург" />
         </Form.Item>
+        <LegalConsentFields hint="Согласие нужно для гостевой сборки: сессия, город, точка старта и технические логи." />
       </Form>
 
       <div className="relative">

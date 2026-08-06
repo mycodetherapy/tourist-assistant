@@ -101,6 +101,8 @@ npm run dev
 
 Лендинг и воронка регистрации отправляют события в [Яндекс Метрику](https://metrika.yandex.ru/) через `VITE_YANDEX_METRIKA_ID` (сборка web, см. [`web/src/utils/analytics.ts`](web/src/utils/analytics.ts)).
 
+Счётчик **инициализируется только после согласия** в баннере cookie («Принять все»). Выбор «Только необходимые» сохраняется в `localStorage` (`progulyai_cookie_consent`) и отключает Метрику. Текст — в [Политике конфиденциальности](https://progulyai.ru/privacy#cookies).
+
 **Подключение:**
 
 1. [metrika.yandex.ru](https://metrika.yandex.ru/) → **Добавить счётчик** → сайт `progulyai.ru`.
@@ -832,6 +834,7 @@ tourist-assistant/
 ├── deploy/                 # docker-compose.prod.yml, env.example для VPS
 ├── docker-compose.yml      # лок/dev: postgres, redis, api-node, worker, web
 ├── .env.example
+├── LICENSE                 # MIT
 └── README.md
 ```
 
@@ -847,4 +850,11 @@ tourist-assistant/
 
 ## Лицензия
 
-Уточните у владельца репозитория.
+Исходный код распространяется по лицензии [MIT](LICENSE) © Maksim Ovchinnikov.
+
+Документы сервиса [progulyai.ru](https://progulyai.ru) (оператор — физическое лицо):
+
+- [Пользовательское соглашение](https://progulyai.ru/terms) (`/terms`)
+- [Политика конфиденциальности](https://progulyai.ru/privacy) (`/privacy`), включая согласие на ПДн и раздел про cookie / Яндекс.Метрику
+
+Лицензия MIT на код не даёт прав на бренд, домен, пользовательские данные и продакшен-инстанс.
