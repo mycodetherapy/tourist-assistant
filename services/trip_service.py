@@ -408,6 +408,14 @@ class TripService:
     ) -> dict[ProgramSectionKey, ProgramSectionView]:
         votes_by_key = list_item_feedback(trip_id)
         votes_by_index = list_item_feedback_by_index(trip_id)
+        preserved_route_indices: set[int] = set()
+        routes_raw = program_data.get("routes")
+        if isinstance(routes_raw, dict):
+            cases_raw = routes_raw.get("cases")
+            if isinstance(cases_raw, list):
+                for index, raw in enumerate(cases_raw):
+                    if isinstance(raw, dict) and raw.get("preserved"):
+                        preserved_route_indices.add(index)
         sections: dict[ProgramSectionKey, ProgramSectionView] = {}
         for key in VOTABLE_SECTIONS:
             if key == "route_stops":
@@ -437,12 +445,15 @@ class TripService:
                     index=index,
                     item_key=make_item_key(key, text),
                     text=text,
-                    vote=_resolve_item_vote(
-                        section=key,
-                        index=index,
-                        text=text,
-                        votes_by_key=votes_by_key,
-                        votes_by_index=votes_by_index,
+                    vote=(
+                        _resolve_item_vote(
+                            section=key,
+                            index=index,
+                            text=text,
+                            votes_by_key=votes_by_key,
+                            votes_by_index=votes_by_index,
+                        )
+                        or (1 if key == "routes" and index in preserved_route_indices else None)
                     ),
                 )
                 for index, text in enumerate(section.items)

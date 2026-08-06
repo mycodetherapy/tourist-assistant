@@ -58,6 +58,7 @@ services:
         NGINX_CONF: nginx.pg.conf
         VITE_YANDEX_MAPS_API_KEY: ${VITE_YANDEX_MAPS_API_KEY:-}
         VITE_YANDEX_METRIKA_ID: ${VITE_YANDEX_METRIKA_ID:-}
+        VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY: ${VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY:-}
     ports:
       - "5173:80"
     depends_on:

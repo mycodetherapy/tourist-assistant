@@ -16,6 +16,7 @@ import {
   removeLlmKey,
   saveLlmSettings,
 } from "../services/auth.js";
+import { claimGuestSessionForUser } from "../services/guestSession.js";
 import {
   buildGoogleAuthorizeUrl,
   exchangeGoogleCode,
@@ -45,7 +46,11 @@ function trimAuthBody(body: unknown): unknown {
   return record;
 }
 
-function authResponsePayload(user: User, token: string) {
+function authResponsePayload(
+  user: User,
+  token: string,
+  claimedTripId?: number | null,
+) {
   return {
     access_token: token,
     token_type: "bearer" as const,
@@ -53,6 +58,7 @@ function authResponsePayload(user: User, token: string) {
       id: Number(user.id),
       email: user.email.trim().toLowerCase(),
     },
+    ...(claimedTripId != null ? { claimed_trip_id: claimedTripId } : {}),
   };
 }
 
@@ -90,7 +96,14 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         } catch (auditErr) {
           request.log.warn({ err: auditErr }, "Register audit failed");
         }
-        return reply.code(201).send(authResponsePayload(user, token));
+        const claimedTripId = await claimGuestSessionForUser(
+          request,
+          reply,
+          user.id,
+        );
+        return reply
+          .code(201)
+          .send(authResponsePayload(user, token, claimedTripId));
       } catch (err) {
         if (err instanceof AuthError) {
           const code = err.statusCode === 409 ? 409 : 400;
@@ -134,7 +147,14 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         } catch (auditErr) {
           request.log.warn({ err: auditErr }, "Login audit failed");
         }
-        return reply.code(200).send(authResponsePayload(user, token));
+        const claimedTripId = await claimGuestSessionForUser(
+          request,
+          reply,
+          user.id,
+        );
+        return reply
+          .code(200)
+          .send(authResponsePayload(user, token, claimedTripId));
       } catch (err) {
         if (err instanceof AuthError) {
           return reply.code(401).send({ detail: err.message });
@@ -305,6 +325,11 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         const domainOpts = cookieDomain
           ? { ...clearOpts, domain: cookieDomain }
           : clearOpts;
+        const claimedTripId = await claimGuestSessionForUser(
+          request,
+          reply,
+          user.id,
+        );
         reply
           .clearCookie(cookies.state, clearOpts)
           .clearCookie(cookies.frontend, clearOpts)
@@ -312,7 +337,10 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           .clearCookie(cookies.state, domainOpts)
           .clearCookie(cookies.frontend, domainOpts)
           .clearCookie(cookies.redirect, domainOpts);
-        const redirectUrl = `${frontend}/auth/callback?token=${encodeURIComponent(token)}`;
+        const tripParam =
+          claimedTripId != null ? `&trip=${claimedTripId}` : "";
+        const redirectUrl =
+          `${frontend}/auth/callback?token=${encodeURIComponent(token)}${tripParam}`;
         return reply.redirect(redirectUrl);
       } catch (err) {
         const frontend = resolveFrontendUrl(

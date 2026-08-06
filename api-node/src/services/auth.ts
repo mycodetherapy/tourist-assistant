@@ -18,6 +18,9 @@ import {
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+export type LlmMode = "none" | "platform" | "byok";
+const VALID_LLM_MODES = new Set<LlmMode>(["none", "platform", "byok"]);
+
 export class AuthError extends Error {
   readonly statusCode: number;
   constructor(message: string, statusCode = 400) {
@@ -38,6 +41,73 @@ function validatePassword(password: string): void {
   if (password.length < 8) {
     throw new AuthError("Пароль должен быть не короче 8 символов");
   }
+}
+
+export function normalizeLlmMode(raw: string | null | undefined): LlmMode {
+  const value = (raw ?? "none").trim().toLowerCase();
+  if (VALID_LLM_MODES.has(value as LlmMode)) {
+    return value as LlmMode;
+  }
+  return "none";
+}
+
+export async function getUserLlmMode(userId: number): Promise<LlmMode> {
+  const row = await getUserSettings(userId);
+  return normalizeLlmMode(row?.llm_mode);
+}
+
+function assertByokConfigured(userId: number, row: Awaited<ReturnType<typeof getUserSettings>>): void {
+  if (!row?.llm_api_key_enc) {
+    throw new AuthError(
+      "Добавьте API-ключ LLM в настройках профиля",
+      428,
+    );
+  }
+  try {
+    const apiKey = decryptSecret(row.llm_api_key_enc).trim();
+    if (!apiKey) {
+      throw new AuthError(
+        "Сохранённый LLM-ключ пустой — укажите ключ заново в настройках",
+        428,
+      );
+    }
+    if (isPlaceholderSecret(apiKey)) {
+      throw new AuthError(
+        "Сохранённый LLM-ключ недействителен — укажите реальный ключ провайдера",
+        428,
+      );
+    }
+  } catch (err) {
+    if (err instanceof AuthError) {
+      throw err;
+    }
+    throw new AuthError(
+      "Сохранённый LLM-ключ повреждён — укажите ключ заново в настройках",
+      428,
+    );
+  }
+}
+
+/** @deprecated use assertCanStartRun */
+export async function requireUserLlmConfigured(userId: number): Promise<void> {
+  await assertCanStartRun(userId);
+}
+
+export async function assertCanStartRun(userId: number): Promise<LlmMode> {
+  const mode = await getUserLlmMode(userId);
+  if (mode === "none") {
+    return "none";
+  }
+  if (mode === "platform") {
+    throw new AuthError(
+      "Оплата AI из приложения скоро будет доступна. "
+        + "Пока используйте бесплатный режим или свой API-ключ.",
+      503,
+    );
+  }
+  const row = await getUserSettings(userId);
+  assertByokConfigured(userId, row);
+  return "byok";
 }
 
 export async function registerUser(
@@ -81,39 +151,6 @@ export async function userFromTokenSub(sub: string): Promise<User> {
   return user;
 }
 
-export async function requireUserLlmConfigured(userId: number): Promise<void> {
-  const row = await getUserSettings(userId);
-  if (!row?.llm_api_key_enc) {
-    throw new AuthError(
-      "Добавьте API-ключ LLM в настройках профиля",
-      428,
-    );
-  }
-  try {
-    const apiKey = decryptSecret(row.llm_api_key_enc).trim();
-    if (!apiKey) {
-      throw new AuthError(
-        "Сохранённый LLM-ключ пустой — укажите ключ заново в настройках",
-        428,
-      );
-    }
-    if (isPlaceholderSecret(apiKey)) {
-      throw new AuthError(
-        "Сохранённый LLM-ключ недействителен — укажите реальный ключ провайдера",
-        428,
-      );
-    }
-  } catch (err) {
-    if (err instanceof AuthError) {
-      throw err;
-    }
-    throw new AuthError(
-      "Сохранённый LLM-ключ повреждён — укажите ключ заново в настройках",
-      428,
-    );
-  }
-}
-
 export async function getLlmSettingsView(userId: number) {
   const row = await getUserSettings(userId);
   const configured = Boolean(row?.llm_api_key_enc);
@@ -125,17 +162,21 @@ export async function getLlmSettingsView(userId: number) {
       preview = "***";
     }
   }
+  const llm_mode = normalizeLlmMode(row?.llm_mode);
   return {
+    llm_mode,
     llm_key_configured: configured,
     llm_key_preview: preview,
     llm_base_url: row?.llm_base_url || config.defaultLlmBaseUrl,
     llm_model: row?.llm_model || config.defaultLlmModel,
+    estimated_ai_run_cost_rub: config.estimatedAiRunCostRub,
   };
 }
 
 export async function saveLlmSettings(
   userId: number,
   fields: {
+    llm_mode?: LlmMode | null;
     llm_api_key?: string | null;
     llm_base_url?: string | null;
     llm_model?: string | null;
@@ -150,10 +191,24 @@ export async function saveLlmSettings(
     }
     enc = encryptSecret(key);
   }
+  let llm_mode: LlmMode | undefined;
+  if (fields.llm_mode !== undefined && fields.llm_mode !== null) {
+    llm_mode = normalizeLlmMode(fields.llm_mode);
+    if (llm_mode === "byok" && enc === undefined) {
+      const existing = await getUserSettings(userId);
+      if (!existing?.llm_api_key_enc) {
+        throw new AuthError(
+          "Для режима «свой ключ» сначала укажите API key",
+          428,
+        );
+      }
+    }
+  }
   await upsertUserSettings(userId, {
     llm_api_key_enc: enc,
     llm_base_url: fields.llm_base_url ?? undefined,
     llm_model: fields.llm_model ?? undefined,
+    llm_mode,
   });
 }
 

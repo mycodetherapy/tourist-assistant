@@ -11,21 +11,34 @@ import {
 } from "../repos/graphRuns.js";
 import { getTrip } from "../repos/trips.js";
 import { recordAuditEvent } from "../repos/audit.js";
+import { getUserLlmMode } from "./auth.js";
+import { checkAndConsumeFreeRunQuota } from "./freeQuotas.js";
 import { checkAndConsumeRunQuota } from "./quotas.js";
 
-export async function startRun(tripId: number, scope: string): Promise<string> {
+export async function startRun(
+  tripId: number,
+  scope: string,
+  options?: { skipFreeQuota?: boolean },
+): Promise<string> {
   const trip = await getTrip(tripId);
   if (!trip) {
     throw new Error(`Поездка #${tripId} не найдена`);
   }
   const userId = trip.user_id;
-  await checkAndConsumeRunQuota(userId, scope);
+  const llmMode = await getUserLlmMode(userId);
+  if (!options?.skipFreeQuota) {
+    if (llmMode === "none") {
+      await checkAndConsumeFreeRunQuota(userId);
+    } else {
+      await checkAndConsumeRunQuota(userId, scope);
+    }
+  }
   await recordAuditEvent({
     action: "graph_run.start",
     entityType: "trip",
     entityId: String(tripId),
     userId,
-    metadata: { scope },
+    metadata: { scope, llm_mode: llmMode },
   });
 
   await failStaleGraphRuns(tripId, config.graphRunStaleSec);

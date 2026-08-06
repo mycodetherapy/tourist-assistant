@@ -9,6 +9,13 @@ import {
   reverseGeocodeAddress,
   updatePreferences,
 } from "../api/trips";
+import {
+  guestFetchCityCenter,
+  guestFetchPreferences,
+  guestGeocodeAddress,
+  guestReverseGeocodeAddress,
+  guestUpdatePreferences,
+} from "../api/guest";
 import type { TripRouteCase } from "../api/routeTypes";
 import type { RouteAnchor } from "../api/types";
 import { parseMapsRoutePoints } from "../utils/mapsRoutePoints";
@@ -18,6 +25,7 @@ interface RouteAnchorEditorProps {
   tripId: number;
   city: string;
   routeCases?: TripRouteCase[];
+  guestMode?: boolean;
   onSaved?: () => void;
 }
 
@@ -29,16 +37,20 @@ export function RouteAnchorEditor({
   tripId,
   city,
   routeCases = [],
+  guestMode = false,
   onSaved,
 }: RouteAnchorEditorProps) {
   const queryClient = useQueryClient();
+  const queryPrefix = guestMode ? "guest" : "trips";
   const prefsQuery = useQuery({
-    queryKey: ["trips", tripId, "preferences"],
-    queryFn: () => fetchPreferences(tripId),
+    queryKey: [queryPrefix, tripId, "preferences"],
+    queryFn: () =>
+      guestMode ? guestFetchPreferences(tripId) : fetchPreferences(tripId),
   });
   const cityCenterQuery = useQuery({
-    queryKey: ["trips", tripId, "city-center"],
-    queryFn: () => fetchCityCenter(tripId),
+    queryKey: [queryPrefix, tripId, "city-center"],
+    queryFn: () =>
+      guestMode ? guestFetchCityCenter(tripId) : fetchCityCenter(tripId),
   });
 
   const [draft, setDraft] = useState<Partial<RouteAnchor>>(emptyDraft());
@@ -86,9 +98,11 @@ export function RouteAnchorEditor({
 
   const saveMutation = useMutation({
     mutationFn: (anchor: RouteAnchor | null) =>
-      updatePreferences(tripId, { route_anchor: anchor }),
+      guestMode
+        ? guestUpdatePreferences(tripId, { route_anchor: anchor })
+        : updatePreferences(tripId, { route_anchor: anchor }),
     onSuccess: (_data, anchor) => {
-      queryClient.invalidateQueries({ queryKey: ["trips", tripId, "preferences"] });
+      queryClient.invalidateQueries({ queryKey: [queryPrefix, tripId, "preferences"] });
       const deleted = anchor === null;
       setBannerKind(deleted ? "deleted" : "saved");
       onSaved?.();
@@ -153,9 +167,17 @@ export function RouteAnchorEditor({
         center={mapInitialCenter}
         value={mapPickerValue}
         label={draft.label ?? ""}
-        onGeocode={(query) => geocodeAddress(tripId, query, city).then((data) => data.results)}
+        onGeocode={(query) =>
+          (guestMode
+            ? guestGeocodeAddress(tripId, query, city)
+            : geocodeAddress(tripId, query, city)
+          ).then((data) => data.results)
+        }
         onReverseGeocode={(lat, lon) =>
-          reverseGeocodeAddress(tripId, lat, lon, city).then((hit) => hit.label)
+          (guestMode
+            ? guestReverseGeocodeAddress(tripId, lat, lon, city)
+            : reverseGeocodeAddress(tripId, lat, lon, city)
+          ).then((hit) => hit.label)
         }
         onChange={(point, meta) =>
           setDraft((prev) => ({

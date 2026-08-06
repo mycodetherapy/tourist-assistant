@@ -29,7 +29,7 @@ __all__ = [
 def search_route_materials(city: str, dates: str) -> str:
     """
     Единый пул мест досуга для всей поездки.
-    POI: city pack (OSM PBF) + Wikidata fallback + веб-discovery → fuzzy-match.
+    POI: city pack (OSM) при LLM; free tier — только Wikidata + discovery.
     """
     try:
         params = RouteMaterialsInput(city=city, dates=dates)

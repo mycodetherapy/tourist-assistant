@@ -41,6 +41,7 @@ class UserSettingsRow:
     llm_api_key_enc: str | None
     llm_base_url: str | None
     llm_model: str | None
+    llm_mode: str
     updated_at: str
 
 

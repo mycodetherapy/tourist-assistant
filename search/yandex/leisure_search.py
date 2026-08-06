@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from config.city_catalog import is_catalog_city, resolve_city_slug
 from models.routes import GeoPoint, LeisureTag, PoiPoint
+from search.context import get_use_city_pack
 from search.osm.city_pack import ensure_pack_async, is_pack_ready
 from search.osm.nominatim import resolve_city_center
 from search.osm.poi_index import fetch_city_pack_poi
@@ -53,13 +54,14 @@ def search_leisure_points(
     in_catalog = is_catalog_city(city)
     pack_ready = bool(slug and is_pack_ready(slug))
     pack_status: str | None = None
+    allow_city_pack = get_use_city_pack()
 
-    if pack_ready and slug:
+    if allow_city_pack and pack_ready and slug:
         osm_points = fetch_city_pack_poi(
             slug, center, city, max_elements=max(limit * 4, 40)
         )
         pack_status = "ready"
-    elif in_catalog and slug:
+    elif allow_city_pack and in_catalog and slug:
         ensure_pack_async(city)
         pack_status = "building"
 
@@ -113,6 +115,7 @@ def search_leisure_points(
         "center": "nominatim",
         "city_pack_slug": slug,
         "city_pack_ready": pack_ready,
+        "city_pack_enabled": allow_city_pack,
         "city_in_catalog": in_catalog,
         "osm_count": len(osm_points),
         "wikidata_count": len(wikidata_points),

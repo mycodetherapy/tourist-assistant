@@ -20,6 +20,7 @@ export function setAuthToken(token: string | null): void {
 export const apiClient = axios.create({
   baseURL: "/api",
   headers: { "Content-Type": "application/json" },
+  withCredentials: true,
 });
 
 apiClient.interceptors.request.use((config) => {

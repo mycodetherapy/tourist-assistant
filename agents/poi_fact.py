@@ -12,6 +12,8 @@ from search.poi_fact_sources import PoiFactContext
 
 _MIN_CHARS = 300
 _MAX_CHARS = 2200
+_WIKI_MIN_CHARS = 40
+POI_FACT_NOT_FOUND = "Справка по месту не найдена в Wikipedia"
 
 _URL_RE = re.compile(r"https?://", re.I)
 _BORING_CITY_RE = re.compile(
@@ -164,11 +166,131 @@ class PoiFactResult:
 
 
 def generate_poi_fact(ctx: PoiFactContext, *, use_llm: bool = True) -> PoiFactResult:
-    if not use_llm:
-        raise RuntimeError("Справка по POI доступна только через LLM")
-    text = generate_poi_fact_llm(name=ctx.name, city=ctx.city)
+    if use_llm:
+        text = generate_poi_fact_llm(name=ctx.name, city=ctx.city)
+        return PoiFactResult(
+            text=_trim_to_max(text),
+            used_llm=True,
+            source_kind="llm",
+        )
+    text = fetch_poi_fact_wikipedia(ctx)
     return PoiFactResult(
         text=_trim_to_max(text),
-        used_llm=True,
-        source_kind="llm",
+        used_llm=False,
+        source_kind="wikipedia",
     )
+
+
+def fetch_poi_fact_wikipedia(ctx: PoiFactContext) -> str:
+    """Wikipedia/Wikidata без LLM для free tier."""
+    qid = _resolve_poi_wikidata_qid(ctx)
+    if qid:
+        return _fetch_poi_fact_by_wikidata(qid)
+    return _fetch_poi_fact_by_search(name=ctx.name, city=ctx.city)
+
+
+def _resolve_poi_wikidata_qid(ctx: PoiFactContext) -> str | None:
+    from search.osm.nominatim import resolve_city_center
+
+    qid = (ctx.wikidata_qid or "").strip().upper() or None
+    if not qid:
+        return None
+    town = (ctx.city or "").strip()
+    if not town:
+        return qid
+    center = resolve_city_center(town)
+    city_qid = ((center.wikidata_id or "").strip().upper() if center else "") or None
+    if city_qid and qid == city_qid:
+        return None
+    return qid
+
+
+def _fetch_poi_fact_by_wikidata(qid: str) -> str:
+    """Статья по Wikidata QID — как для маршрутов из Wikidata, без Wikipedia-поиска."""
+    from search.wikidata.city_description import (
+        clean_wikipedia_plain,
+        fetch_wikipedia_poi_for_wikidata,
+    )
+
+    text = clean_wikipedia_plain(
+        fetch_wikipedia_poi_for_wikidata(qid, max_chars=_MAX_CHARS)
+    )
+    if text and len(text) >= _WIKI_MIN_CHARS:
+        return text
+    raise RuntimeError(POI_FACT_NOT_FOUND)
+
+
+def _fetch_poi_fact_by_search(*, name: str, city: str) -> str:
+    """POI из city pack без Wikidata-тега: только явная статья, не справка о городе."""
+    from search.wikidata.city_description import (
+        city_wikipedia_titles,
+        clean_wikipedia_plain,
+        fetch_wikipedia_poi_text,
+        normalize_wiki_title,
+        search_wikipedia_titles,
+    )
+
+    place = (name or "").strip()
+    town = (city or "").strip()
+    if not place:
+        raise RuntimeError(POI_FACT_NOT_FOUND)
+
+    blocked_titles = city_wikipedia_titles(town) if town else set()
+    queries = [f"{place} {town}".strip(), place]
+    seen_titles: set[str] = set()
+
+    for query in queries:
+        if not query:
+            continue
+        for title in search_wikipedia_titles(query=query, limit=8):
+            norm = normalize_wiki_title(title)
+            if norm in seen_titles or norm in blocked_titles:
+                continue
+            seen_titles.add(norm)
+            if not _search_title_matches_place(title, place):
+                continue
+            text = clean_wikipedia_plain(
+                fetch_wikipedia_poi_text(title=title, max_chars=_MAX_CHARS)
+            )
+            if len(text) < _WIKI_MIN_CHARS:
+                continue
+            if looks_like_city_article(text):
+                continue
+            return text
+
+    raise RuntimeError(POI_FACT_NOT_FOUND)
+
+
+def _significant_name_tokens(name: str) -> list[str]:
+    stop = {
+        "йошкар",
+        "ола",
+        "город",
+        "улица",
+        "площадь",
+        "республика",
+        "марий",
+        "марийск",
+        "центр",
+        "район",
+    }
+    return [
+        w
+        for w in re.findall(r"[а-яёa-z]{4,}", (name or "").lower())
+        if w not in stop
+    ]
+
+
+def _search_title_matches_place(title: str, place: str) -> bool:
+    """Заголовок статьи должен относиться к POI, а не к городу."""
+    from search.wikidata.city_description import normalize_wiki_title
+
+    tokens = _significant_name_tokens(place)
+    if not tokens:
+        return True
+    blob = normalize_wiki_title(title)
+    for token in tokens:
+        stem = token[:-1] if len(token) >= 6 and token[-1] in "ауюыиь" else token
+        if token in blob or stem in blob:
+            return True
+    return False

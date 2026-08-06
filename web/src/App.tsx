@@ -5,15 +5,20 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-r
 import { hitPage } from "./utils/analytics";
 import { useAuth } from "./auth/AuthContext";
 import { APP_NAME } from "./brand";
+import { CookieConsentBanner } from "./components/CookieConsentBanner";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NewTripPage } from "./pages/NewTripPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { TermsPage } from "./pages/TermsPage";
 import { TripDetailPage } from "./pages/TripDetailPage";
 import { HomeRoute } from "./pages/HomeRoute";
 import { TripListPage } from "./pages/TripListPage";
+import { TryPage } from "./pages/TryPage";
+import { GuestTripDetailPage } from "./pages/GuestTripDetailPage";
 
 const { Header, Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -33,11 +38,14 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const isLandingPage = location.pathname === "/";
+  const isGuestPage =
+    location.pathname === "/try" || location.pathname.startsWith("/try/");
   const isAuthPage =
     location.pathname === "/login" ||
     location.pathname === "/register" ||
     location.pathname === "/auth/callback";
-  const hideAppHeader = isLandingPage || isAuthPage;
+  const isLegalPage = location.pathname === "/terms" || location.pathname === "/privacy";
+  const hideAppHeader = isLandingPage || isAuthPage || isGuestPage || isLegalPage;
 
   useEffect(() => {
     hitPage(`${location.pathname}${location.search}`, document.title);
@@ -141,6 +149,10 @@ export default function App() {
       >
         <Routes>
           <Route path="/" element={<HomeRoute />} />
+          <Route path="/try" element={<TryPage />} />
+          <Route path="/try/:id" element={<GuestTripDetailPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
@@ -179,6 +191,22 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Content>
+      {!isLandingPage && !isLegalPage ? (
+        <footer className="shrink-0 border-t border-slate-200 bg-white px-3 py-3 text-center text-xs text-slate-500 sm:px-6">
+          <Link to="/terms" className="text-slate-500 underline-offset-2 hover:underline">
+            Соглашение
+          </Link>
+          <span className="mx-2 text-slate-300">·</span>
+          <Link to="/privacy" className="text-slate-500 underline-offset-2 hover:underline">
+            Конфиденциальность
+          </Link>
+          <span className="mx-2 text-slate-300">·</span>
+          <Link to="/privacy#cookies" className="text-slate-500 underline-offset-2 hover:underline">
+            Cookie
+          </Link>
+        </footer>
+      ) : null}
+      <CookieConsentBanner />
     </Layout>
   );
 }

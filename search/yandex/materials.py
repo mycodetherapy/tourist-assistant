@@ -37,8 +37,8 @@ def _materials_warnings(
         wd_count = int(poi_sources.get("wikidata_count") or 0)
         if osm_count == 0 and wd_count == 0:
             warnings.append(
-                "Wikidata не вернула POI — проверьте сеть, WIKIDATA_SPARQL_URL "
-                "или название города."
+                "Wikidata не вернула POI — для крупных городов возможен таймаут SPARQL; "
+                "проверьте сеть, WIKIDATA_SPARQL_URL или название города."
             )
     if leisure_count == 0:
         warnings.append("Пул мест пуст — маршруты соберутся из демо-точек.")
@@ -68,6 +68,7 @@ def run_route_materials_search(
         discovery = LandmarkDiscoveryTrace(**search_result.landmark_discovery)
     dining: list = []
 
+    poi_sources = search_result.poi_sources
     if leisure and has_real_leisure(leisure):
         provider = "osm"
     else:
@@ -82,7 +83,7 @@ def run_route_materials_search(
     )
     return (
         materials,
-        _materials_warnings(len(leisure), poi_sources=search_result.poi_sources),
+        _materials_warnings(len(leisure), poi_sources=poi_sources),
         discovery,
-        search_result.poi_sources,
+        poi_sources,
     )

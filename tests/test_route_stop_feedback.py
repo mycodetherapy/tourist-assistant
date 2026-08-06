@@ -152,6 +152,44 @@ class TestRouteStopFeedback(unittest.TestCase):
         self.assertIn("monument", banned)
         self.assertNotIn("park", banned)
 
+    def test_expand_similar_does_not_ban_whole_yaroslavl_pool(self) -> None:
+        """Дизлайк одной точки не должен банить все POI с «(Ярославль)» в названии."""
+        leisure = [
+            PoiPoint(
+                poi_id="Q1",
+                tag="temples",
+                name="Благовещенский собор (Ярославль)",
+                coordinates=GeoPoint(lon=39.893, lat=57.626),
+                maps_url="https://example.com/Q1",
+            ),
+            PoiPoint(
+                poi_id="Q2",
+                tag="temples",
+                name="Церковь Ильи Пророка (Ярославль)",
+                coordinates=GeoPoint(lon=39.894, lat=57.627),
+                maps_url="https://example.com/Q2",
+            ),
+            PoiPoint(
+                poi_id="Q6",
+                tag="monuments",
+                name="Памятник Ярославу Мудрому (Ярославль)",
+                coordinates=GeoPoint(lon=39.896, lat=57.626),
+                maps_url="https://example.com/Q6",
+            ),
+            PoiPoint(
+                poi_id="Q10",
+                tag="parks",
+                name="Парк Тысячелетия (Ярославль)",
+                coordinates=GeoPoint(lon=39.900, lat=57.630),
+                maps_url="https://example.com/Q10",
+            ),
+        ]
+        banned = expand_similar_banned_poi(leisure, {"Q1", "Q6"})
+        self.assertIn("Q1", banned)
+        self.assertIn("Q6", banned)
+        self.assertNotIn("Q10", banned)
+        self.assertNotIn("Q2", banned)
+
     def test_stale_route_stops_on_reset_clears_likes_keeps_dislikes(self) -> None:
         pois = collect_route_stop_poi_ids(self.program)
         poi_id = next(iter(pois))

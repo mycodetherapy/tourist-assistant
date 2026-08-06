@@ -110,6 +110,7 @@ def get_user_settings(user_id: int) -> UserSettingsRow | None:
             llm_api_key_enc=row.llm_api_key_enc,
             llm_base_url=row.llm_base_url,
             llm_model=row.llm_model,
+            llm_mode=str(row.llm_mode or "none"),
             updated_at=iso_dt(row.updated_at),
         )
 
@@ -120,6 +121,7 @@ def upsert_user_settings(
     llm_api_key_enc: str | None = None,
     llm_base_url: str | None = None,
     llm_model: str | None = None,
+    llm_mode: str | None = None,
     clear_llm_key: bool = False,
 ) -> UserSettingsRow:
     existing = get_user_settings(user_id)
@@ -132,6 +134,11 @@ def upsert_user_settings(
     model = llm_model if llm_model is not None else (
         existing.llm_model if existing else None
     )
+    mode = llm_mode if llm_mode is not None else (
+        existing.llm_mode if existing else "none"
+    )
+    if clear_llm_key and mode == "byok":
+        mode = "none"
     now = utc_now()
     with pg_session() as session:
         stmt = pg_insert(UserSettings).values(
@@ -139,6 +146,7 @@ def upsert_user_settings(
             llm_api_key_enc=enc,
             llm_base_url=base_url,
             llm_model=model,
+            llm_mode=mode,
             updated_at=now,
         )
         stmt = stmt.on_conflict_do_update(
@@ -147,6 +155,7 @@ def upsert_user_settings(
                 "llm_api_key_enc": enc,
                 "llm_base_url": base_url,
                 "llm_model": model,
+                "llm_mode": mode,
                 "updated_at": now,
             },
         )

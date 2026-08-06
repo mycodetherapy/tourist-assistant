@@ -17,6 +17,16 @@ _session_preferences: ContextVar[TripPreferences | None] = ContextVar(
 _route_materials: ContextVar[dict[str, Any] | None] = ContextVar(
     "route_materials", default=None
 )
+_use_city_pack: ContextVar[bool] = ContextVar("use_city_pack", default=True)
+
+
+def set_poi_source_policy(*, use_city_pack: bool) -> None:
+    """Free tier: только Wikidata; city pack — при LLM (byok/platform)."""
+    _use_city_pack.set(bool(use_city_pack))
+
+
+def get_use_city_pack() -> bool:
+    return _use_city_pack.get()
 
 
 def set_session(preferences: TripPreferences, search_context: str) -> None:
@@ -45,6 +55,7 @@ def clear_search_context() -> None:
     _search_context.set("")
     _session_preferences.set(None)
     _route_materials.set(None)
+    _use_city_pack.set(True)
 
 
 def bootstrap_from_agent_state(state: AgentState | dict[str, Any]) -> None:

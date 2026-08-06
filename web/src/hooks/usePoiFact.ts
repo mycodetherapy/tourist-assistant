@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchPoiFact, startPoiFact, type PoiFactResponse } from "../api/poiFacts";
+import { guestFetchPoiFact, guestStartPoiFact } from "../api/guest";
 
 const POLL_INTERVAL_MS = 1500;
 const MAX_POLL_ATTEMPTS = 24;
@@ -9,7 +10,10 @@ export interface PoiFactTarget {
   name: string;
 }
 
-export function usePoiFact(tripId: number) {
+export function usePoiFact(tripId: number, options?: { guest?: boolean }) {
+  const guest = options?.guest ?? false;
+  const startFact = guest ? guestStartPoiFact : startPoiFact;
+  const fetchFact = guest ? guestFetchPoiFact : fetchPoiFact;
   const [target, setTarget] = useState<PoiFactTarget | null>(null);
   const [data, setData] = useState<PoiFactResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,7 +40,7 @@ export function usePoiFact(tripId: number) {
   const poll = useCallback(
     async (cacheKey: string) => {
       try {
-        const response = await fetchPoiFact(tripId, cacheKey);
+        const response = await fetchFact(tripId, cacheKey);
         setData(response);
         if (response.status === "ready") {
           setLoading(false);
@@ -65,7 +69,7 @@ export function usePoiFact(tripId: number) {
         clearPoll();
       }
     },
-    [tripId, clearPoll],
+    [tripId, clearPoll, fetchFact],
   );
 
   const open = useCallback(
@@ -76,7 +80,7 @@ export function usePoiFact(tripId: number) {
       setError(null);
       setLoading(true);
       try {
-        const response = await startPoiFact(tripId, {
+        const response = await startFact(tripId, {
           poi_id: next.poiId || null,
           name: next.name,
         });
@@ -99,7 +103,7 @@ export function usePoiFact(tripId: number) {
         setError(err instanceof Error ? err.message : "Ошибка запуска");
       }
     },
-    [tripId, poll, clearPoll],
+    [tripId, poll, clearPoll, startFact],
   );
 
   useEffect(() => () => clearPoll(), [clearPoll]);

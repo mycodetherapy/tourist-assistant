@@ -106,6 +106,7 @@ export interface CreateTripPayload {
   route_anchor?: RouteAnchor | null;
   preferences?: TripPreferences | null;
   start_run: boolean;
+  captcha_token?: string;
 }
 
 export interface CreateTripResponse {
@@ -135,16 +136,22 @@ export interface AuthResponse {
   access_token: string;
   token_type: string;
   user: UserInfo;
+  claimed_trip_id?: number;
 }
 
+export type LlmMode = "none" | "platform" | "byok";
+
 export interface SettingsResponse {
+  llm_mode: LlmMode;
   llm_key_configured: boolean;
   llm_key_preview: string | null;
   llm_base_url: string;
   llm_model: string;
+  estimated_ai_run_cost_rub: number;
 }
 
 export interface UpdateSettingsPayload {
+  llm_mode?: LlmMode;
   llm_api_key?: string;
   llm_base_url?: string;
   llm_model?: string;

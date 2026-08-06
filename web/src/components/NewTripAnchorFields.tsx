@@ -2,6 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Button, Checkbox, Spin } from "antd";
 import { useMemo, useState } from "react";
 import { geocodeQuery, reverseGeocodeQuery } from "../api/trips";
+import {
+  guestGeocodeQuery,
+  guestReverseGeocodeQuery,
+} from "../api/guest";
 import type { RouteAnchor } from "../api/types";
 import { RouteAnchorMapPicker, type MapPoint } from "./RouteAnchorMapPicker";
 
@@ -10,6 +14,7 @@ interface NewTripAnchorFieldsProps {
   value: RouteAnchor | null | undefined;
   onChange: (anchor: RouteAnchor | null) => void;
   disabled?: boolean;
+  guestMode?: boolean;
 }
 
 const FALLBACK_CENTER: MapPoint = { lat: 55.75, lon: 37.62 };
@@ -20,13 +25,16 @@ export function NewTripAnchorFields({
   value,
   onChange,
   disabled = false,
+  guestMode = false,
 }: NewTripAnchorFieldsProps) {
   const [loopEnd, setLoopEnd] = useState(Boolean(value?.loop_end));
   const cityTrimmed = city.trim();
+  const geocodeFn = guestMode ? guestGeocodeQuery : geocodeQuery;
+  const reverseGeocodeFn = guestMode ? guestReverseGeocodeQuery : reverseGeocodeQuery;
 
   const cityCenterQuery = useQuery({
-    queryKey: ["new-trip", "city-center", cityTrimmed],
-    queryFn: () => geocodeQuery(cityTrimmed, cityTrimmed),
+    queryKey: [guestMode ? "guest" : "new-trip", "city-center", cityTrimmed],
+    queryFn: () => geocodeFn(cityTrimmed, cityTrimmed),
     enabled: cityTrimmed.length >= 2,
   });
 
@@ -55,9 +63,9 @@ export function NewTripAnchorFields({
           center={mapCenter}
           value={mapValue}
           label={value?.label ?? ""}
-          onGeocode={(query) => geocodeQuery(query, cityTrimmed).then((data) => data.results)}
+          onGeocode={(query) => geocodeFn(query, cityTrimmed).then((data) => data.results)}
           onReverseGeocode={(lat, lon) =>
-            reverseGeocodeQuery(lat, lon, cityTrimmed).then((hit) => hit.label)
+            reverseGeocodeFn(lat, lon, cityTrimmed).then((hit) => hit.label)
           }
           onChange={(point, meta) =>
             onChange({

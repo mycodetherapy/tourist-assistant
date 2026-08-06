@@ -1978,8 +1978,9 @@ def build_new_routes_respecting_likes(
     """Три новых маршрута с учётом poi из лайкнутых (без копирования пути)."""
     from program.route_feedback import collect_leisure_poi_ids
 
-    avoid = collect_leisure_poi_ids(preserved) | set(banned_poi_ids or ())
-    prefer = set(prefer_poi_ids or ()) - avoid
+    liked_poi = collect_leisure_poi_ids(preserved)
+    avoid = set(banned_poi_ids or ())
+    prefer = set(prefer_poi_ids or ()) - avoid - liked_poi
     program: RouteProgram | None = None
     for attempt in range(4):
         if draft is not None and attempt == 0:

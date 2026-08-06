@@ -300,7 +300,16 @@ def save_itinerary_version(
             update(Trip).where(Trip.id == trip_id).values(updated_at=now)
         )
         session.flush()
-        return int(row.id)
+        version_id = int(row.id)
+    if scope in ("routes", "full", "events", "dining"):
+        from program.route_feedback import sync_preserved_route_feedback
+
+        sync_preserved_route_feedback(
+            trip_id,
+            program,
+            itinerary_version_id=version_id,
+        )
+    return version_id
 
 
 def log_tool_run(

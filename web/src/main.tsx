@@ -8,8 +8,12 @@ import App from "./App";
 import { AuthProvider } from "./auth/AuthContext";
 import "./index.css";
 import { initYandexMetrika } from "./utils/analytics";
+import { hasAnalyticsConsent } from "./utils/cookieConsent";
 
-initYandexMetrika();
+/** Метрика — только после согласия («Принять все»); иначе ждём баннер в App. */
+if (hasAnalyticsConsent()) {
+  initYandexMetrika();
+}
 
 if (import.meta.env.PROD) {
   const { registerSW } = await import("virtual:pwa-register");

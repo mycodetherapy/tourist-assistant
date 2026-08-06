@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
+import { guestSubmitItemFeedback } from "../api/guest";
 import { parseRouteProgram, rawRouteCases, routeCaseAtIndex } from "../api/routeTypes";
 import type { ItemVote, ProgramResponse } from "../api/types";
 import { pickPreferredCaseId } from "../utils/routeVotes";
@@ -21,6 +22,7 @@ interface ProgramTabsProps {
   city: string;
   data: ProgramResponse;
   votingDisabled?: boolean;
+  guestMode?: boolean;
 }
 
 function MarkdownBlock({
@@ -47,11 +49,20 @@ function MarkdownBlock({
   );
 }
 
-export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsProps) {
+export function ProgramTabs({
+  tripId,
+  city,
+  data,
+  votingDisabled,
+  guestMode = false,
+}: ProgramTabsProps) {
   const queryClient = useQueryClient();
+  const programQueryKey = guestMode
+    ? (["guest", "trips", tripId, "program"] as const)
+    : (["trips", tripId, "program"] as const);
   const screens = useBreakpoint();
   const isMobile = screens.md === false;
-  const poiFact = usePoiFact(tripId);
+  const poiFact = usePoiFact(tripId, { guest: guestMode });
   const routeCases = parseRouteProgram(data.program.routes);
   const routeCasesRaw = rawRouteCases(data.program.routes);
   const defaultRouteCaseId = useMemo(
@@ -78,26 +89,30 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
       item_key: string;
       vote: ItemVote | null;
     }) =>
-      submitItemFeedback(tripId, {
-        version_id: data.version_id,
-        section: payload.section,
-        item_key: payload.item_key,
-        item_index: payload.item_index,
-        vote: payload.vote,
-      }),
+      guestMode
+        ? guestSubmitItemFeedback(tripId, {
+            version_id: data.version_id,
+            section: payload.section,
+            item_key: payload.item_key,
+            item_index: payload.item_index,
+            vote: payload.vote,
+          })
+        : submitItemFeedback(tripId, {
+            version_id: data.version_id,
+            section: payload.section,
+            item_key: payload.item_key,
+            item_index: payload.item_index,
+            vote: payload.vote,
+          }),
     onMutate: async (payload) => {
-      await queryClient.cancelQueries({ queryKey: ["trips", tripId, "program"] });
-      const previous = queryClient.getQueryData<ProgramResponse>([
-        "trips",
-        tripId,
-        "program",
-      ]);
+      await queryClient.cancelQueries({ queryKey: programQueryKey });
+      const previous = queryClient.getQueryData<ProgramResponse>(programQueryKey);
       if (previous?.sections?.[payload.section]) {
         const section = previous.sections[payload.section];
         const updatedItems = section.items.map((item) =>
           item.item_key === payload.item_key ? { ...item, vote: payload.vote } : item,
         );
-        queryClient.setQueryData<ProgramResponse>(["trips", tripId, "program"], {
+        queryClient.setQueryData<ProgramResponse>(programQueryKey, {
           ...previous,
           sections: {
             ...previous.sections,
@@ -111,11 +126,11 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
       return { previous };
     },
     onSuccess: (updated) => {
-      queryClient.setQueryData(["trips", tripId, "program"], updated);
+      queryClient.setQueryData(programQueryKey, updated);
     },
     onError: (error, _payload, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(["trips", tripId, "program"], context.previous);
+        queryClient.setQueryData(programQueryKey, context.previous);
       }
       notification.error({
         title: "Оценка не сохранена",
@@ -123,7 +138,7 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
       });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
+      queryClient.invalidateQueries({ queryKey: programQueryKey });
     },
   });
 
@@ -152,7 +167,7 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
         title: "Оценка не сохранена",
         description: "Обновите страницу (Ctrl+Shift+R) и попробуйте снова.",
       });
-      queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
+      queryClient.invalidateQueries({ queryKey: programQueryKey });
       return;
     }
     voteMutation.mutate({ section, item_index: itemIndex, item_key: itemKey, vote });
@@ -181,7 +196,7 @@ export function ProgramTabs({ tripId, city, data, votingDisabled }: ProgramTabsP
               return routeCase && String(routeCase.case_id) === activeRouteCaseId;
             })
             .map((item) => {
-              const routeCase = routeCaseAtIndex(routeCases, item.index);
+              const routeCase = routeCaseAtIndex(routeCasesRaw, item.index);
               const useRouteCard =
                 !!routeCase && Boolean(routeCase.maps_route_url || routeCase.stops.length);
               const hasMap = Boolean(routeCase?.maps_route_url);

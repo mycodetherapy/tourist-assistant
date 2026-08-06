@@ -9,9 +9,11 @@ COPY . .
 # Опционально из docker compose (корневой .env); иначе web/.env при сборке.
 ARG VITE_YANDEX_MAPS_API_KEY
 ARG VITE_YANDEX_METRIKA_ID
+ARG VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY
 RUN \
   if [ -n "$VITE_YANDEX_MAPS_API_KEY" ]; then export VITE_YANDEX_MAPS_API_KEY="$VITE_YANDEX_MAPS_API_KEY"; fi && \
   if [ -n "$VITE_YANDEX_METRIKA_ID" ]; then export VITE_YANDEX_METRIKA_ID="$VITE_YANDEX_METRIKA_ID"; fi && \
+  if [ -n "$VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY" ]; then export VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY="$VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY"; fi && \
   npm run build
 
 FROM nginx:1.27-alpine

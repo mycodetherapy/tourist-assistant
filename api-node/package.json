@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run -c vitest.integration.config.ts",
-    "export:openapi": "tsx scripts/export-openapi.ts"
+    "export:openapi": "tsx scripts/export-openapi.ts",
+    "guest:cleanup": "node dist/cli/guestCleanup.js"
   },
   "engines": {
     "node": ">=20"

@@ -33,6 +33,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     password_hash: Mapped[str | None] = mapped_column(Text)
     google_sub: Mapped[str | None] = mapped_column(Text, unique=True)
+    is_guest: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -51,6 +52,7 @@ class UserSettings(Base):
     llm_api_key_enc: Mapped[str | None] = mapped_column(Text)
     llm_base_url: Mapped[str | None] = mapped_column(Text)
     llm_model: Mapped[str | None] = mapped_column(Text)
+    llm_mode: Mapped[str] = mapped_column(Text, nullable=False, server_default="none")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     user: Mapped[User] = relationship(back_populates="settings")
@@ -303,6 +305,28 @@ class UsageEvent(Base):
     completion_tokens: Mapped[int | None] = mapped_column(Integer)
     total_tokens: Mapped[int | None] = mapped_column(Integer)
     cost_usd: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class GuestSession(Base):
+    __tablename__ = "guest_sessions"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_guest_sessions_user_id"),
+        Index("idx_guest_sessions_expires", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    trip_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("trips.id", ondelete="SET NULL")
+    )
+    full_runs_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    partial_runs_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
