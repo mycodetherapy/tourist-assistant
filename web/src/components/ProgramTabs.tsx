@@ -199,7 +199,9 @@ export function ProgramTabs({
               const routeCase = routeCaseAtIndex(routeCasesRaw, item.index);
               const useRouteCard =
                 !!routeCase && Boolean(routeCase.maps_route_url || routeCase.stops.length);
-              const hasMap = Boolean(routeCase?.maps_route_url);
+              const hasMap = Boolean(
+                routeCase?.maps_route_url || routeCase?.route_geometry?.coordinates?.length,
+              );
               const detailsBlock = useRouteCard ? (
                 <RouteCaseDetails
                   routeCase={routeCase}
@@ -215,6 +217,18 @@ export function ProgramTabs({
               ) : (
                 <MarkdownBlock text={item.text} className="mb-0" />
               );
+              const openStopFromMap = (stopIndex: number) => {
+                if (!routeCase) {
+                  return;
+                }
+                const leisure = routeCase.stops.filter((s) => s.kind === "leisure");
+                const stop = leisure[stopIndex];
+                if (!stop) {
+                  return;
+                }
+                const name = (stop.narrative ?? "").trim() || "Место";
+                void poiFact.open({ poiId: stop.poi_id ?? "", name });
+              };
               const voteButtons = (
                 <ItemVoteButtons
                   vote={item.vote}
@@ -230,7 +244,11 @@ export function ProgramTabs({
                     key={`routes-${item.item_key}`}
                     className="route-item--with-map flex flex-col rounded-lg border border-gray-100 bg-white"
                   >
-                    <RouteMapView routeCase={routeCase!} city={city} />
+                    <RouteMapView
+                      routeCase={routeCase!}
+                      city={city}
+                      onStopClick={(stopIndex) => openStopFromMap(stopIndex)}
+                    />
                     <div className="route-item-body flex flex-col gap-2">
                       <div className="min-w-0 flex-1">{detailsBlock}</div>
                       {voteButtons}
@@ -246,8 +264,12 @@ export function ProgramTabs({
                   }`}
                 >
                   <div className="min-w-0 flex-1">
-                    {routeCase?.maps_route_url ? (
-                      <RouteMapView routeCase={routeCase} city={city} />
+                    {hasMap && routeCase ? (
+                      <RouteMapView
+                        routeCase={routeCase}
+                        city={city}
+                        onStopClick={(stopIndex) => openStopFromMap(stopIndex)}
+                      />
                     ) : null}
                     {detailsBlock}
                   </div>

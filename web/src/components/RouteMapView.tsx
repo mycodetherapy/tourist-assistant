@@ -1,10 +1,12 @@
 import type { TripRouteCase } from "../api/routeTypes";
+import type { MapRoutePoint } from "../utils/mapsRoutePoints";
 import { RouteMapEmbed } from "./RouteMapEmbed";
 import { RouteMapLibre } from "./RouteMapLibre";
 
 interface RouteMapViewProps {
   routeCase: TripRouteCase;
   city?: string;
+  onStopClick?: (index: number, point: MapRoutePoint) => void;
 }
 
 function mapProvider(): "yandex" | "maplibre" {
@@ -21,14 +23,14 @@ function mapProvider(): "yandex" | "maplibre" {
  * По умолчанию — iframe Яндекс.Карт (текущая реализация / фолбек).
  * MapLibre — только при VITE_MAP_PROVIDER=maplibre.
  */
-export function RouteMapView({ routeCase, city = "" }: RouteMapViewProps) {
+export function RouteMapView({ routeCase, city = "", onStopClick }: RouteMapViewProps) {
   const provider = mapProvider();
 
   if (provider === "maplibre") {
     if (!routeCase.maps_route_url && !routeCase.route_geometry) {
       return null;
     }
-    return <RouteMapLibre routeCase={routeCase} city={city} />;
+    return <RouteMapLibre routeCase={routeCase} city={city} onStopClick={onStopClick} />;
   }
 
   if (!routeCase.maps_route_url) {

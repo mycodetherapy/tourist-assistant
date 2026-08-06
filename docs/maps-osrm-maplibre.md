@@ -107,8 +107,9 @@ OSRM_BASE_URL=http://osrm:5000   # из контейнера worker
 Проверка:
 
 ```bash
-curl -s "http://127.0.0.1:5000/route/v1/foot/49.122,55.787;49.135,55.796?overview=false" | head -c 300
+curl -s "http://127.0.0.1:5001/route/v1/foot/49.122,55.787;49.135,55.796?overview=false" | head -c 300
 # ожидается "code":"Ok"
+# (хост-порт по умолчанию 5001 — на macOS :5000 часто занят AirPlay)
 ```
 
 ### Когда обновлять граф
@@ -148,10 +149,10 @@ curl -s "http://127.0.0.1:5000/route/v1/foot/49.122,55.787;49.135,55.796?overvie
 
 **Задачи**
 
-1. [ ] Пересобрать граф: `bash scripts/osrm_prepare.sh kazan` (старый `data/cities/kazan/osrm/` мог быть битым — не жалеть)
-2. [ ] `OSRM_DATASET=kazan docker compose --profile osrm up -d osrm`
-3. [ ] `curl` проверка Ok
-4. [ ] В `.env`: `OSRM_BASE_URL=http://127.0.0.1:5000` (worker на хосте) **или** `http://osrm:5000` (worker в compose) — не коммитить секреты; только `.env.example`
+1. [x] Пересобрать граф: `bash scripts/osrm_prepare.sh kazan`
+2. [x] `OSRM_DATASET=kazan docker compose --profile osrm up -d osrm` (хост-порт **5001** — на macOS :5000 занят AirPlay)
+3. [x] `curl` / Python client → `code Ok`
+4. [x] В локальном `.env`: `OSRM_BASE_URL=http://127.0.0.1:5001` (не коммитить)
 5. [ ] Собрать тестовую прогулку по Казани; в JSON case проверить `route_geometry.coordinates.length > 2`
 6. [ ] Собрать прогулку по городу **без** графа (или с выключенным OSRM) — убедиться что сборка ок, `route_geometry` null
 
@@ -163,12 +164,12 @@ curl -s "http://127.0.0.1:5000/route/v1/foot/49.122,55.787;49.135,55.796?overvie
 
 **Задачи**
 
-1. [ ] Включить локально `VITE_MAP_PROVIDER=maplibre`
+1. [x] Включить локально `VITE_MAP_PROVIDER=maplibre` (корневой `.env`, Vite `envDir`)
 2. [ ] Полировка UX: высота карты, touch vs scroll страницы, легенда S / номера
-3. [ ] Клик по маркеру стопа → тот же `onStopClick`, что список (прокинуть из родителя, если ещё не связано)
-4. [ ] Follow: кнопка геолокации включает/выключает `watchUserLocation`; ошибка HTTPS понятна
-5. [ ] Нет `route_geometry` → прямые + toast/hint «линия приближённая» (опционально, короткий текст)
-6. [ ] Регрессия: без флага снова iframe
+3. [x] Клик по маркеру стопа → `poiFact.open` (через `ProgramTabs` → `RouteMapView`)
+4. [ ] Follow: кнопка геолокации включает/выключает `watchUserLocation`; ошибка HTTPS понятна (smoke на телефоне)
+5. [x] Нет `route_geometry` → прямые + hint «линия приближённая»
+6. [x] Регрессия: без флага снова iframe (дефолт `yandex`)
 
 **Done when:** на телефоне по HTTPS можно идти с follow по Казани; клик по маркеру работает; без флага — старый UI.
 
@@ -239,6 +240,6 @@ curl -s "http://127.0.0.1:5000/route/v1/foot/49.122,55.787;49.135,55.796?overvie
 git checkout feat/maplibre-osrm
 bash scripts/osrm_prepare.sh kazan
 OSRM_DATASET=kazan docker compose --profile osrm up -d osrm
-# добавить OSRM_BASE_URL в локальный .env → перезапуск worker
+# в .env: OSRM_BASE_URL=http://127.0.0.1:5001 (worker на хосте)
 # собрать прогулку Казань → проверить route_geometry в program
 ```

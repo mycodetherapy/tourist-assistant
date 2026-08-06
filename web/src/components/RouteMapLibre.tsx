@@ -84,6 +84,10 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
   const [geoError, setGeoError] = useState<string | null>(null);
 
   const lineCoords = useMemo(() => lineCoordinates(routeCase), [routeCase]);
+  const hasOsrmGeometry = useMemo(() => {
+    const geom = routeCase.route_geometry?.coordinates;
+    return Array.isArray(geom) && geom.length >= 2;
+  }, [routeCase.route_geometry]);
   const markers = useMemo(() => {
     const routePoints = parseMapsRoutePoints(routeCase.maps_route_url);
     const leisureCount =
@@ -276,6 +280,11 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
         {geoError ? (
           <div className="absolute inset-x-2 bottom-14 z-[5] rounded bg-white/95 px-2 py-1 text-xs text-amber-800 shadow">
             {geoError}
+          </div>
+        ) : null}
+        {!hasOsrmGeometry ? (
+          <div className="pointer-events-none absolute inset-x-2 top-2 z-[4] max-w-[70%] rounded bg-white/90 px-2 py-1 text-[11px] text-slate-600 shadow">
+            Линия приближённая (нет OSRM-геометрии)
           </div>
         ) : null}
         <RouteMapYandexOpenChrome mapsRouteUrl={routeCase.maps_route_url} city={city} />
