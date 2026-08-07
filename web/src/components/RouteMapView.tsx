@@ -9,27 +9,27 @@ interface RouteMapViewProps {
   onStopClick?: (index: number, point: MapRoutePoint) => void;
 }
 
-function mapProvider(): "yandex" | "maplibre" {
+function maplibreFlagEnabled(): boolean {
   const raw = (import.meta.env.VITE_MAP_PROVIDER as string | undefined)?.trim().toLowerCase();
-  // Текущий прод: iframe Яндекса. MapLibre включаем явно (feature flag).
-  if (raw === "maplibre") {
-    return "maplibre";
-  }
-  return "yandex";
+  return raw === "maplibre";
+}
+
+function hasOsrmGeometry(routeCase: TripRouteCase): boolean {
+  const coords = routeCase.route_geometry?.coordinates;
+  return Array.isArray(coords) && coords.length >= 2;
 }
 
 /**
  * Карта маршрута.
- * По умолчанию — iframe Яндекс.Карт (текущая реализация / фолбек).
- * MapLibre — только при VITE_MAP_PROVIDER=maplibre.
+ *
+ * - VITE_MAP_PROVIDER=maplibre + есть route_geometry → MapLibre (клики, follow, линия OSRM)
+ * - иначе → iframe Яндекса (города без OSRM-графа, Wikidata-only, старые поездки)
+ * - без флага maplibre → всегда iframe (прод-фолбек)
  */
 export function RouteMapView({ routeCase, city = "", onStopClick }: RouteMapViewProps) {
-  const provider = mapProvider();
+  const useMapLibre = maplibreFlagEnabled() && hasOsrmGeometry(routeCase);
 
-  if (provider === "maplibre") {
-    if (!routeCase.maps_route_url && !routeCase.route_geometry) {
-      return null;
-    }
+  if (useMapLibre) {
     return <RouteMapLibre routeCase={routeCase} city={city} onStopClick={onStopClick} />;
   }
 

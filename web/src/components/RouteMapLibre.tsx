@@ -284,7 +284,7 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
         <MapGeolocationButton
           locating={false}
           active={follow}
-          topClassName="top-2"
+          topClassName="top-[84px]"
           ariaLabel={follow ? "Выключить следование" : "Следовать по маршруту"}
           onClick={() => setFollow((value) => !value)}
         />

@@ -168,10 +168,12 @@ curl -s "http://127.0.0.1:5001/route/v1/foot/49.122,55.787;49.135,55.796?overvie
 2. [x] Полировка UX: `cooperativeGestures`, punctир линии, aria follow
 3. [x] Клик по маркеру стопа → `poiFact.open` (через `ProgramTabs` → `RouteMapView`)
 4. [ ] Follow: smoke на телефоне по HTTPS (ручная проверка)
-5. [x] Нет `route_geometry` → прямые + hint «линия приближённая»
+5. [x] Нет `route_geometry` → **iframe Яндекса** (не прямые на MapLibre)
 6. [x] Регрессия: без флага снова iframe (дефолт `yandex`)
+7. [x] Кнопка follow не перекрывает zoom (`top-[84px]`)
 
-**Done when:** на телефоне по HTTPS можно идти с follow по Казани; клик по маркеру работает; без флага — старый UI.
+**Правило UI при `VITE_MAP_PROVIDER=maplibre`:**  
+`route_geometry` есть → MapLibre; нет (Wikidata-only / нет OSRM-графа / старая сборка) → iframe как раньше.
 
 **Оценка:** 1–2 дня.
 
