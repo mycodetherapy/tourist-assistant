@@ -14,6 +14,15 @@
 #   docker compose --profile infra up -d postgres redis
 #   export DATABASE_URL=postgresql+psycopg://tourist:tourist@localhost:5433/tourist
 #   alembic upgrade head
+#
+# OSRM ephemeral (VPS 4 ГБ): OSRM_MODE=ephemeral + docker.sock у worker
+#   (графы на диске; osrm-routed только на время geometry). Always-on: profile osrm.
+
+name: tourist-assistant
+
+networks:
+  default:
+    name: tourist-assistant
 
 services:
   postgres:
@@ -79,10 +88,16 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required in .env}
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY required in .env}
       TOURIST_ASSISTANT_IN_DOCKER: "1"
-      # Внутри compose-сети localhost хоста недоступен — всегда сервис osrm.
+      # Always-on OSRM (profile osrm) ИЛИ ephemeral (VPS 4 ГБ).
+      OSRM_MODE: ${OSRM_MODE:-http}
       OSRM_BASE_URL: ${OSRM_DOCKER_BASE_URL:-http://osrm:5000}
       OSRM_DATASET: ${OSRM_DATASET:-kazan}
       OSRM_URL_BY_SLUG: ${OSRM_URL_BY_SLUG:-}
+      # ephemeral: путь ХОСТА к data/cities (bind для docker run), сеть compose
+      OSRM_HOST_DATA_CITIES: ${OSRM_HOST_DATA_CITIES:-}
+      OSRM_DOCKER_NETWORK: ${OSRM_DOCKER_NETWORK:-tourist-assistant}
+      OSRM_EPHEMERAL_URL: ${OSRM_EPHEMERAL_URL:-http://osrm-ephemeral:5000}
+      OSRM_IMAGE: ${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v5.27.1}
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,6 +106,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./config:/app/config:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
   api-node:

@@ -12,7 +12,16 @@ from search.osrm.client import fetch_foot_route, resolve_osrm_base_url
 class TestOsrmClient(unittest.TestCase):
     def test_returns_none_without_base_url(self) -> None:
         points = [GeoPoint(lat=55.79, lon=49.12), GeoPoint(lat=55.80, lon=49.13)]
-        with patch.dict("os.environ", {"OSRM_BASE_URL": "", "OSRM_URL_BY_SLUG": ""}, clear=False):
+        with patch.dict(
+            "os.environ",
+            {
+                "OSRM_BASE_URL": "",
+                "OSRM_URL_BY_SLUG": "",
+                "OSRM_MODE": "http",
+                "OSRM_EPHEMERAL": "",
+            },
+            clear=False,
+        ):
             self.assertIsNone(fetch_foot_route(points))
 
     def test_returns_none_for_single_point(self) -> None:

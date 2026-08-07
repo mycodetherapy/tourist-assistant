@@ -23,11 +23,17 @@
 # web/.env или корневой .env (для Vite)
 VITE_MAP_PROVIDER=maplibre
 
-# worker
-OSRM_BASE_URL=http://127.0.0.1:5000
+# worker (локально always-on)
+OSRM_MODE=http
+OSRM_BASE_URL=http://127.0.0.1:5001
+
+# VPS 4 ГБ: графы на диске, роутер на время запроса
+# OSRM_MODE=ephemeral
+# OSRM_HOST_DATA_CITIES=/opt/tourist-assistant/data/cities
+# OSRM_DOCKER_NETWORK=progulyai
 ```
 
-Прод до готовности фазы 4: **не** ставить `VITE_MAP_PROVIDER=maplibre`, OSRM profile можно не поднимать.
+Политика каталога: [`docs/city-catalog-policy.md`](city-catalog-policy.md).
 
 ---
 

@@ -267,6 +267,33 @@ class CityPack(Base):
     )
 
 
+class CityRequest(Base):
+    """Заявки на города вне каталога (ручной accept → city_packs.yaml)."""
+
+    __tablename__ = "city_requests"
+    __table_args__ = (
+        Index("idx_city_requests_normalized", "normalized_name"),
+        Index("idx_city_requests_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    city_name: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_name: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str | None] = mapped_column(Text)
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="new")
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     __table_args__ = (Index("idx_audit_events_user_created", "user_id", "created_at"),)

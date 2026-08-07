@@ -1076,6 +1076,15 @@
         }
       }
     },
+    "/api/city-requests": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/runs/{run_id}": {
       "get": {
         "summary": "Run status",

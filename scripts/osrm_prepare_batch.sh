@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Сборка OSRM foot-графов для всех default_packs (или списка slug).
-# Использование:
-#   bash scripts/osrm_prepare_batch.sh
+# Сборка OSRM foot-графов.
+#   bash scripts/osrm_prepare_batch.sh           # hot
+#   bash scripts/osrm_prepare_batch.sh --tier=warm
 #   bash scripts/osrm_prepare_batch.sh kazan samara
 set -euo pipefail
 
@@ -11,14 +11,32 @@ if [[ -x "$ROOT/.venv/bin/python" ]]; then
   PYTHON="$ROOT/.venv/bin/python"
 fi
 
-if [[ "$#" -gt 0 ]]; then
-  SLUGS="$*"
+TIER="hot"
+EXPLICIT=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --tier=*)
+      TIER="${1#--tier=}"
+      shift
+      ;;
+    --tier)
+      TIER="${2:-hot}"
+      shift 2
+      ;;
+    *)
+      EXPLICIT+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ "${#EXPLICIT[@]}" -gt 0 ]]; then
+  SLUGS="${EXPLICIT[*]}"
 else
-  SLUGS="$("$PYTHON" - <<'PY'
-from config.city_catalog import load_city_pack_specs
-for slug, spec in load_city_pack_specs().items():
-    if spec.is_default:
-        print(slug)
+  SLUGS="$("$PYTHON" - "$TIER" <<'PY'
+import sys
+from config.city_catalog import catalog_slugs
+print(" ".join(catalog_slugs(tier=sys.argv[1] or "hot")))
 PY
 )"
 fi

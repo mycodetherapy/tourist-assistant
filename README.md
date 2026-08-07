@@ -175,7 +175,7 @@ npm run dev
 
 ### City pack (POI из OSM-выжимки)
 
-POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута по умолчанию — **iframe-виджет** Яндекса (`maps_route_url`, `rtt=pd`); MapLibre — `VITE_MAP_PROVIDER=maplibre`. Пешая геометрия OSRM опциональна: `bash scripts/osrm_prepare.sh <slug>` / `osrm_prepare_batch.sh`, `docker compose --profile osrm up -d osrm`, worker `OSRM_DOCKER_BASE_URL=http://osrm:5000` + `OSRM_DATASET` (один город на контейнер; multi — `OSRM_URL_BY_SLUG`). Без графа сборка не падает. RAM: ~150–400 MB на город. План: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md). Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
+POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml), полки `hot`/`warm` — [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута по умолчанию — **iframe-виджет** Яндекса (`maps_route_url`, `rtt=pd`); MapLibre — `VITE_MAP_PROVIDER=maplibre` (только при наличии `route_geometry`). Пешая геометрия OSRM: подготовка **на Mac** (`city_pack_prepare` / `osrm_prepare_batch`), на VPS — rsync `data/cities/` + **`OSRM_MODE=ephemeral`** (docker run на время запроса; `docker.sock` + `OSRM_HOST_DATA_CITIES`). Локально можно always-on: `docker compose --profile osrm up -d osrm` + `OSRM_MODE=http`. Без графа сборка не падает. План: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md). Заявки на город вне каталога: `POST /api/city-requests`, CLI `python scripts/city_requests_cli.py`. Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
 
 **Первый запуск (Поволжский ФО, 8 городов):**
 
@@ -183,8 +183,11 @@ POI строятся из `extract.osm.pbf` на город ([`config/city_packs
 bash scripts/fo_ensure.sh volga              # FO PBF ~730 MB (один раз)
 bash scripts/city_pack_prepare.sh kazan      # extract + poi.sqlite (~2–4 мин)
 bash scripts/city_pack_prepare.sh yoshkar-ola
-# или все default packs:
+# extract+poi для hot+warm (на Mac):
 bash scripts/city_pack_batch.sh
+bash scripts/city_pack_batch.sh --tier=hot
+# OSRM-графы hot (на Mac → rsync data/cities на VPS):
+bash scripts/osrm_prepare_batch.sh
 ```
 
 При первом `city_pack_prepare` автоматически собирается Docker-образ `local-osmium-tool` (`scripts/Dockerfile.osmium`), если нет доступа к `ghcr.io/osmcode/osmium-tool`.
@@ -679,7 +682,7 @@ python3 scripts/render_graph.py
 | **LangFuse** (опционально)                   | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker)                                                     |
 | **LangSmith** (опционально)                  | Трейсы графа (`observability/tracing.py`)                                                                          |
 | **Яндекс.Карты (Geocoder + JS API)**         | Геокодинг; карта стартовой точки; **карта маршрута по умолчанию** — iframe + deep link `maps_route_url` |
-| **OSRM** (опционально, `OSRM_BASE_URL`)      | Пешая `route_geometry` при сборке; без графа — тихий skip; план [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md) |
+| **OSRM** (опционально)                       | Пешая `route_geometry`; `OSRM_MODE=http` или `ephemeral`; без графа — тихий skip; [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md) |
 | **MapLibre + OpenFreeMap**                   | Opt-in карта маршрута (`VITE_MAP_PROVIDER=maplibre`): клики, follow GPS                                 |
 | **City pack**                                | POI из `poi.sqlite`; каталог `city_packs` в Postgres                                                               |
 | **OpenStreetMap** (Nominatim, Geofabrik PBF) | Центр города; выжимки city pack; граф OSRM                                                                                    |
@@ -839,13 +842,14 @@ tourist-assistant/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool search_route_materials
 │   ├── osm/                # Nominatim, city pack POI
-│   ├── osrm/               # пешая геометрия (OSRM HTTP → route_geometry)
+│   ├── osrm/               # пешая геометрия (HTTP / ephemeral → route_geometry)
 │   ├── wikidata/           # SPARQL достопримечательностей, city_description (факт)
 │   ├── yandex/             # materials, maps_route_url
 │   ├── context.py          # ContextVar: prefs + route_materials (worker-safe)
 │   └── tool_logging.py     # разбор payload для tool_runs
 ├── docs/
-│   └── maps-osrm-maplibre.md  # дизайн MapLibre + OSRM
+│   ├── maps-osrm-maplibre.md  # дизайн MapLibre + OSRM
+│   └── city-catalog-policy.md # hot/warm, Mac prepare, VPS ephemeral
 ├── agents/
 │   ├── llm.py              # ChatOpenAI, llm_with_tools, llm_final
 │   ├── nodes.py            # researcher, executor, writer, critic
@@ -862,12 +866,16 @@ tourist-assistant/
 ├── observability/          # LangFuse tracing
 ├── eval/                   # python3 -m eval --suite smoke
 ├── scripts/render_graph.py # PNG графа → docs/assets/graph.png
-├── config/city_packs.yaml      # каталог городов (8 × Поволжье)
+├── config/city_packs.yaml      # каталог городов (tier hot|warm)
 ├── config/federal_districts.yaml
 ├── scripts/fo_ensure.sh        # Geofabrik FO PBF
 ├── scripts/city_pack_prepare.sh
 ├── scripts/city_pack_batch.sh
+├── scripts/osrm_prepare.sh
+├── scripts/osrm_prepare_batch.sh
+├── scripts/city_requests_cli.py
 ├── db/postgres/city_packs.py   # статусы pack в Postgres
+├── db/postgres/city_requests.py
 ├── docs/assets/graph.png
 ├── tests/
 ├── data/                   # локальные артефакты (в .gitignore)

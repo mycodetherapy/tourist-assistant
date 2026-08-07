@@ -53,6 +53,7 @@ class CityPackSpec:
     names: tuple[str, ...]
     poi_radius_km: float
     extract_buffer_km: float
+    tier: str = "hot"  # hot | warm
     is_default: bool = True
 
     @property
@@ -70,6 +71,12 @@ class CityPackSpec:
     @property
     def meta_path(self) -> Path:
         return self.pack_dir / "meta.json"
+
+    @property
+    def osrm_graph_path(self) -> Path:
+        """Базовый путь графа: …/osrm/<slug>.osrm (без суффиксов MLD)."""
+        return self.pack_dir / "osrm" / f"{self.slug}.osrm"
+
 
 
 def _normalize_city_name(city: str) -> str:
@@ -102,6 +109,9 @@ def load_city_pack_specs() -> dict[str, CityPackSpec]:
         slug = str(item["slug"])
         names = tuple(str(n) for n in item.get("names") or [])
         buffer_km = item.get("extract_buffer_km", item.get("routing_buffer_km", 1.0))
+        tier = str(item.get("tier") or "hot").strip().lower()
+        if tier not in ("hot", "warm"):
+            tier = "hot"
         out[slug] = CityPackSpec(
             slug=slug,
             display_name=str(item.get("display_name") or slug),
@@ -109,7 +119,8 @@ def load_city_pack_specs() -> dict[str, CityPackSpec]:
             names=names,
             poi_radius_km=float(item.get("poi_radius_km", 4.5)),
             extract_buffer_km=float(buffer_km),
-            is_default=True,
+            tier=tier,
+            is_default=(tier == "hot"),
         )
     return out
 
@@ -137,10 +148,27 @@ def get_federal_district(district_id: str) -> FederalDistrict | None:
     return load_federal_districts().get(district_id)
 
 
+def catalog_slugs(*, tier: str | None = None) -> list[str]:
+    """Все slug каталога; tier=hot|warm|None."""
+    specs = load_city_pack_specs()
+    if tier is None:
+        return list(specs.keys())
+    want = tier.strip().lower()
+    return [s for s, spec in specs.items() if spec.tier == want]
+
+
 def default_pack_slugs() -> list[str]:
-    return list(load_city_pack_specs().keys())
+    """Hot-города (обратная совместимость city_pack_batch / osrm batch)."""
+    return catalog_slugs(tier="hot")
 
 
 def is_default_pack(slug: str) -> bool:
     spec = get_city_pack_spec(slug)
     return spec is not None and spec.is_default
+
+
+def is_osrm_graph_ready(slug: str) -> bool:
+    """На диске есть MLD-граф (файл <slug>.osrm.mldgr)."""
+    spec = get_city_pack_spec(slug)
+    base = spec.osrm_graph_path if spec else city_pack_dir(slug) / "osrm" / f"{slug}.osrm"
+    return Path(f"{base}.mldgr").is_file()

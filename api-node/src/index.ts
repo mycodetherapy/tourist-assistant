@@ -16,6 +16,7 @@ import {
 import { registerRunsRoutes } from "./routes/runs.js";
 import { registerTripsRoutes } from "./routes/trips.js";
 import { registerGuestRoutes } from "./routes/guest.js";
+import { registerCityRequestRoutes } from "./routes/cityRequests.js";
 import { registerSwagger } from "./plugins/swagger.js";
 
 export type BuildAppOptions = {
@@ -95,6 +96,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await registerProfileRoutes(app);
   await registerTripsRoutes(app);
   await registerGuestRoutes(app);
+  await registerCityRequestRoutes(app);
   await registerRunsRoutes(app);
 
   return app;

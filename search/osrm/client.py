@@ -115,6 +115,21 @@ def fetch_foot_route(
     if base_url is not None:
         url_base = base_url.strip().rstrip("/")
     else:
+        # Эфемерный роутер (VPS 4 ГБ): docker run на время запроса
+        try:
+            from search.osrm.ephemeral import ephemeral_enabled, fetch_foot_route_ephemeral
+
+            if ephemeral_enabled() and city:
+                from config.city_catalog import resolve_city_slug
+
+                slug = resolve_city_slug(str(city))
+                if slug:
+                    return fetch_foot_route_ephemeral(
+                        points, slug=slug, timeout_s=timeout_s
+                    )
+        except Exception:
+            logger.warning("ephemeral OSRM path failed", exc_info=True)
+
         url_base = (resolve_osrm_base_url(city) or "").strip().rstrip("/")
     if not url_base or len(points) < 2:
         return None

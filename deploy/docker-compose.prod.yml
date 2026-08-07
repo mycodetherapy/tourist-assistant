@@ -9,6 +9,10 @@
 
 name: progulyai
 
+networks:
+  default:
+    name: progulyai
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -46,7 +50,14 @@ services:
       DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD}@postgres:5432/tourist
       REDIS_URL: redis://redis:6379/0
       TOURIST_ASSISTANT_IN_DOCKER: "1"
+      OSRM_MODE: ${OSRM_MODE:-ephemeral}
       OSRM_BASE_URL: ${OSRM_DOCKER_BASE_URL:-http://osrm:5000}
+      OSRM_DATASET: ${OSRM_DATASET:-kazan}
+      OSRM_URL_BY_SLUG: ${OSRM_URL_BY_SLUG:-}
+      OSRM_HOST_DATA_CITIES: ${OSRM_HOST_DATA_CITIES:-}
+      OSRM_DOCKER_NETWORK: ${OSRM_DOCKER_NETWORK:-progulyai}
+      OSRM_EPHEMERAL_URL: ${OSRM_EPHEMERAL_URL:-http://osrm-ephemeral:5000}
+      OSRM_IMAGE: ${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v5.27.1}
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,6 +65,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
   api-node:
