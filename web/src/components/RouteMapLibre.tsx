@@ -223,9 +223,16 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
   }, [markers, mapReady, onStopClick]);
 
   useEffect(() => {
-    if (!follow) {
+    const clearFollowTracking = () => {
       stopWatchRef.current?.();
       stopWatchRef.current = null;
+      userMarkerRef.current?.remove();
+      userMarkerRef.current = null;
+      mapRef.current?.stop();
+    };
+
+    if (!follow) {
+      clearFollowTracking();
       return undefined;
     }
 
@@ -239,6 +246,10 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
     setGeoError(null);
     stopWatchRef.current = watchUserLocation(
       (point) => {
+        // Поздний GPS-callback после выключения — не двигаем метку/камеру
+        if (!followRef.current) {
+          return;
+        }
         const map = mapRef.current;
         if (!map) {
           return;
@@ -253,9 +264,7 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
         } else {
           userMarkerRef.current.setLngLat([point.lon, point.lat]);
         }
-        if (followRef.current) {
-          map.easeTo({ center: [point.lon, point.lat], duration: 500, zoom: Math.max(map.getZoom(), 15) });
-        }
+        map.easeTo({ center: [point.lon, point.lat], duration: 500, zoom: Math.max(map.getZoom(), 15) });
       },
       (error: GeolocationError) => {
         setGeoError(error.message);
@@ -264,8 +273,7 @@ export function RouteMapLibre({ routeCase, city = "", onStopClick }: RouteMapLib
     );
 
     return () => {
-      stopWatchRef.current?.();
-      stopWatchRef.current = null;
+      clearFollowTracking();
     };
   }, [follow]);
 
