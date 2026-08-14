@@ -6,6 +6,7 @@ import { hitPage } from "./utils/analytics";
 import { useAuth } from "./auth/AuthContext";
 import { APP_NAME } from "./brand";
 import { CookieConsentBanner } from "./components/CookieConsentBanner";
+import { HowRoutesWorkDrawer } from "./components/HowRoutesWorkDrawer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -104,6 +105,14 @@ export default function App() {
                   {user.email}
                 </span>
               ) : null}
+              {!isMobile ? (
+                <span className="mr-1 hidden lg:inline">
+                  <HowRoutesWorkDrawer
+                    link
+                    className="!text-white/85 hover:!text-white"
+                  />
+                </span>
+              ) : null}
               <Button
                 type="text"
                 aria-label="Настройки"
@@ -137,6 +146,9 @@ export default function App() {
             styles={{ body: { padding: 0 } }}
           >
             <Menu mode="inline" selectedKeys={[selectedKey]} items={menuItems} />
+            <div className="border-t border-slate-100 px-4 py-3">
+              <HowRoutesWorkDrawer link />
+            </div>
           </Drawer>
         </Header>
       ) : null}

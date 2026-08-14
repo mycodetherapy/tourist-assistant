@@ -4,6 +4,8 @@ import { Link } from "react-router-dom";
 import { getErrorMessage } from "../api/client";
 import { deleteLlmKey, fetchSettings, updateSettings } from "../api/settings";
 import type { LlmMode, UpdateSettingsPayload } from "../api/types";
+import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
+import { FREE_VS_LLM } from "../content/buildModes";
 
 type SettingsFormValues = UpdateSettingsPayload & { llm_mode: LlmMode };
 
@@ -62,13 +64,18 @@ export function SettingsPage() {
         description={
           <>
             <p className="m-0 mb-2">
-              <strong>Бесплатно</strong> — маршруты строятся по открытым данным (до 30 сборок в сутки).
-              Справки о городе и местах — из Wikipedia.
+              <strong>Бесплатно</strong> — алгоритм и пул мест из Wikipedia (до 30 сборок в сутки).
+              Подготовленный справочник города в этом режиме не используется.
             </p>
-            <p className="m-0">
-              <strong>Свой API-ключ (BYOK)</strong> — полный AI: персонализация маршрутов и справки через
-              LLM. Оплата — у вашего провайдера (ProxyAPI, OpenRouter). Ориентир стоимости одной AI-сборки:{" "}
-              ~{settings?.estimated_ai_run_cost_rub ?? 4} ₽.
+            <p className="m-0 mb-2">
+              <strong>Свой API-ключ (BYOK)</strong> — LLM помогает с формулировками маршрутов и
+              справками. Если город загружен на сервер — расширенный справочник мест (обычно больше
+              точек). Оплата — у провайдера (ProxyAPI, OpenRouter). Ориентир одной AI-сборки: ~
+              {settings?.estimated_ai_run_cost_rub ?? 4} ₽.
+            </p>
+            <p className="m-0 text-xs text-slate-600">{FREE_VS_LLM.cityPackHint}</p>
+            <p className="m-0 mt-2">
+              <HowRoutesWorkDrawer link />
             </p>
           </>
         }

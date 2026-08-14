@@ -18,6 +18,8 @@ import { NewTripAnchorFields } from "../components/NewTripAnchorFields";
 import { useGuestSmartCaptcha } from "../hooks/useGuestSmartCaptcha";
 import { SMART_CAPTCHA_CONTAINER_CLASS } from "../hooks/useYandexSmartCaptcha";
 import { DEFAULT_USER_QUERY } from "../utils/preferences";
+import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
+import { FREE_VS_LLM } from "../content/buildModes";
 import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
 
 interface TripFormValues {
@@ -124,7 +126,16 @@ export function TryPage() {
         showIcon
         className="mb-6"
         title="Без аккаунта"
-        description="Одна полная сборка и один пересбор маршрутов. Новый город или дополнительные пересборы — после регистрации."
+        description={
+          <div className="space-y-2">
+            <p className="m-0">
+              Одна полная сборка и один пересбор. Новый город или дополнительные пересборы — после
+              регистрации.
+            </p>
+            <p className="m-0">{FREE_VS_LLM.guestHint}</p>
+            <HowRoutesWorkDrawer link />
+          </div>
+        }
       />
 
       <Form form={form} layout="vertical" preserve initialValues={{ accept_terms: false, accept_privacy: false }}>

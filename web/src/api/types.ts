@@ -59,7 +59,7 @@ export interface FinalProgram {
 }
 
 export type ProgramSectionKey = "routes" | "lifehacks";
-export type VotableSectionKey = "routes" | "route_stops";
+export type VotableSectionKey = "routes" | "route_stops" | "route_pins";
 export type ItemVote = 1 | -1;
 
 export interface ProgramItem {
@@ -67,6 +67,7 @@ export interface ProgramItem {
   item_key: string;
   text: string;
   vote: ItemVote | null;
+  pinned?: boolean;
   poi_id?: string | null;
 }
 

@@ -5,14 +5,17 @@ import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
 import { guestSubmitItemFeedback } from "../api/guest";
-import { parseRouteProgram, rawRouteCases, routeCaseAtIndex } from "../api/routeTypes";
-import type { ItemVote, ProgramResponse } from "../api/types";
+import { parseRouteProgram, rawRouteCases, routeCaseAtIndex, routeMaterialsSummary } from "../api/routeTypes";
+import type { ItemVote, ProgramResponse, VotableSectionKey } from "../api/types";
 import { pickPreferredCaseId } from "../utils/routeVotes";
 import { ItemVoteButtons } from "./ItemVoteButtons";
 import { PoiFactModal } from "./PoiFactModal";
+import { PoolSourceBanner } from "./PoolSourceBanner";
 import { RouteCaseDetails } from "./RouteCaseDetails";
 import { RouteCaseSwitcher } from "./RouteCaseSwitcher";
 import { RouteMapView } from "./RouteMapView";
+import { RoutePinButton } from "./RoutePinButton";
+import { FREE_VS_LLM } from "../content/buildModes";
 import { usePoiFact } from "../hooks/usePoiFact";
 
 const { useBreakpoint } = Grid;
@@ -84,7 +87,7 @@ export function ProgramTabs({
 
   const voteMutation = useMutation({
     mutationFn: (payload: {
-      section: "routes" | "route_stops";
+      section: VotableSectionKey;
       item_index: number;
       item_key: string;
       vote: ItemVote | null;
@@ -107,21 +110,37 @@ export function ProgramTabs({
     onMutate: async (payload) => {
       await queryClient.cancelQueries({ queryKey: programQueryKey });
       const previous = queryClient.getQueryData<ProgramResponse>(programQueryKey);
-      if (previous?.sections?.[payload.section]) {
-        const section = previous.sections[payload.section];
-        const updatedItems = section.items.map((item) =>
-          item.item_key === payload.item_key ? { ...item, vote: payload.vote } : item,
-        );
-        queryClient.setQueryData<ProgramResponse>(programQueryKey, {
-          ...previous,
-          sections: {
-            ...previous.sections,
-            [payload.section]: {
-              ...section,
-              items: updatedItems,
+      if (previous?.sections) {
+        if (payload.section === "route_pins") {
+          const section = previous.sections.routes;
+          const updatedItems = section.items.map((item) =>
+            item.item_key === payload.item_key || item.index === payload.item_index
+              ? { ...item, pinned: payload.vote === 1 }
+              : item,
+          );
+          queryClient.setQueryData<ProgramResponse>(programQueryKey, {
+            ...previous,
+            sections: {
+              ...previous.sections,
+              routes: { ...section, items: updatedItems },
             },
-          },
-        });
+          });
+        } else if (previous.sections[payload.section]) {
+          const section = previous.sections[payload.section];
+          const updatedItems = section.items.map((item) =>
+            item.item_key === payload.item_key ? { ...item, vote: payload.vote } : item,
+          );
+          queryClient.setQueryData<ProgramResponse>(programQueryKey, {
+            ...previous,
+            sections: {
+              ...previous.sections,
+              [payload.section]: {
+                ...section,
+                items: updatedItems,
+              },
+            },
+          });
+        }
       }
       return { previous };
     },
@@ -154,7 +173,7 @@ export function ProgramTabs({
   }
 
   const handleVote = (
-    section: "routes" | "route_stops",
+    section: VotableSectionKey,
     itemIndex: number,
     itemKey: string | undefined,
     vote: ItemVote | null,
@@ -173,8 +192,19 @@ export function ProgramTabs({
     voteMutation.mutate({ section, item_index: itemIndex, item_key: itemKey, vote });
   };
 
+  const poolSummary =
+    routeMaterialsSummary(data.program.routes) ??
+    (data.sections.routes.intro.match(/^Пул:\s*\d+/i)
+      ? data.sections.routes.intro.split("\n")[0]
+      : null);
+  const routesIntro = data.sections.routes.intro
+    .replace(/^Пул:\s*\d+[^\n]*\n?/i, "")
+    .trim();
+
   return (
     <div className="space-y-3">
+      <PoolSourceBanner summary={poolSummary} />
+      <p className="m-0 text-xs leading-relaxed text-slate-500">{FREE_VS_LLM.likesHint}</p>
       {isMobile && routeCases.length > 1 && (
         <RouteCaseSwitcher
           cases={routeCases}
@@ -182,7 +212,7 @@ export function ProgramTabs({
           onChange={setSelectedRouteCaseId}
         />
       )}
-      <MarkdownBlock text={data.sections.routes.intro} />
+      <MarkdownBlock text={routesIntro} />
       {data.sections.routes.items.length === 0 && data.program.routes_text?.trim() ? (
         <MarkdownBlock text={data.program.routes_text} />
       ) : (
@@ -230,13 +260,26 @@ export function ProgramTabs({
                 void poiFact.open({ poiId: stop.poi_id ?? "", name });
               };
               const voteButtons = (
-                <ItemVoteButtons
-                  vote={item.vote}
-                  horizontal={isMobile}
-                  className={isMobile ? "self-end" : undefined}
-                  disabled={votingDisabled || voteMutation.isPending}
-                  onVote={(vote) => handleVote("routes", item.index, item.item_key, vote)}
-                />
+                <div
+                  className={`flex shrink-0 gap-0.5 ${
+                    isMobile ? "flex-row items-center self-end" : "flex-col items-center pt-0.5"
+                  }`}
+                >
+                  <RoutePinButton
+                    pinned={Boolean(item.pinned || routeCase?.preserved)}
+                    horizontal={isMobile}
+                    disabled={votingDisabled || voteMutation.isPending}
+                    onToggle={(pinned) =>
+                      handleVote("route_pins", item.index, item.item_key, pinned ? 1 : null)
+                    }
+                  />
+                  <ItemVoteButtons
+                    vote={item.vote}
+                    horizontal={isMobile}
+                    disabled={votingDisabled || voteMutation.isPending}
+                    onVote={(vote) => handleVote("routes", item.index, item.item_key, vote)}
+                  />
+                </div>
               );
               if (isMobile && hasMap) {
                 return (

@@ -209,6 +209,22 @@ export async function listItemFeedback(
   return out;
 }
 
+export async function listItemFeedbackBySection(
+  tripId: number,
+  section: string,
+): Promise<Record<string, number>> {
+  const { rows } = await query<{ item_key: string; vote: number }>(
+    `SELECT item_key, vote FROM program_item_feedback
+     WHERE trip_id = $1 AND section = $2`,
+    [tripId, section],
+  );
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    out[r.item_key] = r.vote;
+  }
+  return out;
+}
+
 export async function deleteItemFeedback(
   tripId: number,
   section: string,
@@ -281,14 +297,38 @@ export async function countLikedRouteStops(tripId: number): Promise<number> {
   return Number(rows[0]?.count ?? 0);
 }
 
-export async function countLikedRoutes(
+export async function hasRoutePin(
+  tripId: number,
+  itemKey: string,
+): Promise<boolean> {
+  const { rows } = await query<{ vote: number }>(
+    `SELECT vote FROM program_item_feedback
+     WHERE trip_id = $1 AND section = 'route_pins' AND item_key = $2
+     LIMIT 1`,
+    [tripId, itemKey],
+  );
+  return Number(rows[0]?.vote) === 1;
+}
+
+export async function countPinnedRoutes(
   tripId: number,
   program: Record<string, unknown>,
 ): Promise<number> {
+  const MIGRATED_KEY = "__route_pins_migrated__";
+  const pins = await listItemFeedbackBySection(tripId, "route_pins");
+  let count = 0;
+  for (const [key, vote] of Object.entries(pins)) {
+    if (key === MIGRATED_KEY) continue;
+    if (vote === 1) count += 1;
+  }
+  if (pins[MIGRATED_KEY] === 1 || count > 0) {
+    return count;
+  }
+
+  // legacy: 👍 routes без pin ещё не мигрированы
   const votes = await listItemFeedback(tripId);
   const { parseProgramRoutes } = await import("../services/parseProgram.js");
   const parsed = parseProgramRoutes(program);
-  let count = 0;
   const { makeItemKey } = await import("../lib/itemKey.js");
   const routesRaw = program.routes;
   const preservedFlags: boolean[] = [];
@@ -306,6 +346,14 @@ export async function countLikedRoutes(
     }
   });
   return count;
+}
+
+/** @deprecated use countPinnedRoutes */
+export async function countLikedRoutes(
+  tripId: number,
+  program: Record<string, unknown>,
+): Promise<number> {
+  return countPinnedRoutes(tripId, program);
 }
 
 export async function patchItineraryProgram(

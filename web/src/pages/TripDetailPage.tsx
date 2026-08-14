@@ -9,9 +9,11 @@ import type { RebuildScope } from "../api/types";
 import { deleteTrip, startRun } from "../api/trips";
 import { parseRouteProgram } from "../api/routeTypes";
 import { BuildingOverlay } from "../components/BuildingOverlay";
+import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
 import { ProgramTabs } from "../components/ProgramTabs";
 import { TripAnchorCard } from "../components/TripAnchorCard";
 import { TripMetaCard } from "../components/TripMetaCard";
+import { FREE_VS_LLM } from "../content/buildModes";
 import { useRunPolling } from "../hooks/useRunPolling";
 import { useTrip, useTripProgram } from "../hooks/useTrip";
 
@@ -265,12 +267,12 @@ export function TripDetailPage() {
                 className="block text-gray-500"
                 style={{ fontSize: 12, lineHeight: "16px" }}
               >
-                Используйте глубокий пересбор после долгого перерыва: в городе могли открыться
-                новые места или измениться данные.
+                {FREE_VS_LLM.rebuildRoutesHint}{" "}
+                <HowRoutesWorkDrawer link />
               </Typography.Text>
             </div>
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 type="primary"
                 loading={rebuildMutation.isPending}
@@ -289,8 +291,8 @@ export function TripDetailPage() {
                 className="text-gray-500"
                 style={{ fontSize: 12, lineHeight: "16px" }}
               >
-                Глубокий пересбор обновляет пул мест из источников заново; используйте его после
-                перерыва, когда данные по городу могли измениться.
+                {FREE_VS_LLM.rebuildRoutesHint}{" "}
+                <HowRoutesWorkDrawer link />
               </Typography.Text>
             </div>
           )}

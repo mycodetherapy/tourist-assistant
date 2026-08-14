@@ -127,16 +127,35 @@ class TestRouteFeedback(unittest.TestCase):
         self.version_id = save_itinerary_version(self.trip_id, self.program)
         self.service = TripService()
 
-    def _like_route_index(self, index: int) -> None:
+    def _pin_route_index(self, index: int) -> None:
+        from program.parse_items import ROUTE_PINS_SECTION
+
+        parsed = parse_program_sections(self.program)
+        key = make_item_key(ROUTE_PINS_SECTION, parsed.routes.items[index])
+        upsert_item_feedback(
+            self.trip_id, self.version_id, ROUTE_PINS_SECTION, index, key, 1
+        )
+
+    def _soft_like_route_index(self, index: int) -> None:
+        """👍 без 📌: сначала закрываем legacy-миграцию, чтобы лайк не стал pin."""
+        from program.route_feedback import migrate_legacy_route_likes_to_pins
+
+        migrate_legacy_route_likes_to_pins(
+            self.trip_id, self.program, itinerary_version_id=self.version_id
+        )
         parsed = parse_program_sections(self.program)
         key = make_item_key("routes", parsed.routes.items[index])
         upsert_item_feedback(
             self.trip_id, self.version_id, "routes", index, key, 1
         )
 
+    def _like_route_index(self, index: int) -> None:
+        """Совместимость: раньше 👍 = сохранение → теперь 📌."""
+        self._pin_route_index(index)
+
     def test_extract_liked_routes(self) -> None:
-        self._like_route_index(0)
-        self._like_route_index(1)
+        self._pin_route_index(0)
+        self._pin_route_index(1)
         liked = extract_liked_routes(self.program, self.trip_id)
         self.assertEqual(len(liked), 2)
         self.assertEqual(liked[0].case_id, "A")
@@ -153,7 +172,7 @@ class TestRouteFeedback(unittest.TestCase):
         self.assertEqual(liked, [])
 
     def test_merge_preserved_with_new(self) -> None:
-        self._like_route_index(0)
+        self._pin_route_index(0)
         preserved = extract_liked_routes(self.program, self.trip_id)
         new = RouteProgram(
             cases=[
@@ -170,7 +189,7 @@ class TestRouteFeedback(unittest.TestCase):
         self.assertFalse(merged.cases[1].preserved)
 
     def test_feedback_prompt_includes_stops_and_themes(self) -> None:
-        self._like_route_index(0)
+        self._pin_route_index(0)
         ctx = build_route_feedback_context(
             self.program, self.trip_id, rebuild_scope="routes"
         )
@@ -181,15 +200,25 @@ class TestRouteFeedback(unittest.TestCase):
         self.assertIn("вдохновения", ctx.llm_instructions)
 
     def test_full_rebuild_soft_route_like_hints(self) -> None:
-        self._like_route_index(1)
+        self._soft_like_route_index(1)
         ctx = build_route_feedback_context(
             self.program, self.trip_id, rebuild_scope="full"
         )
         assert ctx is not None
-        self.assertIn("Параметры лайкнутых маршрутов", ctx.llm_instructions)
+        self.assertIn("без закрепления", ctx.llm_instructions)
         self.assertIn("средний", ctx.llm_instructions.lower())
         self.assertNotIn("останутся без изменений", ctx.llm_instructions)
         self.assertNotIn("Запрещённые poi_id", ctx.llm_instructions)
+
+    def test_legacy_route_like_migrates_to_pin(self) -> None:
+        parsed = parse_program_sections(self.program)
+        key = make_item_key("routes", parsed.routes.items[0])
+        upsert_item_feedback(
+            self.trip_id, self.version_id, "routes", 0, key, 1
+        )
+        liked = extract_liked_routes(self.program, self.trip_id)
+        self.assertEqual(len(liked), 1)
+        self.assertEqual(liked[0].case_id, "A")
 
     def test_church_theme_hint_from_stop_names(self) -> None:
         from program.route_feedback import _infer_soft_themes
@@ -201,28 +230,64 @@ class TestRouteFeedback(unittest.TestCase):
         self.assertIn("культовая архитектура", themes)
 
     def test_unlike_removes_from_liked_extract(self) -> None:
-        self._like_route_index(0)
+        from program.parse_items import ROUTE_PINS_SECTION
+
+        self._pin_route_index(0)
         self.assertEqual(len(extract_liked_routes(self.program, self.trip_id)), 1)
         parsed = parse_program_sections(self.program)
-        key = make_item_key("routes", parsed.routes.items[0])
+        key = make_item_key(ROUTE_PINS_SECTION, parsed.routes.items[0])
         self.service.set_item_feedback(
             self.trip_id,
-            section="routes",
+            section=ROUTE_PINS_SECTION,
             item_key=key,
             vote=None,
         )
         self.assertEqual(extract_liked_routes(self.program, self.trip_id), [])
 
+    def test_unpin_clears_preserved_flag(self) -> None:
+        """После пересбора preserved=True; открепление должно снять и флаг, и pin."""
+        from db import get_latest_itinerary
+        from program.parse_items import ROUTE_PINS_SECTION
+
+        routes = RouteProgram.model_validate(self.program["routes"])
+        cases = [
+            routes.cases[0].model_copy(update={"preserved": True}),
+            *routes.cases[1:],
+        ]
+        program = {
+            **self.program,
+            "routes": RouteProgram(cases=cases).model_dump(),
+        }
+        version_id = save_itinerary_version(self.trip_id, program, scope="routes")
+        self.assertEqual(len(extract_liked_routes(program, self.trip_id)), 1)
+
+        parsed = parse_program_sections(program)
+        key = make_item_key(ROUTE_PINS_SECTION, parsed.routes.items[0])
+        self.service.set_item_feedback(
+            self.trip_id,
+            section=ROUTE_PINS_SECTION,
+            item_key=key,
+            vote=None,
+            program_data=program,
+        )
+        latest = get_latest_itinerary(self.trip_id)
+        assert latest is not None
+        self.assertFalse(latest["program"]["routes"]["cases"][0]["preserved"])
+        self.assertEqual(extract_liked_routes(latest["program"], self.trip_id), [])
+        # version_id used so mypy/linters keep save result
+        self.assertEqual(version_id, latest["id"])
+
     def test_like_limit_enforced(self) -> None:
         from unittest.mock import patch
+        from program.parse_items import ROUTE_PINS_SECTION
 
-        self._like_route_index(0)
-        self._like_route_index(1)
+        self._pin_route_index(0)
+        self._pin_route_index(1)
         with patch("program.route_feedback.MAX_LIKED_ROUTES_PER_TRIP", 2):
             with self.assertRaises(ValueError):
                 self.service.set_item_feedback(
                     self.trip_id,
-                    section="routes",
+                    section=ROUTE_PINS_SECTION,
                     item_index=2,
                     vote=1,
                 )

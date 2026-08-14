@@ -6,22 +6,24 @@ from typing import Any
 
 from models.schemas import normalize_stored_program
 from program.item_key import make_item_key
-from program.parse_items import VOTABLE_SECTIONS, VotableSectionKey, parse_program_sections
+from program.parse_items import parse_program_sections
 from program.route_stops import route_stop_keys_for_program
 
-_SCOPE_AFFECTED: dict[str, tuple[VotableSectionKey, ...]] = {
-    "full": VOTABLE_SECTIONS,
-    "routes": ("routes", "route_stops"),
-    "events": ("routes", "route_stops", "events"),
-    "dining": ("routes", "route_stops", "dining"),
+_SCOPE_AFFECTED: dict[str, tuple[str, ...]] = {
+    "full": ("routes", "route_stops", "route_pins"),
+    "routes": ("routes", "route_stops", "route_pins"),
+    "events": ("routes", "route_stops", "route_pins", "events"),
+    "dining": ("routes", "route_stops", "route_pins", "dining"),
     "lifehacks": ("lifehacks",),
     "tickets": (),
 }
 
 
-def affected_votable_sections(scope: str) -> tuple[VotableSectionKey, ...]:
-    """Какие голосуемые секции затронуты пересборкой."""
-    return _SCOPE_AFFECTED.get(scope, VOTABLE_SECTIONS)
+def affected_votable_sections(scope: str) -> tuple[str, ...]:
+    """Какие секции feedback затронуты пересборкой."""
+    from program.parse_items import FEEDBACK_SECTIONS
+
+    return _SCOPE_AFFECTED.get(scope, FEEDBACK_SECTIONS)
 
 
 def find_stale_feedback_keys(
@@ -57,6 +59,13 @@ def find_stale_feedback_keys(
                 }
             else:
                 valid_by_section[section] = route_stop_keys_for_program(normalized)
+            continue
+        if section == "route_pins":
+            from program.route_feedback import ROUTE_PINS_MIGRATED_KEY
+
+            valid_by_section[section] = {
+                make_item_key("route_pins", text) for text in parsed.routes.items
+            } | {ROUTE_PINS_MIGRATED_KEY}
             continue
         items = getattr(parsed, section).items
         valid_by_section[section] = {

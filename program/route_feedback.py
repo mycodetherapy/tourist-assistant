@@ -15,6 +15,8 @@ MAX_LIKED_ROUTES_PER_TRIP = 10
 MAX_LIKED_ROUTE_STOPS_PER_TRIP = 40
 NEW_ROUTE_BATCH_IDS = ("N-A", "N-B", "N-C")
 _PRESERVED_MAX_OVERLAP = 0.5
+# Маркер: старые 👍 маршрутов уже перенесены в 📌 (иначе soft-like снова станет pin).
+ROUTE_PINS_MIGRATED_KEY = "__route_pins_migrated__"
 
 _TAG_LABELS: dict[str, str] = {
     "landmarks": "достопримечательности",
@@ -96,39 +98,101 @@ def _route_votes_by_index(
     return out
 
 
+def _route_pin_votes_by_index(
+    program: dict[str, Any],
+    trip_id: int,
+) -> dict[int, int]:
+    """item_index -> 1 для закреплённых (📌) маршрутов."""
+    from db.repository import list_item_feedback_by_section
+    from program.parse_items import ROUTE_PINS_SECTION
+
+    votes_by_key = list_item_feedback_by_section(trip_id, ROUTE_PINS_SECTION)
+    parsed = parse_program_sections(program)
+    out: dict[int, int] = {}
+    for index, text in enumerate(parsed.routes.items):
+        key = make_item_key(ROUTE_PINS_SECTION, text)
+        if key in votes_by_key and int(votes_by_key[key]) == 1:
+            out[index] = 1
+    return out
+
+
+def migrate_legacy_route_likes_to_pins(
+    trip_id: int,
+    program: dict[str, Any],
+    *,
+    itinerary_version_id: int | None = None,
+) -> int:
+    """Старые 👍 маршрутов (=сохранение) → секция route_pins. Один раз на поездку."""
+    from db import upsert_item_feedback
+    from db.repository import list_item_feedback_by_section
+    from program.parse_items import ROUTE_PINS_SECTION
+
+    existing_pins = list_item_feedback_by_section(trip_id, ROUTE_PINS_SECTION)
+    if ROUTE_PINS_MIGRATED_KEY in existing_pins:
+        return 0
+    votes = _route_votes_by_index(program, trip_id)
+    parsed = parse_program_sections(program)
+    migrated = 0
+    for index, text in enumerate(parsed.routes.items):
+        if votes.get(index) != 1:
+            continue
+        key = make_item_key(ROUTE_PINS_SECTION, text)
+        upsert_item_feedback(
+            trip_id,
+            itinerary_version_id,
+            ROUTE_PINS_SECTION,
+            index,
+            key,
+            1,
+        )
+        migrated += 1
+    upsert_item_feedback(
+        trip_id,
+        itinerary_version_id,
+        ROUTE_PINS_SECTION,
+        -1,
+        ROUTE_PINS_MIGRATED_KEY,
+        1,
+    )
+    return migrated
+
+
 def count_liked_routes(program: dict[str, Any], trip_id: int) -> int:
+    """Число закреплённых (📌) маршрутов — лимит pin."""
+    migrate_legacy_route_likes_to_pins(trip_id, program)
     cases = _program_route_cases(program)
     if not cases:
         return 0
-    votes = _route_votes_by_index(program, trip_id)
+    pins = _route_pin_votes_by_index(program, trip_id)
     return sum(
         1
         for index, case in enumerate(cases)
-        if _route_is_liked(case, index, votes)
+        if _route_is_preserved(case, index, pins)
     )
 
 
-def _route_is_liked(
+def _route_is_preserved(
     case: TripRouteCase,
     index: int,
-    votes: dict[int, int],
+    pins: dict[int, int],
 ) -> bool:
-    """👍 в БД или preserved=True после частичного пересбора."""
-    return bool(case.preserved) or votes.get(index) == 1
+    """📌 или preserved=True после частичного пересбора."""
+    return bool(case.preserved) or pins.get(index) == 1
 
 
 def extract_liked_routes(
     base_program: dict[str, Any],
     trip_id: int,
 ) -> list[TripRouteCase]:
-    """Маршруты с 👍 или preserved из текущей программы (порядок как в UI)."""
+    """Закреплённые маршруты (📌) из текущей программы (порядок как в UI)."""
+    migrate_legacy_route_likes_to_pins(trip_id, base_program)
     cases = _program_route_cases(base_program)
     if not cases:
         return []
-    votes = _route_votes_by_index(base_program, trip_id)
+    pins = _route_pin_votes_by_index(base_program, trip_id)
     liked: list[TripRouteCase] = []
     for index, case in enumerate(cases):
-        if _route_is_liked(case, index, votes):
+        if _route_is_preserved(case, index, pins):
             liked.append(case.model_copy(update={"preserved": True}))
     return liked[:MAX_LIKED_ROUTES_PER_TRIP]
 
@@ -304,6 +368,7 @@ def rebuild_poi_preferences(
     preserved: list[TripRouteCase],
     *,
     disliked_routes: list[TripRouteCase] | None = None,
+    soft_liked_routes: list[TripRouteCase] | None = None,
 ) -> tuple[set[str], set[str], set[str]]:
     """preferred, banned (hard), disliked (raw 👎 stops) для LLM и пост-процессора."""
     poi_liked, poi_disliked = load_poi_stop_vote_sets(trip_id)
@@ -313,14 +378,12 @@ def rebuild_poi_preferences(
         expanded_ban = expand_similar_banned_poi(
             materials.leisure_points, seed_disliked
         )
-    # Лайкнутый маршрут сохраняется отдельно; его POI не hard-ban — только 👎 и overlap <50%.
     banned = expanded_ban
-    preferred = set(poi_liked) - banned
+    preferred = set(poi_liked) | collect_leisure_poi_ids(soft_liked_routes or [])
+    preferred -= banned
     if materials is not None:
         pool = {p.poi_id for p in materials.leisure_points}
         preferred &= pool
-        # banned не режем по пулу: дизлайкнутые poi_id должны исключаться даже если
-        # кэш materials устарел или POI выпал из leisure_points.
     return preferred, banned, poi_disliked
 
 
@@ -439,31 +502,46 @@ def build_route_feedback_context(
     *,
     rebuild_scope: str = "routes",
 ) -> RouteFeedbackContext | None:
-    """Контекст для пересборки маршрутов: лайки, остановки, мягкие мотивы."""
+    """Контекст для пересборки маршрутов: pin, лайки, остановки, мягкие мотивы."""
+    migrate_legacy_route_likes_to_pins(trip_id, base_program)
     cases = _program_route_cases(base_program)
     votes = _route_votes_by_index(base_program, trip_id) if cases else {}
-    liked: list[TripRouteCase] = []
+    pins = _route_pin_votes_by_index(base_program, trip_id) if cases else {}
+    preserved_cases: list[TripRouteCase] = []
+    soft_liked: list[TripRouteCase] = []
     disliked: list[TripRouteCase] = []
     for index, case in enumerate(cases):
         vote = votes.get(index)
-        if _route_is_liked(case, index, votes):
-            liked.append(case.model_copy(update={"preserved": True}))
+        if _route_is_preserved(case, index, pins):
+            preserved_cases.append(case.model_copy(update={"preserved": True}))
+        elif vote == 1:
+            soft_liked.append(case)
         elif vote == -1:
             disliked.append(case)
 
     poi_liked, poi_disliked = load_poi_stop_vote_sets(trip_id)
-    if not liked and not disliked and not poi_liked and not poi_disliked:
+    if (
+        not preserved_cases
+        and not soft_liked
+        and not disliked
+        and not poi_liked
+        and not poi_disliked
+    ):
         return None
 
     poi_index = _load_poi_index(trip_id)
     from search.route_materials_store import load_route_materials_for_trip
 
     materials = load_route_materials_for_trip(trip_id)
-    preserved_for_ban = liked if rebuild_scope == "routes" else []
     preferred, banned, poi_disliked = rebuild_poi_preferences(
-        trip_id, materials, preserved_for_ban, disliked_routes=disliked
+        trip_id,
+        materials,
+        preserved_cases,
+        disliked_routes=disliked,
+        soft_liked_routes=soft_liked,
     )
-    preserve_liked = rebuild_scope == "routes" and bool(liked)
+    preserve_liked = rebuild_scope == "routes" and bool(preserved_cases)
+    liked = preserved_cases  # имя для LLM-блока ниже
     forbidden_ids = sorted(banned)
 
     parts: list[str] = [
@@ -477,25 +555,13 @@ def build_route_feedback_context(
             "Жёсткое правило: poi_id из «запрещено» не использовать в новых A/B/C."
         )
     if liked:
-        if preserve_liked:
-            parts.append(
-                f"Сохранённые лайкнутые варианты ({len(liked)}) останутся без изменений. "
-                "Сгенерируй только 3 НОВЫх маршрута A/B/C."
-            )
-            parts.append(
-                "Остановки-примеры из лайкнутых маршрутов (для вдохновения, не для копирования пути):"
-            )
-        else:
-            parts.append(
-                "Лайкнутые варианты — ориентир по параметрам (длина, число остановок, мотивы). "
-                "Сгенерируй 3 новых маршрута A/B/C; poi_id можно менять, сохраняя дух подборки."
-            )
-            parts.append("Параметры лайкнутых маршрутов:")
-            for case in liked:
-                parts.append(_route_criteria_line(case))
-            parts.append(
-                "Примеры остановок из лайкнутых (для вдохновения, не копируй путь целиком):"
-            )
+        parts.append(
+            f"Сохранённые (📌) варианты ({len(liked)}) останутся без изменений. "
+            "Сгенерируй только 3 НОВЫх маршрута A/B/C."
+        )
+        parts.append(
+            "Остановки-примеры из сохранённых маршрутов (для вдохновения, не для копирования пути):"
+        )
         for case in liked:
             parts.extend(_describe_liked_case(case, poi_index))
         aggregate = _aggregate_liked_themes(liked, poi_index)
@@ -506,16 +572,21 @@ def build_route_feedback_context(
                 "Запрещённые poi_id (дизлайк и похожие места): "
                 + ", ".join(forbidden_ids)
             )
-        if preserve_liked:
-            parts.append(
-                "Новые маршруты: тот же дух и разнообразие мотивов, но другие места "
-                "(пересечение poi с лайками < 50%). Можешь комбинировать мотивы и "
-                "добавлять неожиданные, но уместные точки из digest."
-            )
-        elif liked:
-            parts.append(
-                "Новые маршруты: похожий характер и длина, но свобода в выборе poi_id из digest."
-            )
+        parts.append(
+            "Новые маршруты: тот же дух и разнообразие мотивов, но другие места "
+            "(пересечение poi с сохранёнными < 50%). Можешь комбинировать мотивы и "
+            "добавлять неожиданные, но уместные точки из digest."
+        )
+    if soft_liked:
+        parts.append(
+            f"Лайкнутые 👍 варианты без закрепления ({len(soft_liked)}) — ориентир по "
+            "мотивам и длине, путь не копируй. Предпочитай похожие poi_id из digest."
+        )
+        for case in soft_liked:
+            parts.append(_route_criteria_line(case))
+        soft_agg = _aggregate_liked_themes(soft_liked, poi_index)
+        if soft_agg:
+            parts.append(soft_agg)
     if disliked:
         parts.append("Не понравились — ориентиры, чего не повторять:")
         for case in disliked:
@@ -544,10 +615,10 @@ def sync_preserved_route_feedback(
     *,
     itinerary_version_id: int | None = None,
 ) -> None:
-    """Восстанавливает 👍 для preserved-маршрутов после смены item_key."""
+    """Восстанавливает 📌 для preserved-маршрутов после смены item_key."""
     from db import upsert_item_feedback
     from program.item_key import make_item_key
-    from program.parse_items import parse_program_sections
+    from program.parse_items import ROUTE_PINS_SECTION, parse_program_sections
 
     cases = _program_route_cases(program)
     if not cases:
@@ -558,15 +629,36 @@ def sync_preserved_route_feedback(
             continue
         if index >= len(parsed.routes.items):
             continue
-        key = make_item_key("routes", parsed.routes.items[index])
+        key = make_item_key(ROUTE_PINS_SECTION, parsed.routes.items[index])
         upsert_item_feedback(
             trip_id,
             itinerary_version_id,
-            "routes",
+            ROUTE_PINS_SECTION,
             index,
             key,
             1,
         )
+
+
+def clear_route_case_preserved(
+    program: dict[str, Any],
+    case_index: int,
+) -> dict[str, Any] | None:
+    """Снимает preserved у варианта — иначе открепление 📌 откатывается при пересборе."""
+    routes_raw = program.get("routes")
+    if not isinstance(routes_raw, dict):
+        return None
+    cases_raw = routes_raw.get("cases")
+    if not isinstance(cases_raw, list):
+        return None
+    if case_index < 0 or case_index >= len(cases_raw):
+        return None
+    case = cases_raw[case_index]
+    if not isinstance(case, dict) or not case.get("preserved"):
+        return None
+    new_cases = list(cases_raw)
+    new_cases[case_index] = {**case, "preserved": False}
+    return {**program, "routes": {**routes_raw, "cases": new_cases}}
 
 
 def merge_preserved_with_new_routes(

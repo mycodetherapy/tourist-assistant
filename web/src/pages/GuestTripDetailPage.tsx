@@ -18,10 +18,12 @@ import {
 } from "../api/guest";
 import { parseRouteProgram } from "../api/routeTypes";
 import { BuildingOverlay } from "../components/BuildingOverlay";
+import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
 import { ProgramTabs } from "../components/ProgramTabs";
 import { RegisterGateModal } from "../components/RegisterGateModal";
 import { TripAnchorCard } from "../components/TripAnchorCard";
 import { TripMetaCard } from "../components/TripMetaCard";
+import { FREE_VS_LLM } from "../content/buildModes";
 import { useGuestSmartCaptcha } from "../hooks/useGuestSmartCaptcha";
 import { SMART_CAPTCHA_CONTAINER_CLASS } from "../hooks/useYandexSmartCaptcha";
 import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
@@ -237,7 +239,8 @@ export function GuestTripDetailPage() {
         title="Без аккаунта"
         description={
           <span>
-            Чтобы сохранить прогулку и собирать новые города,{" "}
+            Пробный режим: бесплатный алгоритм и Wikipedia. Чтобы сохранить прогулку, включить LLM и
+            расширенный справочник города,{" "}
             <Link
               to={`/register?return=${encodeURIComponent(`/try/${tripId}`)}`}
               className="font-medium underline"
@@ -348,7 +351,8 @@ export function GuestTripDetailPage() {
             )}
           </div>
           <Typography.Text className="mt-2 block text-gray-500" style={{ fontSize: 12 }}>
-            Без аккаунта доступен один пересбор маршрутов без повторного поиска мест.
+            {FREE_VS_LLM.rebuildRoutesHint} Без аккаунта доступен один пересбор по тому же пулу.{" "}
+            <HowRoutesWorkDrawer link />
           </Typography.Text>
         </Card>
       )}

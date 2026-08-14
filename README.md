@@ -15,7 +15,7 @@
 | Блок | Статус | Кратко |
 | ---- | ------ | ------ |
 | **Free tier** | ✅ | Режим «алгоритм» (`llm_mode=none`): POI из Wikidata, deterministic runner, **30 сборок/сутки** на аккаунт |
-| **Guest `/try`** | ✅ | Cookie-сессия: **1× full + 1× routes**; лайки и POI facts; claim прогулки при register/login/OAuth |
+| **Guest `/try`** | ✅ | Cookie-сессия: **1× full + 1× routes**; 📌/лайки и POI facts; claim прогулки при register/login/OAuth |
 | **Защита guest** | ✅ | SmartCaptcha (invisible), geocode **40/ч**, cleanup guest-user (in-process + cron) |
 | **Legal** | ✅ | `/terms`, `/privacy`, cookie-баннер, согласие при регистрации, LICENSE |
 | **Аналитика** | ✅ | Яндекс.Метрика + воронка guest (`try_*`, `guest_register_*`) |
@@ -239,7 +239,7 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 
 Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
-**Оценки пунктов (👍/👎):** для **вариантов маршрута и остановок** (блок «О городе» без голосования). Веб: клик → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` (Postgres). **👎 на остановку** — жёсткий запрет `poi_id` при пересборке (дизлайк сохраняется между прогонами); похожие места (тот же мотив/имя, напр. собор и памятник Ушакова) тоже исключаются. **👎 на вариант маршрута** — мягкая подсказка LLM + бан остановок этого варианта.
+**Оценки и сохранение маршрутов:** для **вариантов A/B/C и остановок** (блок «О городе» без голосования). Веб → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` (Postgres). **📌 (`section=route_pins`)** — сохранить вариант при пересборе (`preserved`); снятие 📌 сбрасывает и `preserved`. **👍/👎 на вариант** — мягкая подсказка для LLM (путь не копируется). **👎 на остановку** — жёсткий запрет `poi_id` при пересборке (сохраняется между прогонами); похожие места тоже исключаются. Старые 👍 маршрутов (=сохранение) один раз мигрируют в 📌.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -724,6 +724,7 @@ python3 scripts/render_graph.py
 | **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`)                                                                    |
 | **Кольцевой маршрут**               | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км            |
 | **Дизлайк остановки и пересборка**  | 👎 на `route_stops` не сбрасывается после rebuild; `banned_poi_ids` в snapshot + `enforce_route_poi_policy` исключают POI даже при готовых `maps_route_url`                                 |
+| **📌 маршрута и пересборка**        | `route_pins` + `preserved`; sync после save пишет только pins (не soft 👍); снятие 📌 очищает `preserved`                                                                                  |
 | **Гостевая сессия `/try`**          | HttpOnly cookie; лимит **1× full** + **1× routes**; geocode **40/ч** на сессию (Redis); SmartCaptcha перед сборкой/пересбором (если задан `YANDEX_SMARTCAPTCHA_SERVER_KEY`); cleanup истёкших guest-user; soft gate → register; claim trip при login |
 
 ### Как понять, что агент работает хорошо?
@@ -859,7 +860,7 @@ tourist-assistant/
 │   └── print_program.py
 ├── planning/rebuild.py       # rebuild_scope, merge_program
 ├── program/parse_items.py  # разбор markdown-секций на пункты
-├── program/route_feedback.py  # лайкнутые маршруты при partial rebuild
+├── program/route_feedback.py  # 📌 preserve + soft 👍 при partial rebuild
 ├── program/route_stops.py     # голосование за POI-остановки
 ├── db/                     # schema.sql, repository, bootstrap user id=1
 ├── onboarding/             # TripPreferences
