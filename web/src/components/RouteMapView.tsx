@@ -1,7 +1,13 @@
+import { lazy, Suspense } from "react";
+import { Spin } from "antd";
 import type { TripRouteCase } from "../api/routeTypes";
 import type { MapRoutePoint } from "../utils/mapsRoutePoints";
 import { RouteMapEmbed } from "./RouteMapEmbed";
-import { RouteMapLibre } from "./RouteMapLibre";
+
+const RouteMapLibre = lazy(async () => {
+  const mod = await import("./RouteMapLibre");
+  return { default: mod.RouteMapLibre };
+});
 
 interface RouteMapViewProps {
   routeCase: TripRouteCase;
@@ -30,7 +36,17 @@ export function RouteMapView({ routeCase, city = "", onStopClick }: RouteMapView
   const useMapLibre = maplibreFlagEnabled() && hasOsrmGeometry(routeCase);
 
   if (useMapLibre) {
-    return <RouteMapLibre routeCase={routeCase} city={city} onStopClick={onStopClick} />;
+    return (
+      <Suspense
+        fallback={
+          <div className="route-map-embed mb-2 flex min-h-[240px] items-center justify-center rounded-lg border border-gray-200 bg-gray-50">
+            <Spin description="Загрузка карты…" />
+          </div>
+        }
+      >
+        <RouteMapLibre routeCase={routeCase} city={city} onStopClick={onStopClick} />
+      </Suspense>
+    );
   }
 
   if (!routeCase.maps_route_url) {
