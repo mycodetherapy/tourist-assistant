@@ -19,6 +19,7 @@ import { useGuestSmartCaptcha } from "../hooks/useGuestSmartCaptcha";
 import { SMART_CAPTCHA_CONTAINER_CLASS } from "../hooks/useYandexSmartCaptcha";
 import { DEFAULT_USER_QUERY } from "../utils/preferences";
 import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
+import { OsrmCityChips } from "../components/OsrmCityChips";
 import { FREE_VS_LLM } from "../content/buildModes";
 import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
 
@@ -142,6 +143,10 @@ export function TryPage() {
         <Form.Item name="city" label="Город маршрута" rules={[{ required: true }]}>
           <Input placeholder="Санкт-Петербург" />
         </Form.Item>
+        <OsrmCityChips
+          selectedCity={city}
+          onSelect={(name) => form.setFieldsValue({ city: name })}
+        />
         <LegalConsentFields hint="Согласие нужно для гостевой сборки: сессия, город, точка старта и технические логи." />
       </Form>
 

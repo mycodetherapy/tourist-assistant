@@ -76,11 +76,14 @@ services:
       DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD}@postgres:5432/tourist
       REDIS_URL: redis://redis:6379/0
       API_NODE_PORT: "8001"
+      TOURIST_DATA_DIR: /app/data
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./data:/app/data:ro
     restart: unless-stopped
 
   web:
