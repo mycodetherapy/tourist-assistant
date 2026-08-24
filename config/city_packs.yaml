@@ -413,3 +413,54 @@ default_packs:
     names: [светлогорск, svetlogorsk]
     poi_radius_km: 3.0
     extract_buffer_km: 0.8
+
+  # ----- hot: Georgia -----
+  - slug: tbilisi
+    tier: hot
+    display_name: Тбилиси
+    federal_district: georgia
+    names: [тбилиси, tbilisi]
+    poi_radius_km: 6.0
+    extract_buffer_km: 1.2
+
+  - slug: batumi
+    tier: hot
+    display_name: Батуми
+    federal_district: georgia
+    names: [батуми, batumi]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: kutaisi
+    tier: hot
+    display_name: Кутаиси
+    federal_district: georgia
+    names: [кутаиси, kutaisi]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: poti
+    tier: hot
+    display_name: Поти
+    federal_district: georgia
+    names: [поти, poti]
+    poi_radius_km: 3.5
+    extract_buffer_km: 0.8
+
+  # ----- hot: Armenia -----
+  - slug: yerevan
+    tier: hot
+    display_name: Ереван
+    federal_district: armenia
+    names: [ереван, yerevan]
+    poi_radius_km: 6.0
+    extract_buffer_km: 1.2
+
+  # ----- hot: Serbia -----
+  - slug: belgrade
+    tier: hot
+    display_name: Белград
+    federal_district: serbia
+    names: [белград, belgrade, beograd]
+    poi_radius_km: 6.0
+    extract_buffer_km: 1.2
