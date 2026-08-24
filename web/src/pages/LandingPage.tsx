@@ -10,20 +10,21 @@ import { Button } from "antd";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { APP_DESCRIPTION, APP_DOMAIN, APP_HERO, APP_NAME, APP_TAGLINE } from "../brand";
+import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
 import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
 
 const STEPS = [
   {
     title: "Выберите город",
-    text: "Укажите город и пожелания — спокойный темп, музеи, прогулки у воды или что важно именно вам.",
+    text: "Укажите город и при желании точку старта — отель или адрес, откуда начнёте прогулку.",
   },
   {
     title: "Получите три маршрута",
-    text: "Прогуляй подбирает места из открытых данных (OSM, Wikidata) и собирает варианты A, B и C — разная длина и набор остановок.",
+    text: "Сначала — открытые данные Wikipedia; с AI-ключом, если город у нас подготовлен, — расширенный справочник мест. Варианты A, B и C — разная длина и набор остановок.",
   },
   {
-    title: "Сравните на карте",
-    text: "Откройте варианты на интерактивной карте, задайте точку старта (отель или адрес) и при необходимости пересоберите маршрут.",
+    title: "Сравните и отметьте",
+    text: "Посмотрите A/B/C на карте. Лайкните удачный маршрут или отдельные остановки — при пересборе учтём оценку; понравившийся вариант можно сохранить.",
   },
   {
     title: "Идите по маршруту",
@@ -45,8 +46,8 @@ const FEATURES = [
     text: "Отель или адрес проживания — маршруты строятся от вашей точки, а не от абстрактного центра города.",
   },
   {
-    title: "Пересбор и оценки",
-    text: "Не понравилась остановка — отметьте и пересоберите; понравившийся вариант можно сохранить при следующей сборке.",
+    title: "Лайки и пересбор",
+    text: "📌 сохраняет маршрут при пересборе. 👍/👎 у варианта и остановок мягко влияют на следующую сборку: неудачные места уходят, удачные мотивы подсказывают новые A/B/C.",
   },
 ] as const;
 
@@ -121,7 +122,7 @@ export function LandingPage() {
           <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Как это работает</h2>
           <p className="mb-10 max-w-2xl text-slate-600">
             Укажите город — получите три маршрута на карте. Аккаунт нужен, чтобы сохранить прогулки; ключ
-            LLM — по желанию для AI-персонализации.
+            LLM — по желанию: более живые описания и расширенный справочник города, если он загружен у нас.
           </p>
           <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step, index) => (
@@ -189,8 +190,8 @@ export function LandingPage() {
                 Ключ LLM-провайдера (опционально)
               </h3>
               <p className="mb-4 text-sm leading-relaxed text-slate-700">
-                Для AI-персонализации укажите API-ключ OpenAI-compatible провайдера
-                (по умолчанию —{" "}
+                Для более живых описаний маршрутов и справок о местах укажите API-ключ
+                OpenAI-compatible провайдера (по умолчанию —{" "}
                 <a
                   href="https://proxyapi.ru"
                   target="_blank"
@@ -200,16 +201,31 @@ export function LandingPage() {
                 >
                   ProxyAPI
                 </a>
-                ). Модель читает ваши пожелания и формирует варианты A/B/C по пулу мест в городе.
+                ). Модель помогает собрать варианты A/B/C по пулу мест в городе.
               </p>
+              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-amber-100 bg-white/70 p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Без ключа
+                  </p>
+                  <ul className="m-0 list-none space-y-2 p-0 text-sm text-slate-700">
+                    <li>Алгоритм без LLM</li>
+                    <li>Пул мест из Wikipedia</li>
+                    <li>До 30 сборок в сутки</li>
+                  </ul>
+                </div>
+                <div className="rounded-xl border border-amber-200 bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                    С LLM-ключом
+                  </p>
+                  <ul className="m-0 list-none space-y-2 p-0 text-sm text-slate-700">
+                    <li>Живее формулировки маршрутов и справок</li>
+                    <li>Расширенный справочник, если город подготовлен</li>
+                    <li>Обычно больше мест в пуле</li>
+                  </ul>
+                </div>
+              </div>
               <ul className="m-0 list-none space-y-3 p-0 text-sm text-slate-700">
-                <li className="flex gap-2">
-                  <span className="text-amber-600">•</span>
-                  <span>
-                    <strong>Зачем:</strong> LLM учитывает пожелания; без ключа маршруты строятся алгоритмом
-                    по открытым данным (до 30 сборок в сутки).
-                  </span>
-                </li>
                 <li className="flex gap-2">
                   <span className="text-amber-600">•</span>
                   <span>
@@ -255,6 +271,10 @@ export function LandingPage() {
           </div>
         </div>
         <div className="mx-auto mt-8 flex max-w-6xl flex-wrap gap-x-4 gap-y-2 border-t border-white/10 pt-6 text-sm text-slate-400">
+          <HowRoutesWorkDrawer
+            link
+            className="!text-slate-400 hover:!text-white"
+          />
           <Link to="/terms" className="text-slate-400 no-underline hover:text-white">
             Пользовательское соглашение
           </Link>

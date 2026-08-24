@@ -97,3 +97,12 @@ export function routeCaseAtIndex(
 ): TripRouteCase | undefined {
   return cases[index];
 }
+
+/** materials_summary из program.routes, если есть. */
+export function routeMaterialsSummary(routes: unknown): string | null {
+  if (!routes || typeof routes !== "object") {
+    return null;
+  }
+  const raw = (routes as RouteProgram).materials_summary;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}

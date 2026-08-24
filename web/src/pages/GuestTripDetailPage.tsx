@@ -18,10 +18,12 @@ import {
 } from "../api/guest";
 import { parseRouteProgram } from "../api/routeTypes";
 import { BuildingOverlay } from "../components/BuildingOverlay";
+import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
 import { ProgramTabs } from "../components/ProgramTabs";
 import { RegisterGateModal } from "../components/RegisterGateModal";
 import { TripAnchorCard } from "../components/TripAnchorCard";
 import { TripMetaCard } from "../components/TripMetaCard";
+import { FREE_VS_LLM } from "../content/buildModes";
 import { useGuestSmartCaptcha } from "../hooks/useGuestSmartCaptcha";
 import { SMART_CAPTCHA_CONTAINER_CLASS } from "../hooks/useYandexSmartCaptcha";
 import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
@@ -44,6 +46,8 @@ export function GuestTripDetailPage() {
   const sessionQuery = useQuery({
     queryKey: ["guest", "session"],
     queryFn: fetchGuestSession,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const tripQuery = useQuery({
@@ -92,7 +96,6 @@ export function GuestTripDetailPage() {
     mutationFn: ({ scope, captcha_token }: { scope: RebuildScope; captcha_token?: string }) =>
       guestStartRun(tripId, scope, captcha_token),
     onSuccess: (data, { scope }) => {
-      captcha.resetToken();
       if (data.run_id) {
         setLastBuildError(null);
         setActiveRunId(data.run_id);
@@ -120,14 +123,16 @@ export function GuestTripDetailPage() {
 
   const startGuestRun = async (scope: RebuildScope) => {
     let captcha_token: string | undefined;
-    try {
-      captcha_token = await captcha.requestTokenIfRequired();
-    } catch (err) {
-      notification.error({
-        title: "Проверка CAPTCHA",
-        description: err instanceof Error ? err.message : "Не удалось пройти проверку",
-      });
-      return;
+    if (captcha.enabled) {
+      try {
+        captcha_token = await captcha.requestToken();
+      } catch (err) {
+        notification.error({
+          title: "Проверка CAPTCHA",
+          description: err instanceof Error ? err.message : "Не удалось пройти проверку",
+        });
+        return;
+      }
     }
     setActiveRunScope(scope);
     rebuildMutation.mutate({ scope, captcha_token });
@@ -234,7 +239,8 @@ export function GuestTripDetailPage() {
         title="Без аккаунта"
         description={
           <span>
-            Чтобы сохранить прогулку и собирать новые города,{" "}
+            Пробный режим: бесплатный алгоритм и Wikipedia. Чтобы сохранить прогулку, включить LLM и
+            расширенный справочник города,{" "}
             <Link
               to={`/register?return=${encodeURIComponent(`/try/${tripId}`)}`}
               className="font-medium underline"
@@ -297,7 +303,6 @@ export function GuestTripDetailPage() {
           <Button
             type="primary"
             loading={rebuildMutation.isPending}
-            disabled={captcha.enabled && !captcha.ready}
             onClick={() => void startGuestRun("full")}
           >
             Собрать маршруты
@@ -312,7 +317,6 @@ export function GuestTripDetailPage() {
               <Button
                 type="primary"
                 loading={rebuildMutation.isPending}
-                disabled={captcha.enabled && !captcha.ready}
                 onClick={() => void startGuestRun("routes")}
               >
                 Пересобрать маршруты
@@ -331,7 +335,6 @@ export function GuestTripDetailPage() {
               <Button
                 type="dashed"
                 loading={rebuildMutation.isPending}
-                disabled={captcha.enabled && !captcha.ready}
                 onClick={() => void startGuestRun("full")}
               >
                 Глубокий пересбор
@@ -348,7 +351,8 @@ export function GuestTripDetailPage() {
             )}
           </div>
           <Typography.Text className="mt-2 block text-gray-500" style={{ fontSize: 12 }}>
-            Без аккаунта доступен один пересбор маршрутов без повторного поиска мест.
+            {FREE_VS_LLM.rebuildRoutesHint} Без аккаунта доступен один пересбор по тому же пулу.{" "}
+            <HowRoutesWorkDrawer link />
           </Typography.Text>
         </Card>
       )}

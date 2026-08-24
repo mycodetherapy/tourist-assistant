@@ -1,77 +1,466 @@
-# Каталог городских пакетов: FO PBF → extract.osm.pbf → poi.sqlite.
-# default_packs — prebuild (scripts/city_pack_batch.sh); остальные — lazy prepare.
+# Каталог городских пакетов: FO PBF → extract.osm.pbf → poi.sqlite [→ osrm].
+# tier: hot — файлы osrm на диске, ephemeral route на VPS
+#       warm — extract+poi prebuild; osrm по нужде
+# Политика: docs/city-catalog-policy.md
+#
+# Prebuild extract+poi: bash scripts/city_pack_batch.sh
+# Prebuild OSRM (hot):  bash scripts/osrm_prepare_batch.sh
+# Warm OSRM optional:   bash scripts/osrm_prepare_batch.sh --tier=warm
 
 default_packs:
+  # ----- hot: Volga (существующие) -----
   - slug: kazan
+    tier: hot
     display_name: Казань
     federal_district: volga
-    names:
-      - казань
-      - kazan
+    names: [казань, kazan]
     poi_radius_km: 4.5
     extract_buffer_km: 1.0
 
   - slug: yoshkar-ola
+    tier: hot
     display_name: Йошкар-Ола
     federal_district: volga
-    names:
-      - йошкар-ола
-      - yoshkar-ola
-      - yoshkar ola
+    names: [йошкар-ола, yoshkar-ola, yoshkar ola]
     poi_radius_km: 4.5
     extract_buffer_km: 1.0
 
   - slug: samara
+    tier: hot
     display_name: Самара
     federal_district: volga
-    names:
-      - самара
-      - samara
+    names: [самара, samara]
     poi_radius_km: 4.5
     extract_buffer_km: 1.0
 
   - slug: nizhny-novgorod
+    tier: hot
     display_name: Нижний Новгород
     federal_district: volga
-    names:
-      - нижний новгород
-      - nizhny novgorod
-      - nizhny-novgorod
+    names: [нижний новгород, nizhny novgorod, nizhny-novgorod]
     poi_radius_km: 4.5
     extract_buffer_km: 1.0
 
   - slug: izhevsk
+    tier: hot
     display_name: Ижевск
     federal_district: volga
-    names:
-      - ижевск
-      - izhevsk
+    names: [ижевск, izhevsk]
     poi_radius_km: 4.5
     extract_buffer_km: 1.0
 
   - slug: tolyatti
+    tier: hot
     display_name: Тольятти
     federal_district: volga
-    names:
-      - тольятти
-      - tolyatti
+    names: [тольятти, tolyatti]
     poi_radius_km: 4.5
     extract_buffer_km: 1.0
 
   - slug: kostroma
+    tier: hot
     display_name: Кострома
-    federal_district: volga
-    names:
-      - кострома
-      - kostroma
+    federal_district: central
+    names: [кострома, kostroma]
     poi_radius_km: 4.5
     extract_buffer_km: 1.0
 
   - slug: ulyanovsk
+    tier: hot
     display_name: Ульяновск
     federal_district: volga
-    names:
-      - ульяновск
-      - ulyanovsk
+    names: [ульяновск, ulyanovsk]
     poi_radius_km: 4.5
     extract_buffer_km: 1.0
+
+  # ----- hot: Central + NW -----
+  - slug: moscow
+    tier: hot
+    display_name: Москва
+    federal_district: central
+    names: [москва, moscow]
+    poi_radius_km: 8.0
+    extract_buffer_km: 1.5
+
+  - slug: saint-petersburg
+    tier: hot
+    display_name: Санкт-Петербург
+    federal_district: northwestern
+    names: [санкт-петербург, петербург, питер, saint-petersburg, st petersburg, spb]
+    poi_radius_km: 7.0
+    extract_buffer_km: 1.5
+
+  - slug: yaroslavl
+    tier: hot
+    display_name: Ярославль
+    federal_district: central
+    names: [ярославль, yaroslavl]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: vladimir
+    tier: hot
+    display_name: Владимир
+    federal_district: central
+    names: [владимир, vladimir]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: suzdal
+    tier: hot
+    display_name: Суздаль
+    federal_district: central
+    names: [суздаль, suzdal]
+    poi_radius_km: 3.0
+    extract_buffer_km: 0.8
+
+  - slug: sergiev-posad
+    tier: hot
+    display_name: Сергиев Посад
+    federal_district: central
+    names: [сергиев посад, сергиев-посад, sergiev posad, sergiev-posad]
+    poi_radius_km: 3.5
+    extract_buffer_km: 1.0
+
+  - slug: tula
+    tier: hot
+    display_name: Тула
+    federal_district: central
+    names: [тула, tula]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: tver
+    tier: hot
+    display_name: Тверь
+    federal_district: central
+    names: [тверь, tver]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: kaluga
+    tier: hot
+    display_name: Калуга
+    federal_district: central
+    names: [калуга, kaluga]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  # ----- warm: Central -----
+  - slug: ryazan
+    tier: warm
+    display_name: Рязань
+    federal_district: central
+    names: [рязань, ryazan]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: smolensk
+    tier: warm
+    display_name: Смоленск
+    federal_district: central
+    names: [смоленск, smolensk]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: voronezh
+    tier: warm
+    display_name: Воронеж
+    federal_district: central
+    names: [воронеж, voronezh]
+    poi_radius_km: 5.0
+    extract_buffer_km: 1.0
+
+  - slug: orel
+    tier: warm
+    display_name: Орёл
+    federal_district: central
+    names: [орёл, орел, orel, oryol]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: bryansk
+    tier: warm
+    display_name: Брянск
+    federal_district: central
+    names: [брянск, bryansk]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: ivanovo
+    tier: warm
+    display_name: Иваново
+    federal_district: central
+    names: [иваново, ivanovo]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: rostov-veliky
+    tier: warm
+    display_name: Ростов Великий
+    federal_district: central
+    names: [ростов великий, rostov veliky, rostov-veliky]
+    poi_radius_km: 3.0
+    extract_buffer_km: 0.8
+
+  - slug: pereslavl-zalessky
+    tier: warm
+    display_name: Переславль-Залесский
+    federal_district: central
+    names: [переславль-залесский, переславль залесский, pereslavl-zalessky]
+    poi_radius_km: 3.0
+    extract_buffer_km: 0.8
+
+  - slug: myshkin
+    tier: warm
+    display_name: Мышкин
+    federal_district: central
+    names: [мышкин, myshkin]
+    poi_radius_km: 2.5
+    extract_buffer_km: 0.6
+
+  - slug: ples
+    tier: warm
+    display_name: Плёс
+    federal_district: central
+    names: [плёс, плес, ples]
+    poi_radius_km: 2.5
+    extract_buffer_km: 0.6
+
+  - slug: uglich
+    tier: warm
+    display_name: Углич
+    federal_district: central
+    names: [углич, uglich]
+    poi_radius_km: 3.0
+    extract_buffer_km: 0.8
+
+  - slug: kolomna
+    tier: warm
+    display_name: Коломна
+    federal_district: central
+    names: [коломна, kolomna]
+    poi_radius_km: 3.5
+    extract_buffer_km: 1.0
+
+  - slug: murom
+    tier: warm
+    display_name: Муром
+    federal_district: central
+    names: [муром, murom]
+    poi_radius_km: 3.5
+    extract_buffer_km: 1.0
+
+  # ----- warm: Volga -----
+  - slug: saratov
+    tier: warm
+    display_name: Саратов
+    federal_district: volga
+    names: [саратов, saratov]
+    poi_radius_km: 5.0
+    extract_buffer_km: 1.0
+
+  - slug: penza
+    tier: warm
+    display_name: Пенза
+    federal_district: volga
+    names: [пенза, penza]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: cheboksary
+    tier: warm
+    display_name: Чебоксары
+    federal_district: volga
+    names: [чебоксары, cheboksary]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: kirov
+    tier: warm
+    display_name: Киров
+    federal_district: volga
+    names: [киров, kirov]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: orenburg
+    tier: warm
+    display_name: Оренбург
+    federal_district: volga
+    names: [оренбург, orenburg]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: saransk
+    tier: warm
+    display_name: Саранск
+    federal_district: volga
+    names: [саранск, saransk]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: naberezhnye-chelny
+    tier: warm
+    display_name: Набережные Челны
+    federal_district: volga
+    names: [набережные челны, naberezhnye chelny, naberezhnye-chelny]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: syzran
+    tier: warm
+    display_name: Сызрань
+    federal_district: volga
+    names: [сызрань, syzran]
+    poi_radius_km: 4.0
+    extract_buffer_km: 1.0
+
+  - slug: arzamas
+    tier: warm
+    display_name: Арзамас
+    federal_district: volga
+    names: [арзамас, arzamas]
+    poi_radius_km: 3.5
+    extract_buffer_km: 1.0
+
+  - slug: elabuga
+    tier: warm
+    display_name: Елабуга
+    federal_district: volga
+    names: [елабуга, elabuga]
+    poi_radius_km: 3.0
+    extract_buffer_km: 0.8
+
+  - slug: bolgar
+    tier: warm
+    display_name: Болгар
+    federal_district: volga
+    names: [болгар, bolgar]
+    poi_radius_km: 3.0
+    extract_buffer_km: 0.8
+
+  - slug: dzerzhinsk
+    tier: warm
+    display_name: Дзержинск
+    federal_district: volga
+    names: [дзержинск, dzerzhinsk]
+    poi_radius_km: 4.0
+    extract_buffer_km: 1.0
+
+  # ----- warm: Northwest -----
+  - slug: vyborg
+    tier: warm
+    display_name: Выборг
+    federal_district: northwestern
+    names: [выборг, vyborg]
+    poi_radius_km: 3.5
+    extract_buffer_km: 1.0
+
+  - slug: pskov
+    tier: warm
+    display_name: Псков
+    federal_district: northwestern
+    names: [псков, pskov]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: veliky-novgorod
+    tier: warm
+    display_name: Великий Новгород
+    federal_district: northwestern
+    names: [великий новгород, новгород, veliky novgorod, veliky-novgorod]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: petrozavodsk
+    tier: warm
+    display_name: Петрозаводск
+    federal_district: northwestern
+    names: [петрозаводск, petrozavodsk]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: vologda
+    tier: warm
+    display_name: Вологда
+    federal_district: northwestern
+    names: [вологда, vologda]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  # ----- warm: Kaliningrad (отдельный FO ~27 MB) -----
+  - slug: kaliningrad
+    tier: warm
+    display_name: Калининград
+    federal_district: kaliningrad
+    names: [калининград, kaliningrad]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: zelenogradsk
+    tier: warm
+    display_name: Зеленоградск
+    federal_district: kaliningrad
+    names: [зеленоградск, zelenogradsk]
+    poi_radius_km: 3.0
+    extract_buffer_km: 0.8
+
+  - slug: svetlogorsk
+    tier: warm
+    display_name: Светлогорск
+    federal_district: kaliningrad
+    names: [светлогорск, svetlogorsk]
+    poi_radius_km: 3.0
+    extract_buffer_km: 0.8
+
+  # ----- hot: Georgia -----
+  - slug: tbilisi
+    tier: hot
+    display_name: Тбилиси
+    federal_district: georgia
+    names: [тбилиси, tbilisi]
+    poi_radius_km: 6.0
+    extract_buffer_km: 1.2
+
+  - slug: batumi
+    tier: hot
+    display_name: Батуми
+    federal_district: georgia
+    names: [батуми, batumi]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: kutaisi
+    tier: hot
+    display_name: Кутаиси
+    federal_district: georgia
+    names: [кутаиси, kutaisi]
+    poi_radius_km: 4.5
+    extract_buffer_km: 1.0
+
+  - slug: poti
+    tier: hot
+    display_name: Поти
+    federal_district: georgia
+    names: [поти, poti]
+    poi_radius_km: 3.5
+    extract_buffer_km: 0.8
+
+  # ----- hot: Armenia -----
+  - slug: yerevan
+    tier: hot
+    display_name: Ереван
+    federal_district: armenia
+    names: [ереван, yerevan]
+    poi_radius_km: 6.0
+    extract_buffer_km: 1.2
+
+  # ----- hot: Serbia -----
+  - slug: belgrade
+    tier: hot
+    display_name: Белград
+    federal_district: serbia
+    names: [белград, belgrade, beograd]
+    poi_radius_km: 6.0
+    extract_buffer_km: 1.2

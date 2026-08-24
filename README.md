@@ -8,14 +8,52 @@
 
 ## Статус и планы
 
-Приложение находится **в стадии активной разработки**. Текущая версия — **routes-first MVP**: сервис собирает три маршрута; **факт о городе** подгружается **параллельно** (маршруты показываются сразу, блок «О городе» — по готовности). **Веб-интерфейс и REST API** на [progulyai.ru](https://progulyai.ru) позволяют создавать прогулки и пересобирать маршруты. Консольный CLI снят.
+Приложение **в активной разработке**. На [progulyai.ru](https://progulyai.ru) работает **routes-first MVP**: три маршрута A/B/C, параллельный факт о городе, PostgreSQL + Node API + worker.
 
-**Ближайшие планы:**
+### Сделано (ветка `develop`, релиз через PR → `main`)
 
-| Направление  | Что планируется                                                                                              |
-| ------------ | ------------------------------------------------------------------------------------------------------------ |
-| **Маршруты** | City pack (OSM PBF → `poi.sqlite`) для 8 городов Поволжья; карта маршрута — iframe Яндекс.Карт               |
-| **SaaS**     | Многопользовательский режим: регистрация, личный кабинет, изоляция поездок по аккаунту (Postgres + Node API) |
+| Блок | Статус | Кратко |
+| ---- | ------ | ------ |
+| **Free tier** | ✅ | Режим «алгоритм» (`llm_mode=none`): POI из Wikidata, deterministic runner, **30 сборок/сутки** на аккаунт |
+| **Guest `/try`** | ✅ | Cookie-сессия: **1× full + 1× routes**; 📌/лайки и POI facts; claim прогулки при register/login/OAuth |
+| **Защита guest** | ✅ | SmartCaptcha (invisible), geocode **40/ч**, cleanup guest-user (in-process + cron) |
+| **Legal** | ✅ | `/terms`, `/privacy`, cookie-баннер, согласие при регистрации, LICENSE |
+| **Аналитика** | ✅ | Яндекс.Метрика + воронка guest (`try_*`, `guest_register_*`) |
+| **Wikidata** | ✅ | Fallback `P131` без `*` для крупных городов (Москва — таймаут transitive SPARQL) |
+| **UI guest** | ✅ | «Прогулка: {город}», `/try` без слова «бесплатно» в публичном UI |
+
+### В процессе
+
+| Задача | Действие |
+| ------ | -------- |
+| **Prod-деплой** | Merge PR `develop` → `main` → CI Deploy; `.env`: `YANDEX_SMARTCAPTCHA_SERVER_KEY`; secret `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` |
+| **Миграции** | Авто при старте worker (`alembic upgrade head`); проверка: `e2b3c4d5f6a7` (guest_sessions) |
+| **Локальные фиксы** | Кнопка «Пересобрать» (captcha disabled), крестик cookie-баннера — закоммитить в `develop` |
+
+### Ближайшие планы (phase 2)
+
+| Приоритет | Направление | Что делать |
+| --------- | ----------- | ---------- |
+| 1 | **Конверсия guest → register** | Смотреть Метрику (`guest_register_gate` / `guest_register_click`); доработать soft gate и CTA после первой сборки |
+| 2 | **Качество POI** | Москва/СПб в `city_packs.yaml` (OSM pack); меньше demo-fallback |
+| 3 | **Маршруты** | Довести city pack для 8 городов Поволжья; iframe-карта маршрута |
+| 4 | **Монетизация** | Ветка `feat/affiliate-monetization` — виджеты билетов; позже — платные лимиты / подписка (не в phase 1) |
+| 5 | **Надёжность guest** | Алерты на captcha/geocode 429; мониторинг cleanup cron |
+
+### Позже (backlog)
+
+- Email magic link / напоминание «сохранить прогулку» для guest
+- A/B тексты soft gate
+- Rate limit по IP поверх guest-сессии
+- Расширение каталога городов и lazy prepare pack для LLM-пользователей
+
+**Ближайшие планы (legacy-таблица, частично закрыто):**
+
+| Направление  | Статус | Комментарий                                                                                  |
+| ------------ | ------ | -------------------------------------------------------------------------------------------- |
+| **SaaS**     | ✅     | Регистрация, JWT, Google OAuth, изоляция поездок, Postgres + api-node                        |
+| **Маршруты** | 🔄     | City pack; карта — iframe Яндекса (дефолт); MapLibre+OSRM в ветке `feat/maplibre-osrm` (docs/maps-osrm-maplibre.md) |
+| **Guest**    | ✅     | `/try` без регистрации — см. таблицу выше                                                    |
 
 ## Быстрый старт
 
@@ -94,7 +132,7 @@ npm run dev
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
 5. **Чёрный экран:** перезапустите `npm run dev` (Vite прописывает HMR на IP Mac). На iPhone: Настройки → Safari → «Дополнения» → «Данные веб-сайтов» → удалите сайт `192.168.x.x`. Не используйте гостевую Wi‑Fi (изоляция клиентов).
 6. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой» (после того как сайт открылся в Safari по IP).
-7. **Геолокация:** только при **новой прогулке** — выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута — iframe без геолокации.
+7. **Геолокация:** выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута по умолчанию — **iframe Яндекса**; MapLibre + follow — opt-in (`VITE_MAP_PROVIDER=maplibre`). Пешая линия OSRM → `route_geometry` (план: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md)).
 8. **Google OAuth:** при HTTPS dev callback — `https://<host>:5173/api/auth/google/callback` (добавьте URI в Google Cloud Console; origin передаётся автоматически).
 
 ### Аналитика (Яндекс Метрика)
@@ -137,7 +175,7 @@ npm run dev
 
 ### City pack (POI из OSM-выжимки)
 
-POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута — **iframe-виджет** Яндекса по `maps_route_url` (пеший режим `rtt=pd`). Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
+POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml), полки `hot`/`warm` — [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута по умолчанию — **iframe-виджет** Яндекса (`maps_route_url`, `rtt=pd`); MapLibre — `VITE_MAP_PROVIDER=maplibre` (только при наличии `route_geometry`). Пешая геометрия OSRM: подготовка **на Mac** (`city_pack_prepare` / `osrm_prepare_batch`), на VPS — rsync `data/cities/` + **`OSRM_MODE=ephemeral`** (docker run на время запроса; `docker.sock` + `OSRM_HOST_DATA_CITIES`). Локально можно always-on: `docker compose --profile osrm up -d osrm` + `OSRM_MODE=http`. Без графа сборка не падает. План: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md). Заявки на город вне каталога: `POST /api/city-requests`, CLI `python scripts/city_requests_cli.py`. Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
 
 **Первый запуск (Поволжский ФО, 8 городов):**
 
@@ -145,8 +183,11 @@ POI строятся из `extract.osm.pbf` на город ([`config/city_packs
 bash scripts/fo_ensure.sh volga              # FO PBF ~730 MB (один раз)
 bash scripts/city_pack_prepare.sh kazan      # extract + poi.sqlite (~2–4 мин)
 bash scripts/city_pack_prepare.sh yoshkar-ola
-# или все default packs:
+# extract+poi для hot+warm (на Mac):
 bash scripts/city_pack_batch.sh
+bash scripts/city_pack_batch.sh --tier=hot
+# OSRM-графы hot (на Mac → rsync data/cities на VPS):
+bash scripts/osrm_prepare_batch.sh
 ```
 
 При первом `city_pack_prepare` автоматически собирается Docker-образ `local-osmium-tool` (`scripts/Dockerfile.osmium`), если нет доступа к `ghcr.io/osmcode/osmium-tool`.
@@ -180,7 +221,7 @@ python3 scripts/export_openapi.py
 
 Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/openapi.json` автоматически.
 
-**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
+**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На форме новой прогулки и `/try` — чипы городов с OSRM: `GET /api/cities/osrm-ready` (скан `data/cities/*/osrm/*.osrm.mldgr`). На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
 
 Один раз установить автообновление схемы перед коммитом:
 
@@ -198,7 +239,7 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 
 Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
-**Оценки пунктов (👍/👎):** для **вариантов маршрута и остановок** (блок «О городе» без голосования). Веб: клик → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` (Postgres). **👎 на остановку** — жёсткий запрет `poi_id` при пересборке (дизлайк сохраняется между прогонами); похожие места (тот же мотив/имя, напр. собор и памятник Ушакова) тоже исключаются. **👎 на вариант маршрута** — мягкая подсказка LLM + бан остановок этого варианта.
+**Оценки и сохранение маршрутов:** для **вариантов A/B/C и остановок** (блок «О городе» без голосования). Веб → `PUT /api/trips/{id}/program/feedback`. Хранение: `program_item_feedback` (Postgres). **📌 (`section=route_pins`)** — сохранить вариант при пересборе (`preserved`); снятие 📌 сбрасывает и `preserved`. **👍/👎 на вариант** — мягкая подсказка для LLM (путь не копируется). **👎 на остановку** — жёсткий запрет `poi_id` при пересборке (сохраняется между прогонами); похожие места тоже исключаются. Старые 👍 маршрутов (=сохранение) один раз мигрируют в 📌.
 
 ### Запуск в Docker (Docker Compose)
 
@@ -456,7 +497,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY`                       | Нет         | Public key проекта LangFuse                                                                                                    |
 | `LANGFUSE_SECRET_KEY`                       | Нет         | Secret key проекта LangFuse                                                                                                    |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `YANDEX_SMARTCAPTCHA_SERVER_KEY` + `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` (CAPTCHA на guest `/try`); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `YANDEX_SMARTCAPTCHA_SERVER_KEY` + `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` (CAPTCHA на guest `/try`); `VITE_MAP_PROVIDER` (дефолт iframe Яндекса; `maplibre` — opt-in); `OSRM_BASE_URL` + `OSRM_DATASET` (опционально, план [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md)); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 #### Google OAuth (prod + local)
 
@@ -640,9 +681,11 @@ python3 scripts/render_graph.py
 | **DuckDuckGo** (`ddgs`, ru-ru)               | Веб-поиск по умолчанию                                                                                             |
 | **LangFuse** (опционально)                   | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker)                                                     |
 | **LangSmith** (опционально)                  | Трейсы графа (`observability/tracing.py`)                                                                          |
-| **Яндекс.Карты (Geocoder + JS API)**         | Геокодинг базовой точки; карта стартовой точки (`ymaps.Map`); маршрут — iframe-виджет + deep link `maps_route_url` |
+| **Яндекс.Карты (Geocoder + JS API)**         | Геокодинг; карта стартовой точки; **карта маршрута по умолчанию** — iframe + deep link `maps_route_url` |
+| **OSRM** (опционально)                       | Пешая `route_geometry`; `OSRM_MODE=http` или `ephemeral`; без графа — тихий skip; [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md) |
+| **MapLibre + OpenFreeMap**                   | Opt-in карта маршрута (`VITE_MAP_PROVIDER=maplibre`): клики, follow GPS                                 |
 | **City pack**                                | POI из `poi.sqlite`; каталог `city_packs` в Postgres                                                               |
-| **OpenStreetMap** (Nominatim, Geofabrik PBF) | Центр города; выжимки city pack                                                                                    |
+| **OpenStreetMap** (Nominatim, Geofabrik PBF) | Центр города; выжимки city pack; граф OSRM                                                                                    |
 | **Wikidata SPARQL**                          | Достопримечательности (P625)                                                                                       |
 
 Маршруты: `search/yandex/materials.py`, контракт — `models/routes.py`; базовая точка — `onboarding/preferences.py` (`route_anchor`). Пул POI: Wikidata Tier 0 + Tier 1 до ~50. LLM ранжирует `poi_id`; `agents/route_postprocess.py` проверяет км, дубли и overlap A/B/C.
@@ -681,6 +724,7 @@ python3 scripts/render_graph.py
 | **LLM-маршрут не прошёл валидацию** | Неверный `poi_id`, &lt; min км или overlap пар &gt; порога — подставляется алгоритм A/B/C (`build_hybrid_route_program`)                                                                    |
 | **Кольцевой маршрут**               | При `loop_route: true` от LLM или эвристике (набережная, мосты, компактный центр) пост-процессор замыкает `maps_route_url` в кольцо, если возврат к старту не превышает лимит км            |
 | **Дизлайк остановки и пересборка**  | 👎 на `route_stops` не сбрасывается после rebuild; `banned_poi_ids` в snapshot + `enforce_route_poi_policy` исключают POI даже при готовых `maps_route_url`                                 |
+| **📌 маршрута и пересборка**        | `route_pins` + `preserved`; sync после save пишет только pins (не soft 👍); снятие 📌 очищает `preserved`                                                                                  |
 | **Гостевая сессия `/try`**          | HttpOnly cookie; лимит **1× full** + **1× routes**; geocode **40/ч** на сессию (Redis); SmartCaptcha перед сборкой/пересбором (если задан `YANDEX_SMARTCAPTCHA_SERVER_KEY`); cleanup истёкших guest-user; soft gate → register; claim trip при login |
 
 ### Как понять, что агент работает хорошо?
@@ -799,10 +843,14 @@ tourist-assistant/
 │   ├── web.py              # Tavily / ddgs, digest
 │   ├── tools.py            # @tool search_route_materials
 │   ├── osm/                # Nominatim, city pack POI
+│   ├── osrm/               # пешая геометрия (HTTP / ephemeral → route_geometry)
 │   ├── wikidata/           # SPARQL достопримечательностей, city_description (факт)
 │   ├── yandex/             # materials, maps_route_url
 │   ├── context.py          # ContextVar: prefs + route_materials (worker-safe)
 │   └── tool_logging.py     # разбор payload для tool_runs
+├── docs/
+│   ├── maps-osrm-maplibre.md  # дизайн MapLibre + OSRM
+│   └── city-catalog-policy.md # hot/warm, Mac prepare, VPS ephemeral
 ├── agents/
 │   ├── llm.py              # ChatOpenAI, llm_with_tools, llm_final
 │   ├── nodes.py            # researcher, executor, writer, critic
@@ -812,19 +860,23 @@ tourist-assistant/
 │   └── print_program.py
 ├── planning/rebuild.py       # rebuild_scope, merge_program
 ├── program/parse_items.py  # разбор markdown-секций на пункты
-├── program/route_feedback.py  # лайкнутые маршруты при partial rebuild
+├── program/route_feedback.py  # 📌 preserve + soft 👍 при partial rebuild
 ├── program/route_stops.py     # голосование за POI-остановки
 ├── db/                     # schema.sql, repository, bootstrap user id=1
 ├── onboarding/             # TripPreferences
 ├── observability/          # LangFuse tracing
 ├── eval/                   # python3 -m eval --suite smoke
 ├── scripts/render_graph.py # PNG графа → docs/assets/graph.png
-├── config/city_packs.yaml      # каталог городов (8 × Поволжье)
+├── config/city_packs.yaml      # каталог городов (tier hot|warm)
 ├── config/federal_districts.yaml
 ├── scripts/fo_ensure.sh        # Geofabrik FO PBF
 ├── scripts/city_pack_prepare.sh
 ├── scripts/city_pack_batch.sh
+├── scripts/osrm_prepare.sh
+├── scripts/osrm_prepare_batch.sh
+├── scripts/city_requests_cli.py
 ├── db/postgres/city_packs.py   # статусы pack в Postgres
+├── db/postgres/city_requests.py
 ├── docs/assets/graph.png
 ├── tests/
 ├── data/                   # локальные артефакты (в .gitignore)

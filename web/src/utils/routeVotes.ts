@@ -16,7 +16,7 @@ function caseSortKey(caseId: string): number {
   return CASE_ORDER[caseId] ?? 50;
 }
 
-/** Маршрут с 👍; при равенстве — A раньше B; без голосов — первый по порядку case_id. */
+/** Маршрут с 📌, иначе с 👍; при равенстве — A раньше B; без голосов — первый по порядку case_id. */
 export function pickPreferredCaseId(
   cases: TripRouteCase[],
   routeItems: ProgramItem[],
@@ -25,16 +25,29 @@ export function pickPreferredCaseId(
     return undefined;
   }
   const voteByCaseId = new Map<string, ItemVote | null>();
+  const pinnedByCaseId = new Map<string, boolean>();
   for (const item of routeItems) {
     const routeCase = cases[item.index];
     if (routeCase) {
-      voteByCaseId.set(String(routeCase.case_id), item.vote);
+      const id = String(routeCase.case_id);
+      voteByCaseId.set(id, item.vote);
+      pinnedByCaseId.set(id, Boolean(item.pinned));
     }
   }
   for (const routeCase of cases) {
-    if (!voteByCaseId.has(String(routeCase.case_id))) {
-      voteByCaseId.set(String(routeCase.case_id), null);
+    const id = String(routeCase.case_id);
+    if (!voteByCaseId.has(id)) {
+      voteByCaseId.set(id, null);
     }
+    if (!pinnedByCaseId.has(id)) {
+      pinnedByCaseId.set(id, Boolean(routeCase.preserved));
+    }
+  }
+  const pinned = cases
+    .map((c) => String(c.case_id))
+    .filter((id) => pinnedByCaseId.get(id));
+  if (pinned.length > 0) {
+    return pinned.sort((a, b) => caseSortKey(a) - caseSortKey(b))[0];
   }
   const liked = cases
     .map((c) => String(c.case_id))

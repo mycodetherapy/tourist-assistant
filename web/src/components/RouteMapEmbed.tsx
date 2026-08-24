@@ -1,7 +1,6 @@
 import { Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { mapsUrlToWidgetUrl } from "../utils/yandexMap";
-import { RouteMapYandexOpenChrome } from "./RouteMapYandexOpenChrome";
 
 interface RouteMapEmbedProps {
   mapsRouteUrl: string;
@@ -12,7 +11,6 @@ interface RouteMapEmbedProps {
 
 export function RouteMapEmbed({
   mapsRouteUrl,
-  city = "",
   caseId,
   title,
 }: RouteMapEmbedProps) {
@@ -67,11 +65,6 @@ export function RouteMapEmbed({
             <Spin description="Загрузка карты…" />
           </div>
         ) : null}
-        <RouteMapYandexOpenChrome
-          mapsRouteUrl={mapsRouteUrl}
-          city={city}
-          maskWidgetFooter
-        />
       </div>
     </div>
   );

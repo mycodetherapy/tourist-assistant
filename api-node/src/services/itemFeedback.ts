@@ -10,20 +10,81 @@ import {
 } from "../services/parseProgram.js";
 import * as tripsRepo from "../repos/trips.js";
 
-const MAX_LIKED_ROUTES = 10;
+const MAX_PINNED_ROUTES = 10;
 const MAX_LIKED_ROUTE_STOPS = 40;
+export const ROUTE_PINS_SECTION = "route_pins";
+/** Совпадает с program/route_feedback.ROUTE_PINS_MIGRATED_KEY */
+export const ROUTE_PINS_MIGRATED_KEY = "__route_pins_migrated__";
+
+async function migrateLegacyRouteLikesToPins(
+  tripId: number,
+  program: Record<string, unknown>,
+  versionId: number,
+): Promise<void> {
+  const pins = await tripsRepo.listItemFeedbackBySection(tripId, ROUTE_PINS_SECTION);
+  if (pins[ROUTE_PINS_MIGRATED_KEY] === 1) return;
+  const votes = await tripsRepo.listItemFeedback(tripId);
+  const parsed = parseProgramRoutes(program);
+  for (let i = 0; i < parsed.items.length; i++) {
+    const routesKey = makeItemKey("routes", parsed.items[i]!);
+    if (votes[routesKey] !== 1) continue;
+    const pinKey = makeItemKey(ROUTE_PINS_SECTION, parsed.items[i]!);
+    await tripsRepo.upsertItemFeedback({
+      tripId,
+      versionId,
+      section: ROUTE_PINS_SECTION,
+      itemIndex: i,
+      itemKey: pinKey,
+      vote: 1,
+    });
+  }
+  await tripsRepo.upsertItemFeedback({
+    tripId,
+    versionId,
+    section: ROUTE_PINS_SECTION,
+    itemIndex: -1,
+    itemKey: ROUTE_PINS_MIGRATED_KEY,
+    vote: 1,
+  });
+}
+
+async function clearRouteCasePreserved(
+  versionId: number,
+  program: Record<string, unknown>,
+  caseIndex: number,
+): Promise<void> {
+  const routesRaw = program.routes;
+  if (!routesRaw || typeof routesRaw !== "object" || Array.isArray(routesRaw)) {
+    return;
+  }
+  const routes = routesRaw as {
+    cases?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  const cases = Array.isArray(routes.cases) ? [...routes.cases] : [];
+  const current = cases[caseIndex];
+  if (!current || !current.preserved) return;
+  cases[caseIndex] = { ...current, preserved: false };
+  await tripsRepo.patchItineraryProgram(versionId, {
+    routes: { ...routes, cases },
+  });
+}
 
 export const feedbackSchema = z
   .object({
     version_id: z.number().nullable().optional(),
-    section: z.enum(["routes", "route_stops"]),
+    section: z.enum(["routes", "route_stops", "route_pins"]),
     item_key: z.string().nullable().optional(),
     item_index: z.number().int().min(0).nullable().optional(),
     vote: z.union([z.literal(1), z.literal(-1)]).nullable(),
   })
   .refine((v) => (v.item_key ?? "").trim() || v.item_index !== undefined, {
     message: "Укажите item_key или item_index",
-  });
+  })
+  .refine(
+    (v) => v.section !== "route_pins" || v.vote === 1 || v.vote === null,
+    { message: "Для закрепления допустимы только pin (1) или снятие (null)" },
+  );
 
 export async function setItemFeedback(
   tripId: number,
@@ -39,6 +100,9 @@ export async function setItemFeedback(
   }
 
   const program = latest.program;
+  if (body.section === ROUTE_PINS_SECTION || body.section === "routes") {
+    await migrateLegacyRouteLikesToPins(tripId, program, latest.id);
+  }
   let resolvedKey: string | null = null;
   let matchedIndex: number | null = null;
 
@@ -62,12 +126,17 @@ export async function setItemFeedback(
     }
   } else {
     const parsed = parseProgramRoutes(program);
+    const keySection =
+      body.section === ROUTE_PINS_SECTION ? ROUTE_PINS_SECTION : "routes";
     const normalizedKey = (body.item_key ?? "").trim();
+    // UI передаёт routes-ключ; для pin пересчитываем.
     if (normalizedKey) {
       for (let i = 0; i < parsed.items.length; i++) {
-        if (makeItemKey("routes", parsed.items[i]!) === normalizedKey) {
+        const routesKey = makeItemKey("routes", parsed.items[i]!);
+        const sectionKey = makeItemKey(keySection, parsed.items[i]!);
+        if (normalizedKey === routesKey || normalizedKey === sectionKey) {
           matchedIndex = i;
-          resolvedKey = normalizedKey;
+          resolvedKey = sectionKey;
           break;
         }
       }
@@ -77,7 +146,7 @@ export async function setItemFeedback(
       body.item_index < parsed.items.length
     ) {
       matchedIndex = body.item_index;
-      resolvedKey = makeItemKey("routes", parsed.items[body.item_index]!);
+      resolvedKey = makeItemKey(keySection, parsed.items[body.item_index]!);
     }
   }
 
@@ -85,19 +154,17 @@ export async function setItemFeedback(
     throw new Error("Пункт подборки не найден");
   }
 
-  const votes = await tripsRepo.listItemFeedback(tripId);
-  if (body.vote === 1 && body.section === "routes") {
-    const alreadyLiked = votes[resolvedKey] === 1;
-    if (!alreadyLiked) {
-      const liked = await tripsRepo.countLikedRoutes(tripId, program);
-      if (liked >= MAX_LIKED_ROUTES) {
-        throw new Error(
-          `Лимит лайков маршрутов (${MAX_LIKED_ROUTES}) для поездки`,
-        );
-      }
+  if (body.vote === 1 && body.section === ROUTE_PINS_SECTION) {
+    const pinned = await tripsRepo.countPinnedRoutes(tripId, program);
+    const already = await tripsRepo.hasRoutePin(tripId, resolvedKey);
+    if (!already && pinned >= MAX_PINNED_ROUTES) {
+      throw new Error(
+        `Лимит сохранённых маршрутов (${MAX_PINNED_ROUTES}) для поездки`,
+      );
     }
   }
   if (body.vote === 1 && body.section === "route_stops") {
+    const votes = await tripsRepo.listItemFeedback(tripId);
     const alreadyLiked = votes[resolvedKey] === 1;
     if (!alreadyLiked) {
       const liked = await tripsRepo.countLikedRouteStops(tripId);
@@ -110,6 +177,9 @@ export async function setItemFeedback(
   if (body.vote === null) {
     await tripsRepo.deleteItemFeedback(tripId, body.section, resolvedKey);
     await tripsRepo.deleteFeedbackAtIndex(tripId, body.section, matchedIndex);
+    if (body.section === ROUTE_PINS_SECTION) {
+      await clearRouteCasePreserved(latest.id, program, matchedIndex);
+    }
     return;
   }
 

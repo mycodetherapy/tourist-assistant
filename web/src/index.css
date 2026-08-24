@@ -110,16 +110,17 @@ body {
 
 .yandex-map-open-overlay {
   position: absolute;
-  bottom: 7px;
+  bottom: 9px;
   left: 4px;
   z-index: 30;
   display: inline-flex;
   max-width: calc(100% - 8px);
   align-items: center;
+  justify-content: center;
   border-radius: 6px;
   background: #fff;
-  padding: 6px 10px;
-  font-size: 13px;
+  padding: 8px 10px;
+  font-size: 14px;
   line-height: 1.2;
   color: #212121;
   text-decoration: none;
@@ -127,15 +128,18 @@ body {
   white-space: nowrap;
 }
 
-.yandex-map-footer-mask {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  z-index: 25;
-  width: 178px;
-  height: 50px;
-  pointer-events: auto;
-  background: transparent;
+.yandex-map-open-overlay--icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.yandex-map-open-overlay--icon img {
+  display: block;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
 }
 
 .yandex-map-open-overlay:hover {
@@ -150,6 +154,15 @@ body {
 @media (max-width: 767px) {
   .yandex-map-open-overlay {
     padding: 6px;
+    bottom: 12px;
+  }
+
+  .yandex-map-open-overlay--icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    bottom: 56px;
+    left: 10px;
   }
 
   .program-card .ant-card-body {
@@ -215,6 +228,39 @@ body {
     height: min(62dvh, 480px);
     min-height: 100%;
     width: 100%;
+  }
+
+  .route-map-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 9999px;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+    cursor: pointer;
+  }
+
+  .route-map-marker--stop {
+    background: #0369a1;
+  }
+
+  .route-map-marker--anchor {
+    background: #0f766e;
+    cursor: default;
+  }
+
+  .route-map-marker--user {
+    width: 16px;
+    height: 16px;
+    background: #2563eb;
+    border-width: 3px;
+    cursor: default;
   }
 
   .route-item--with-map .route-item-body {

@@ -1076,6 +1076,58 @@
         }
       }
     },
+    "/api/city-requests": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/cities/osrm-ready": {
+      "get": {
+        "summary": "Города с готовым пешим OSRM-графом на этом сервере",
+        "tags": [
+          "cities"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cities": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "display_name"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "cities"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/runs/{run_id}": {
       "get": {
         "summary": "Run status",

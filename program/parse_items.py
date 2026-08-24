@@ -17,11 +17,14 @@ SECTION_KEYS: tuple[ProgramSectionKey, ...] = (
     "dining",
 )
 
-VotableSectionKey = Literal["routes", "route_stops"]
+VotableSectionKey = Literal["routes", "route_stops", "route_pins"]
 VOTABLE_SECTIONS: tuple[VotableSectionKey, ...] = (
     "routes",
     "route_stops",
 )
+# Закрепление маршрута (📌) — отдельно от 👍/👎.
+ROUTE_PINS_SECTION: Literal["route_pins"] = "route_pins"
+FEEDBACK_SECTIONS: tuple[str, ...] = (*VOTABLE_SECTIONS, ROUTE_PINS_SECTION)
 
 _NUMBERED_ITEM = re.compile(r"^\d+\.\s+")
 _DASH_ITEM = re.compile(r"^-\s+")

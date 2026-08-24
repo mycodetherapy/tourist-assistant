@@ -76,6 +76,7 @@ class ProgramItemView:
     text: str
     vote: ItemVote | None
     poi_id: str | None = None
+    pinned: bool = False
 
 
 @dataclass(frozen=True)
@@ -408,6 +409,12 @@ class TripService:
     ) -> dict[ProgramSectionKey, ProgramSectionView]:
         votes_by_key = list_item_feedback(trip_id)
         votes_by_index = list_item_feedback_by_index(trip_id)
+        from db.repository import list_item_feedback_by_section
+        from program.parse_items import ROUTE_PINS_SECTION
+        from program.route_feedback import migrate_legacy_route_likes_to_pins
+
+        migrate_legacy_route_likes_to_pins(trip_id, program_data)
+        pin_votes = list_item_feedback_by_section(trip_id, ROUTE_PINS_SECTION)
         preserved_route_indices: set[int] = set()
         routes_raw = program_data.get("routes")
         if isinstance(routes_raw, dict):
@@ -445,16 +452,19 @@ class TripService:
                     index=index,
                     item_key=make_item_key(key, text),
                     text=text,
-                    vote=(
-                        _resolve_item_vote(
-                            section=key,
-                            index=index,
-                            text=text,
-                            votes_by_key=votes_by_key,
-                            votes_by_index=votes_by_index,
-                        )
-                        or (1 if key == "routes" and index in preserved_route_indices else None)
+                    vote=_resolve_item_vote(
+                        section=key,
+                        index=index,
+                        text=text,
+                        votes_by_key=votes_by_key,
+                        votes_by_index=votes_by_index,
                     ),
+                    pinned=(
+                        pin_votes.get(make_item_key(ROUTE_PINS_SECTION, text)) == 1
+                        or index in preserved_route_indices
+                    )
+                    if key == "routes"
+                    else False,
                 )
                 for index, text in enumerate(section.items)
             )
@@ -539,16 +549,20 @@ class TripService:
         self,
         trip_id: int,
         *,
-        section: VotableSectionKey,
+        section: str,
         vote: ItemVote | None,
         item_key: str | None = None,
         item_index: int | None = None,
         version_id: int | None = None,
         program_data: dict[str, Any] | None = None,
     ) -> None:
-        """Сохраняет, обновляет или снимает оценку пункта подборки."""
-        if section not in VOTABLE_SECTIONS:
+        """Сохраняет оценку, дизлайк или 📌-закрепление маршрута."""
+        from program.parse_items import FEEDBACK_SECTIONS, ROUTE_PINS_SECTION
+
+        if section not in FEEDBACK_SECTIONS:
             raise ValueError(f"Неизвестный раздел: {section}")
+        if section == ROUTE_PINS_SECTION and vote not in (1, None):
+            raise ValueError("Для закрепления допустимы только pin (1) или снятие")
         if get_trip(trip_id) is None:
             raise ValueError("Поездка не найдена")
 
@@ -562,7 +576,6 @@ class TripService:
         if version_id is not None and get_itinerary_version(trip_id, version_id) is None:
             raise ValueError("Версия программы не найдена")
         parsed = parse_program_sections(program.model_dump())
-        section_data = getattr(parsed, section)
         resolved_key: str | None = None
         matched_index: int | None = None
 
@@ -582,31 +595,48 @@ class TripService:
                 matched_index = poi_ids.index(poi_id)
                 resolved_key = make_route_stop_key(poi_id)
         else:
+            # routes / route_pins — пункты из routes markdown
+            route_items = parsed.routes.items
+            key_section = ROUTE_PINS_SECTION if section == ROUTE_PINS_SECTION else "routes"
             normalized_key = (item_key or "").strip()
             if normalized_key:
-                for index, text in enumerate(section_data.items):
-                    if make_item_key(section, text) == normalized_key:
+                for index, text in enumerate(route_items):
+                    routes_key = make_item_key("routes", text)
+                    section_key = make_item_key(key_section, text)
+                    if normalized_key in (routes_key, section_key):
                         matched_index = index
-                        resolved_key = normalized_key
+                        resolved_key = section_key
                         break
             elif item_index is not None:
-                if 0 <= item_index < len(section_data.items):
+                if 0 <= item_index < len(route_items):
                     matched_index = item_index
-                    resolved_key = make_item_key(section, section_data.items[item_index])
+                    resolved_key = make_item_key(key_section, route_items[item_index])
 
         if matched_index is None or resolved_key is None:
             raise ValueError("Пункт подборки не найден")
 
-        if vote == 1 and section == "routes":
+        if section in (ROUTE_PINS_SECTION, "routes"):
+            from program.route_feedback import migrate_legacy_route_likes_to_pins
+
+            # Закрываем legacy до soft-like, иначе 👍 уедет в 📌 при следующем чтении.
+            migrate_legacy_route_likes_to_pins(
+                trip_id,
+                program.model_dump(),
+                itinerary_version_id=int(latest["id"]) if latest is not None else None,
+            )
+
+        if vote == 1 and section == ROUTE_PINS_SECTION:
             from program.route_feedback import MAX_LIKED_ROUTES_PER_TRIP, count_liked_routes
 
-            existing_votes = list_item_feedback(trip_id)
-            already_liked = existing_votes.get(resolved_key) == 1
-            if not already_liked:
+            from db.repository import list_item_feedback_by_section
+
+            pins = list_item_feedback_by_section(trip_id, ROUTE_PINS_SECTION)
+            already = pins.get(resolved_key) == 1
+            if not already:
                 liked_count = count_liked_routes(program.model_dump(), trip_id)
                 if liked_count >= MAX_LIKED_ROUTES_PER_TRIP:
                     raise ValueError(
-                        f"Лимит лайков маршрутов ({MAX_LIKED_ROUTES_PER_TRIP}) для поездки"
+                        f"Лимит сохранённых маршрутов ({MAX_LIKED_ROUTES_PER_TRIP}) для поездки"
                     )
 
         if vote == 1 and section == "route_stops":
@@ -629,6 +659,18 @@ class TripService:
 
             delete_item_feedback(trip_id, section, resolved_key)
             delete_feedback_at_index(trip_id, section, matched_index)
+            if section == ROUTE_PINS_SECTION and latest is not None:
+                from db import patch_itinerary_program
+                from program.route_feedback import clear_route_case_preserved
+
+                cleared = clear_route_case_preserved(
+                    program.model_dump(), matched_index
+                )
+                if cleared is not None:
+                    patch_itinerary_program(
+                        int(latest["id"]),
+                        {"routes": cleared["routes"]},
+                    )
             return
         from db.repository import delete_feedback_at_index
 

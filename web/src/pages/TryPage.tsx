@@ -18,6 +18,9 @@ import { NewTripAnchorFields } from "../components/NewTripAnchorFields";
 import { useGuestSmartCaptcha } from "../hooks/useGuestSmartCaptcha";
 import { SMART_CAPTCHA_CONTAINER_CLASS } from "../hooks/useYandexSmartCaptcha";
 import { DEFAULT_USER_QUERY } from "../utils/preferences";
+import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
+import { OsrmCityChips } from "../components/OsrmCityChips";
+import { FREE_VS_LLM } from "../content/buildModes";
 import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
 
 interface TripFormValues {
@@ -50,7 +53,6 @@ export function TryPage() {
   const createMutation = useMutation({
     mutationFn: guestCreateTrip,
     onSuccess: (data) => {
-      captcha.resetToken();
       reachGoal(METRIKA_GOALS.TRY_TRIP_CREATED, { trip_id: data.trip_id });
       const url = data.run_id
         ? `/try/${data.trip_id}?run=${data.run_id}`
@@ -82,14 +84,16 @@ export function TryPage() {
       return;
     }
     let captcha_token: string | undefined;
-    try {
-      captcha_token = await captcha.requestTokenIfRequired();
-    } catch (err) {
-      notification.error({
-        title: "Проверка CAPTCHA",
-        description: err instanceof Error ? err.message : "Не удалось пройти проверку",
-      });
-      return;
+    if (captcha.enabled) {
+      try {
+        captcha_token = await captcha.requestToken();
+      } catch (err) {
+        notification.error({
+          title: "Проверка CAPTCHA",
+          description: err instanceof Error ? err.message : "Не удалось пройти проверку",
+        });
+        return;
+      }
     }
     createMutation.mutate({
       city: values.city.trim(),
@@ -123,13 +127,26 @@ export function TryPage() {
         showIcon
         className="mb-6"
         title="Без аккаунта"
-        description="Одна полная сборка и один пересбор маршрутов. Новый город или дополнительные пересборы — после регистрации."
+        description={
+          <div className="space-y-2">
+            <p className="m-0">
+              Одна полная сборка и один пересбор. Новый город или дополнительные пересборы — после
+              регистрации.
+            </p>
+            <p className="m-0">{FREE_VS_LLM.guestHint}</p>
+            <HowRoutesWorkDrawer link />
+          </div>
+        }
       />
 
       <Form form={form} layout="vertical" preserve initialValues={{ accept_terms: false, accept_privacy: false }}>
         <Form.Item name="city" label="Город маршрута" rules={[{ required: true }]}>
           <Input placeholder="Санкт-Петербург" />
         </Form.Item>
+        <OsrmCityChips
+          selectedCity={city}
+          onSelect={(name) => form.setFieldsValue({ city: name })}
+        />
         <LegalConsentFields hint="Согласие нужно для гостевой сборки: сессия, город, точка старта и технические логи." />
       </Form>
 
@@ -151,9 +168,9 @@ export function TryPage() {
               type="primary"
               block
               className="sm:!w-auto"
-              loading={createMutation.isPending}
-              disabled={!cityReady || (captcha.enabled && !captcha.ready)}
-              onClick={() => void handleSubmit()}
+            loading={createMutation.isPending}
+            disabled={!cityReady}
+            onClick={() => void handleSubmit()}
             >
               Собрать маршруты
             </Button>

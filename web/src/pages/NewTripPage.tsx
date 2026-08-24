@@ -6,6 +6,7 @@ import { getErrorMessage, isLlmKeyRequiredError } from "../api/client";
 import type { RouteAnchor } from "../api/types";
 import { createTrip } from "../api/trips";
 import { NewTripAnchorFields } from "../components/NewTripAnchorFields";
+import { OsrmCityChips } from "../components/OsrmCityChips";
 import { DEFAULT_USER_QUERY } from "../utils/preferences";
 
 interface TripFormValues {
@@ -73,6 +74,10 @@ export function NewTripPage() {
         <Form.Item name="city" label="Город маршрута" rules={[{ required: true }]}>
           <Input placeholder="Санкт-Петербург" />
         </Form.Item>
+        <OsrmCityChips
+          selectedCity={city}
+          onSelect={(name) => form.setFieldsValue({ city: name })}
+        />
       </Form>
 
       <div className="relative max-w-2xl">

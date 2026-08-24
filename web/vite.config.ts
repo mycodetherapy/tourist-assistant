@@ -83,6 +83,8 @@ export default defineConfig(({ mode }) => {
       includeAssets: ["favicon.svg", "apple-touch-icon.png", "icons/icon-192.png", "icons/icon-512.png"],
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // maplibre + antd раздувают chunk выше дефолтных 2 MiB
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // /docs — Swagger на api-node; без denylist SW отдаёт старый index.html (лендинг)
         navigateFallbackDenylist: [/^\/docs/, /^\/api\//, /^\/health$/],
         runtimeCaching: [

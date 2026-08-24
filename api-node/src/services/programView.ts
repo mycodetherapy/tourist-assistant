@@ -1,6 +1,6 @@
 import { makeItemKey, makeRouteStopKey } from "../lib/itemKey.js";
 import type { ItineraryVersion } from "../repos/trips.js";
-import { listItemFeedback } from "../repos/trips.js";
+import { listItemFeedback, listItemFeedbackBySection } from "../repos/trips.js";
 import {
   collectRouteStopPoiIds,
   parseNumberedSection,
@@ -19,6 +19,7 @@ export interface ProgramItemView {
   item_key: string;
   text: string;
   vote: 1 | -1 | null;
+  pinned?: boolean;
   poi_id?: string | null;
 }
 
@@ -63,6 +64,12 @@ export async function buildProgramView(
 ): Promise<ProgramView> {
   const programData = normalizeProgram({ ...latest.program });
   const votesByKey = await listItemFeedback(tripId);
+  const ROUTE_PINS_MIGRATED_KEY = "__route_pins_migrated__";
+  const pinVotes = await listItemFeedbackBySection(tripId, "route_pins");
+  const migrated = pinVotes[ROUTE_PINS_MIGRATED_KEY] === 1;
+  const hasRealPin = Object.entries(pinVotes).some(
+    ([key, vote]) => key !== ROUTE_PINS_MIGRATED_KEY && vote === 1,
+  );
 
   const routesParsed = parseProgramRoutes(programData);
   const preservedRouteIndices = new Set<number>();
@@ -79,17 +86,18 @@ export async function buildProgramView(
   }
   const routesItems: ProgramItemView[] = routesParsed.items.map((text, index) => {
     const key = makeItemKey("routes", text);
+    const pinKey = makeItemKey("route_pins", text);
     const vote = votesByKey[key];
+    const pinned =
+      pinVotes[pinKey] === 1 ||
+      preservedRouteIndices.has(index) ||
+      (!migrated && !hasRealPin && vote === 1);
     return {
       index,
       item_key: key,
       text,
-      vote:
-        vote === 1 || vote === -1
-          ? vote
-          : preservedRouteIndices.has(index)
-            ? 1
-            : null,
+      vote: vote === 1 || vote === -1 ? vote : null,
+      pinned: Boolean(pinned),
     };
   });
 

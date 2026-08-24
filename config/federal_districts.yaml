@@ -1,5 +1,7 @@
-# Федеральные округа РФ — источники Geofabrik для city pack extract.
-# Добавление нового ФО: запись здесь + bash scripts/fo_ensure.sh <id>
+# Источники Geofabrik для city pack extract (ФО РФ + страны).
+# Добавление нового региона: запись здесь + bash scripts/fo_ensure.sh <id>
+# Калининград — отдельный маленький extract (~27 MB), не весь northwestern:
+#   https://download.geofabrik.de/russia/kaliningrad.html
 
 districts:
   volga:
@@ -16,6 +18,11 @@ districts:
     pbf_name: northwestern-fed-district-latest.osm.pbf
     geofabrik_url: https://download.geofabrik.de/russia/northwestern-fed-district-latest.osm.pbf
     min_pbf_bytes: 52428800
+
+  kaliningrad:
+    pbf_name: kaliningrad-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/russia/kaliningrad-latest.osm.pbf
+    min_pbf_bytes: 10485760
 
   southern:
     pbf_name: southern-fed-district-latest.osm.pbf
@@ -41,3 +48,19 @@ districts:
     pbf_name: far-eastern-fed-district-latest.osm.pbf
     geofabrik_url: https://download.geofabrik.de/russia/far-eastern-fed-district-latest.osm.pbf
     min_pbf_bytes: 52428800
+
+  # ----- страны (не РФ) -----
+  georgia:
+    pbf_name: georgia-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/europe/georgia-latest.osm.pbf
+    min_pbf_bytes: 10485760
+
+  armenia:
+    pbf_name: armenia-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/asia/armenia-latest.osm.pbf
+    min_pbf_bytes: 5242880
+
+  serbia:
+    pbf_name: serbia-latest.osm.pbf
+    geofabrik_url: https://download.geofabrik.de/europe/serbia-latest.osm.pbf
+    min_pbf_bytes: 20971520
