@@ -201,11 +201,11 @@ curl -s "http://127.0.0.1:5001/route/v1/foot/49.122,55.787;49.135,55.796?overvie
 
 **Задачи**
 
-1. [ ] Staging/prod: залить `osrm/` артефакты на VPS (rsync рядом с `poi.sqlite`)
-2. [ ] Поднять `osrm` в `deploy/docker-compose.prod.yml --profile osrm`
-3. [ ] `OSRM_BASE_URL` в prod `.env` worker
-4. [ ] Сборка web с `VITE_MAP_PROVIDER=maplibre` (secret/CI build-arg)
-5. [ ] Smoke: Казань geometry + follow; откат: убрать `VITE_MAP_PROVIDER` → снова iframe без редеплоя api (только web rebuild) **или** держать оба образа
+1. [x] Staging/prod: залить `osrm/` артефакты на VPS (rsync рядом с `poi.sqlite`)
+2. [x] Ephemeral OSRM в `deploy/docker-compose.prod.yml` (`OSRM_MODE=ephemeral`, docker.sock)
+3. [x] Prod defaults: `OSRM_HOST_DATA_CITIES=/opt/tourist-assistant/data/cities`, сеть `progulyai`
+4. [x] Сборка web с `VITE_MAP_PROVIDER=maplibre` (Dockerfile ARG + deploy/CI build-arg)
+5. [ ] Smoke: город с графом → MapLibre + follow; без графа → iframe; откат: `VITE_MAP_PROVIDER=yandex` + rebuild web
 6. [ ] Юридическое: атрибуция OSM на карте (MapLibre/OpenFreeMap добавляет сами); при необходимости строка в Privacy/Terms про OSM-тайлы
 
 **Done when:** прод на MapLibre; iframe доступен откатом флага; метрики ошибок OSRM в логах worker приемлемы.
