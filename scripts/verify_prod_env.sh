@@ -47,6 +47,10 @@ elif prod_compose ps api-node 2>/dev/null | grep -q Up; then
     test -n "$JWT_SECRET" && echo "JWT_SECRET: OK (len=${#JWT_SECRET})" || echo "JWT_SECRET: MISSING"
     test -n "$SETTINGS_ENCRYPTION_KEY" && echo "SETTINGS_ENCRYPTION_KEY: OK (len=${#SETTINGS_ENCRYPTION_KEY})" || echo "SETTINGS_ENCRYPTION_KEY: MISSING"
   '
+else
+  echo "api-node не запущен — выполните: bash prod_ps.sh или IMAGE_TAG=latest prod_compose up -d api-node"
+fi
+
 echo ""
 echo "=== worker OSRM (ephemeral) ==="
 if [[ -z "${IMAGE_TAG:-}" ]]; then
