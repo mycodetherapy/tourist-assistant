@@ -22,7 +22,7 @@ echo "dir=$PROD_DEPLOY_DIR file=$PROD_COMPOSE_FILE IMAGE_TAG=${IMAGE_TAG:-MISSIN
 
 echo ""
 echo "=== .env на хосте (только имена, длина значения) ==="
-for key in JWT_SECRET SETTINGS_ENCRYPTION_KEY FRONTEND_URL CORS_ORIGINS YANDEX_MAPS_API_KEY POSTGRES_PASSWORD GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
+for key in JWT_SECRET SETTINGS_ENCRYPTION_KEY FRONTEND_URL CORS_ORIGINS YANDEX_MAPS_API_KEY POSTGRES_PASSWORD GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET OSRM_MODE OSRM_HOST_DATA_CITIES OSRM_DOCKER_NETWORK; do
   line=$(grep -E "^${key}=" .env 2>/dev/null | head -1 || true)
   if [[ -z "$line" ]]; then
     echo "$key: MISSING in .env"
@@ -47,6 +47,24 @@ elif prod_compose ps api-node 2>/dev/null | grep -q Up; then
     test -n "$JWT_SECRET" && echo "JWT_SECRET: OK (len=${#JWT_SECRET})" || echo "JWT_SECRET: MISSING"
     test -n "$SETTINGS_ENCRYPTION_KEY" && echo "SETTINGS_ENCRYPTION_KEY: OK (len=${#SETTINGS_ENCRYPTION_KEY})" || echo "SETTINGS_ENCRYPTION_KEY: MISSING"
   '
+echo ""
+echo "=== worker OSRM (ephemeral) ==="
+if [[ -z "${IMAGE_TAG:-}" ]]; then
+  echo "IMAGE_TAG не задан — skip worker check"
+elif prod_compose ps worker 2>/dev/null | grep -q Up; then
+  prod_compose exec -T worker sh -c '
+    echo "OSRM_MODE=${OSRM_MODE:-}"
+    echo "OSRM_HOST_DATA_CITIES=${OSRM_HOST_DATA_CITIES:-}"
+    echo "OSRM_DOCKER_NETWORK=${OSRM_DOCKER_NETWORK:-}"
+    echo "TOURIST_DATA_DIR=${TOURIST_DATA_DIR:-}"
+    test -S /var/run/docker.sock && echo "docker.sock: OK" || echo "docker.sock: MISSING"
+    if [ -n "$TOURIST_DATA_DIR" ] && [ -d "$TOURIST_DATA_DIR/cities" ]; then
+      n=$(find "$TOURIST_DATA_DIR/cities" -name "*.osrm.mldgr" 2>/dev/null | wc -l | tr -d " ")
+      echo "osrm graphs (mldgr): $n"
+    else
+      echo "osrm graphs: no TOURIST_DATA_DIR/cities"
+    fi
+  '
 else
-  echo "api-node не запущен — выполните: bash prod_ps.sh или IMAGE_TAG=latest prod_compose up -d api-node"
+  echo "worker не запущен"
 fi

@@ -132,7 +132,7 @@ npm run dev
 4. **macOS:** если не открывается — **Системные настройки → Сеть → Брандмауэр → Параметры** → для **node** выберите «Разрешить входящие подключения».
 5. **Чёрный экран:** перезапустите `npm run dev` (Vite прописывает HMR на IP Mac). На iPhone: Настройки → Safari → «Дополнения» → «Данные веб-сайтов» → удалите сайт `192.168.x.x`. Не используйте гостевую Wi‑Fi (изоляция клиентов).
 6. Установка на главный экран: Android — «Установить приложение»; iPhone — «Поделиться» → «На экран Домой» (после того как сайт открылся в Safari по IP).
-7. **Геолокация:** выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута по умолчанию — **iframe Яндекса**; MapLibre + follow — opt-in (`VITE_MAP_PROVIDER=maplibre`). Пешая линия OSRM → `route_geometry` (план: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md)).
+7. **Геолокация:** выбор стартовой точки на `ymaps.Map` (`VITE_YANDEX_MAPS_API_KEY`, HTTPS с телефона). Карта маршрута: **MapLibre** при `VITE_MAP_PROVIDER=maplibre` (дефолт в Docker/CI) и наличии `route_geometry`; иначе iframe Яндекса. Пешая линия OSRM → `route_geometry` (план: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md)).
 8. **Google OAuth:** при HTTPS dev callback — `https://<host>:5173/api/auth/google/callback` (добавьте URI в Google Cloud Console; origin передаётся автоматически).
 
 ### Аналитика (Яндекс Метрика)
@@ -175,7 +175,7 @@ npm run dev
 
 ### City pack (POI из OSM-выжимки)
 
-POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml), полки `hot`/`warm` — [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута по умолчанию — **iframe-виджет** Яндекса (`maps_route_url`, `rtt=pd`); MapLibre — `VITE_MAP_PROVIDER=maplibre` (только при наличии `route_geometry`). Пешая геометрия OSRM: подготовка **на Mac** (`city_pack_prepare` / `osrm_prepare_batch`), на VPS — rsync `data/cities/` + **`OSRM_MODE=ephemeral`** (docker run на время запроса; `docker.sock` + `OSRM_HOST_DATA_CITIES`). Локально можно always-on: `docker compose --profile osrm up -d osrm` + `OSRM_MODE=http`. Без графа сборка не падает. План: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md). Заявки на город вне каталога: `POST /api/city-requests`, CLI `python scripts/city_requests_cli.py`. Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
+POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml), полки `hot`/`warm` — [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута: **MapLibre** при `VITE_MAP_PROVIDER=maplibre` (Docker/CI дефолт) и `route_geometry`; иначе iframe Яндекса. Пешая геометрия OSRM: подготовка **на Mac** (`city_pack_prepare` / `osrm_prepare_batch`), на VPS — rsync `data/cities/` + **`OSRM_MODE=ephemeral`** (`docker.sock` + `OSRM_HOST_DATA_CITIES=/opt/tourist-assistant/data/cities`). Локально можно always-on: `docker compose --profile osrm up -d osrm` + `OSRM_MODE=http`. Без графа сборка не падает. План: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md). Заявки на город вне каталога: `POST /api/city-requests`, CLI `python scripts/city_requests_cli.py`. Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
 
 **Первый запуск (Поволжский ФО, 8 городов):**
 
@@ -294,6 +294,8 @@ docker compose --profile docker-web up -d --build
 | `VITE_YANDEX_MAPS_API_KEY` | Ключ Яндекс.Карт для **сборки** web в CI                                                                              |
 | `VITE_YANDEX_METRIKA_ID`   | ID счётчика Яндекс Метрики для **сборки** web в CI                                                                    |
 | `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` | Клиентский ключ SmartCaptcha для guest `/try` (сборка web в CI)                                              |
+
+`VITE_MAP_PROVIDER=maplibre` задаётся **build-arg** в deploy/CI (не secret): MapLibre при наличии `route_geometry`, иначе iframe.
 
 Packages → каждый образ → **Change visibility → Private** (если репозиторий публичный).
 
@@ -497,7 +499,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY`                       | Нет         | Public key проекта LangFuse                                                                                                    |
 | `LANGFUSE_SECRET_KEY`                       | Нет         | Secret key проекта LangFuse                                                                                                    |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `YANDEX_SMARTCAPTCHA_SERVER_KEY` + `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` (CAPTCHA на guest `/try`); `VITE_MAP_PROVIDER` (дефолт iframe Яндекса; `maplibre` — opt-in); `OSRM_BASE_URL` + `OSRM_DATASET` (опционально, план [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md)); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `YANDEX_SMARTCAPTCHA_SERVER_KEY` + `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` (CAPTCHA на guest `/try`); `VITE_MAP_PROVIDER` (Docker/CI: `maplibre`; без geometry — iframe); `OSRM_MODE` / `OSRM_HOST_DATA_CITIES` (план [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md)); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
 
 #### Google OAuth (prod + local)
 
@@ -683,7 +685,7 @@ python3 scripts/render_graph.py
 | **LangSmith** (опционально)                  | Трейсы графа (`observability/tracing.py`)                                                                          |
 | **Яндекс.Карты (Geocoder + JS API)**         | Геокодинг; карта стартовой точки; **карта маршрута по умолчанию** — iframe + deep link `maps_route_url` |
 | **OSRM** (опционально)                       | Пешая `route_geometry`; `OSRM_MODE=http` или `ephemeral`; без графа — тихий skip; [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md) |
-| **MapLibre + OpenFreeMap**                   | Opt-in карта маршрута (`VITE_MAP_PROVIDER=maplibre`): клики, follow GPS                                 |
+| **MapLibre + OpenFreeMap**                   | Карта маршрута (`VITE_MAP_PROVIDER=maplibre` в Docker/CI): клики, follow GPS; без geometry — iframe        |
 | **City pack**                                | POI из `poi.sqlite`; каталог `city_packs` в Postgres                                                               |
 | **OpenStreetMap** (Nominatim, Geofabrik PBF) | Центр города; выжимки city pack; граф OSRM                                                                                    |
 | **Wikidata SPARQL**                          | Достопримечательности (P625)                                                                                       |

@@ -50,11 +50,13 @@ services:
       DATABASE_URL: postgresql+psycopg://tourist:${POSTGRES_PASSWORD}@postgres:5432/tourist
       REDIS_URL: redis://redis:6379/0
       TOURIST_ASSISTANT_IN_DOCKER: "1"
+      TOURIST_DATA_DIR: /app/data
       OSRM_MODE: ${OSRM_MODE:-ephemeral}
       OSRM_BASE_URL: ${OSRM_DOCKER_BASE_URL:-http://osrm:5000}
-      OSRM_DATASET: ${OSRM_DATASET:-kazan}
+      OSRM_DATASET: ${OSRM_DATASET:-}
       OSRM_URL_BY_SLUG: ${OSRM_URL_BY_SLUG:-}
-      OSRM_HOST_DATA_CITIES: ${OSRM_HOST_DATA_CITIES:-}
+      # Путь на ХОСТЕ (Docker bind для ephemeral osrm-routed)
+      OSRM_HOST_DATA_CITIES: ${OSRM_HOST_DATA_CITIES:-/opt/tourist-assistant/data/cities}
       OSRM_DOCKER_NETWORK: ${OSRM_DOCKER_NETWORK:-progulyai}
       OSRM_EPHEMERAL_URL: ${OSRM_EPHEMERAL_URL:-http://osrm-ephemeral:5000}
       OSRM_IMAGE: ${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v5.27.1}

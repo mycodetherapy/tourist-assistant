@@ -144,5 +144,6 @@ jobs:
           tags: tourist-assistant-web:ci
           build-args: |
             NGINX_CONF=nginx.pg.conf
+            VITE_MAP_PROVIDER=maplibre
           cache-from: type=gha
           cache-to: type=gha,mode=max
