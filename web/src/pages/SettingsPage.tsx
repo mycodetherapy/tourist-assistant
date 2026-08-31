@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Card, Form, Input, Radio, Spin, Typography, notification } from "antd";
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { getErrorMessage } from "../api/client";
 import { deleteLlmKey, fetchSettings, updateSettings } from "../api/settings";
 import type { LlmMode, UpdateSettingsPayload } from "../api/types";
@@ -11,6 +12,7 @@ import { FREE_VS_LLM } from "../content/buildModes";
 type SettingsFormValues = UpdateSettingsPayload & { llm_mode: LlmMode };
 
 export function SettingsPage() {
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [form] = Form.useForm<SettingsFormValues>();
   const watchedMode = Form.useWatch("llm_mode", form);
@@ -19,6 +21,16 @@ export function SettingsPage() {
     queryKey: ["settings"],
     queryFn: fetchSettings,
   });
+
+  useEffect(() => {
+    if (settingsQuery.isLoading) return;
+    if (location.hash !== "#osrm-cities") return;
+    const el = document.getElementById("osrm-cities");
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [location.hash, settingsQuery.isLoading]);
 
   const saveMutation = useMutation({
     mutationFn: updateSettings,
