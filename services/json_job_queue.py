@@ -9,6 +9,7 @@ QUEUE_BUILD_ROUTES = "tourist:queue:build_routes"
 QUEUE_CITY_FACT = "tourist:queue:city_fact"
 QUEUE_POI_FACT = "tourist:queue:poi_fact"
 QUEUE_PREPARE_CITY_PACK = "tourist:queue:prepare_city_pack"
+QUEUE_PREPARE_OSRM = "tourist:queue:prepare_osrm"
 
 
 def push_job(
@@ -39,7 +40,13 @@ def pop_job(timeout_sec: int = 5) -> tuple[str, dict[str, Any]] | None:
 
     try:
         result = get_redis().blpop(
-            [QUEUE_BUILD_ROUTES, QUEUE_CITY_FACT, QUEUE_POI_FACT, QUEUE_PREPARE_CITY_PACK],
+            [
+                QUEUE_BUILD_ROUTES,
+                QUEUE_CITY_FACT,
+                QUEUE_POI_FACT,
+                QUEUE_PREPARE_CITY_PACK,
+                QUEUE_PREPARE_OSRM,
+            ],
             timeout=timeout_sec,
         )
     except RedisTimeoutError:

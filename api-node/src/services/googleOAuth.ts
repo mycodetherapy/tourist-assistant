@@ -192,9 +192,12 @@ export async function loginOrLinkGoogle(params: {
 
   const bySub = await getUserByGoogleSub(params.googleSub);
   if (bySub) {
+    const { markEmailVerified } = await import("../repos/users.js");
+    await markEmailVerified(bySub.id);
+    const user = (await getUserById(bySub.id))!;
     return {
-      user: bySub,
-      token: createAccessToken(bySub.id, bySub.email),
+      user,
+      token: createAccessToken(user.id, user.email),
       isNewUser: false,
     };
   }
@@ -218,6 +221,7 @@ export async function loginOrLinkGoogle(params: {
   const user = await createUser({
     email,
     google_sub: params.googleSub,
+    email_verified: true,
   });
   return {
     user,

@@ -94,12 +94,39 @@ def _stop_ephemeral(client: httpx.Client) -> None:
         logger.debug("ephemeral stop ignored", exc_info=True)
 
 
+def _ensure_image(client: httpx.Client, image: str) -> bool:
+    """Docker create не pull'ит образ — без локального image → 404 No such image."""
+    prefix = _api_prefix()
+    name, _, tag = image.partition(":")
+    tag = tag or "latest"
+    insp = client.get(f"{prefix}/images/{image}/json")
+    if insp.status_code == 200:
+        return True
+    logger.info("ephemeral OSRM: pulling %s", image)
+    pulled = client.post(
+        f"{prefix}/images/create",
+        params={"fromImage": name, "tag": tag},
+        timeout=600.0,
+    )
+    if pulled.status_code not in (200, 201):
+        logger.warning(
+            "ephemeral pull failed: %s %s",
+            pulled.status_code,
+            pulled.text[:500],
+        )
+        return False
+    return True
+
+
 def _start_ephemeral(client: httpx.Client, *, slug: str) -> bool:
     cities_host = str(_host_cities_dir())
     image = _env("OSRM_IMAGE", _DEFAULT_IMAGE) or _DEFAULT_IMAGE
     network = _env("OSRM_DOCKER_NETWORK")
     graph_in_container = f"/data/{slug}/osrm/{slug}.osrm"
     prefix = _api_prefix()
+
+    if not _ensure_image(client, image):
+        return False
 
     host_config: dict = {
         "Binds": [f"{cities_host}:/data:ro"],

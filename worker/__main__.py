@@ -13,7 +13,13 @@ load_dotenv()
 from db.redis_client import get_redis
 from services.json_job_queue import pop_job
 from worker.callbacks import on_json_job_failure
-from worker.tasks import build_routes_task, city_fact_task, poi_fact_task, prepare_city_pack_task
+from worker.tasks import (
+    build_routes_task,
+    city_fact_task,
+    poi_fact_task,
+    prepare_city_pack_task,
+    prepare_osrm_task,
+)
 
 
 def _dispatch(job: dict[str, object]) -> None:
@@ -33,6 +39,9 @@ def _dispatch(job: dict[str, object]) -> None:
         return
     if task == "prepare_city_pack":
         prepare_city_pack_task(graph_run_id, payload)
+        return
+    if task == "prepare_osrm":
+        prepare_osrm_task(graph_run_id, payload)
         return
     raise ValueError(f"unknown task: {task}")
 

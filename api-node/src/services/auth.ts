@@ -123,6 +123,12 @@ export async function registerUser(
     email: normalized,
     password_hash: await hashPassword(password),
   });
+  try {
+    const { issueAndSendEmailVerification } = await import("./emailVerify.js");
+    await issueAndSendEmailVerification(user);
+  } catch (err) {
+    console.warn("[auth] verify email send failed", err);
+  }
   const token = createAccessToken(user.id, user.email);
   return { user, token };
 }

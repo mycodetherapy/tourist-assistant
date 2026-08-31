@@ -80,6 +80,15 @@ export const config = {
     /\/$/,
     "",
   ),
+  /** Self-serve OSRM */
+  osrmPrepareQuotaPerUser: Number(process.env.OSRM_PREPARE_QUOTA_PER_USER ?? 3),
+  osrmPrepareMaxCities: Number(process.env.OSRM_PREPARE_MAX_CITIES ?? 40),
+  osrmPrepareMinFreeGb: Number(process.env.OSRM_PREPARE_MIN_FREE_GB ?? 5),
+  osrmPrepareEnqueuePerHour: Number(process.env.OSRM_PREPARE_ENQUEUE_PER_HOUR ?? 3),
+  osrmPrepareRequireEmailVerified: !["0", "false", "no", "off"].includes(
+    (process.env.OSRM_PREPARE_REQUIRE_EMAIL_VERIFIED ?? "true").trim().toLowerCase(),
+  ),
+  touristDataDir: (process.env.TOURIST_DATA_DIR ?? "").trim(),
 };
 
 export function googleOAuthConfigured(): boolean {

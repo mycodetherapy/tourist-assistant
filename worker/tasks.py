@@ -171,3 +171,10 @@ def prepare_city_pack_task(graph_run_id: str, payload: dict[str, Any]) -> None:
     if not slug:
         raise ValueError("prepare_city_pack: slug required")
     run_pack_prepare_subprocess(slug, city=city)
+
+
+def prepare_osrm_task(graph_run_id: str, payload: dict[str, Any]) -> None:
+    """Self-serve / user-initiated OSRM prepare (FO → extract → osrm)."""
+    from search.osrm.prepare_job import prepare_osrm_task as _run
+
+    _run(graph_run_id, payload)

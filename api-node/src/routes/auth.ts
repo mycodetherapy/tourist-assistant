@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { googleOAuthConfigured } from "../config.js";
+import { config, googleOAuthConfigured } from "../config.js";
 import {
   bearerSecurity,
   loginBodySchema,
@@ -16,6 +16,10 @@ import {
   removeLlmKey,
   saveLlmSettings,
 } from "../services/auth.js";
+import {
+  resendEmailVerification,
+  verifyEmailToken,
+} from "../services/emailVerify.js";
 import { claimGuestSessionForUser } from "../services/guestSession.js";
 import {
   buildGoogleAuthorizeUrl,
@@ -35,7 +39,8 @@ import {
   recordUserLogin,
   recordUserRegister,
 } from "../services/authAudit.js";
-import type { User } from "../repos/users.js";
+import { isEmailVerified, type User } from "../repos/users.js";
+import { createAccessToken } from "../lib/crypto.js";
 
 function trimAuthBody(body: unknown): unknown {
   if (!body || typeof body !== "object") return body;
@@ -46,6 +51,14 @@ function trimAuthBody(body: unknown): unknown {
   return record;
 }
 
+function userPublic(user: User) {
+  return {
+    id: Number(user.id),
+    email: user.email.trim().toLowerCase(),
+    email_verified: isEmailVerified(user),
+  };
+}
+
 function authResponsePayload(
   user: User,
   token: string,
@@ -54,10 +67,7 @@ function authResponsePayload(
   return {
     access_token: token,
     token_type: "bearer" as const,
-    user: {
-      id: Number(user.id),
-      email: user.email.trim().toLowerCase(),
-    },
+    user: userPublic(user),
     ...(claimedTripId != null ? { claimed_trip_id: claimedTripId } : {}),
   };
 }
@@ -177,9 +187,76 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (request) => ({
-      id: request.user!.id,
-      email: request.user!.email,
+      ...userPublic(request.user!),
+      osrm_prepare_quota_used: request.user!.osrm_prepare_quota_used ?? 0,
+      osrm_prepare_quota_limit: config.osrmPrepareQuotaPerUser,
     }),
+  );
+
+  app.post(
+    "/api/auth/verify-email",
+    {
+      schema: {
+        tags: ["auth"],
+        summary: "Confirm email via token from letter",
+        body: {
+          type: "object",
+          required: ["token"],
+          properties: { token: { type: "string" } },
+        },
+        response: {
+          200: ref("AuthResponse"),
+          400: ref("ErrorDetail"),
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = z.object({ token: z.string().min(16) }).safeParse(request.body);
+      if (!body.success) {
+        return reply.code(400).send({ detail: "Некорректный токен" });
+      }
+      try {
+        const user = await verifyEmailToken(body.data.token);
+        const token = createAccessToken(user.id, user.email);
+        return reply.code(200).send(authResponsePayload(user, token));
+      } catch (err) {
+        if (err instanceof AuthError) {
+          return reply
+            .code(err.statusCode as 400)
+            .send({ detail: err.message });
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.post(
+    "/api/auth/resend-verification",
+    {
+      preHandler: requireAuth,
+      schema: {
+        tags: ["auth"],
+        summary: "Resend email verification letter",
+        security: [...bearerSecurity],
+        response: {
+          204: { type: "null" },
+          400: ref("ErrorDetail"),
+          429: ref("ErrorDetail"),
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        await resendEmailVerification(request.user!.id);
+        return reply.code(204).send();
+      } catch (err) {
+        if (err instanceof AuthError) {
+          const code = err.statusCode === 429 ? 429 : 400;
+          return reply.code(code).send({ detail: err.message });
+        }
+        throw err;
+      }
+    },
   );
 
   app.post(

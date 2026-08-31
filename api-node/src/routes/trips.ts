@@ -19,6 +19,7 @@ import {
   startRun,
 } from "../services/runManager.js";
 import { buildProgramView } from "../services/programView.js";
+import { buildTripOsrmUpdateStatus } from "../services/osrmTripUpdate.js";
 import { recoverCityFactIfNeeded } from "../services/cityFactRecovery.js";
 import { repairProgramForTrip } from "../services/repairProgram.js";
 import {
@@ -311,6 +312,26 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
         program: repaired,
       });
       return buildProgramView(tripId, { ...latest, program });
+    },
+  );
+
+  app.get<{ Params: { trip_id: string } }>(
+    "/api/trips/:trip_id/osrm-update",
+    {
+      preHandler: requireAuth,
+      schema: {
+        tags: ["trips"],
+        summary: "Есть ли более новый OSRM-граф, чем последняя сборка маршрутов",
+      },
+    },
+    async (request, reply) => {
+      const tripId = Number(request.params.trip_id);
+      const trip = await tripsRepo.getTrip(tripId, request.user!.id);
+      if (!trip) {
+        return reply.code(404).send({ detail: "Поездка не найдена" });
+      }
+      const latest = await tripsRepo.getLatestItinerary(tripId);
+      return buildTripOsrmUpdateStatus({ city: trip.city, latest });
     },
   );
 

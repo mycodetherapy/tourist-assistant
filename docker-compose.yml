@@ -89,13 +89,16 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required in .env}
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY required in .env}
       TOURIST_ASSISTANT_IN_DOCKER: "1"
+      TOURIST_DATA_DIR: /app/data
+      # Абсолютный путь ХОСТА к ./data (для docker run -v из worker через sock)
+      TOURIST_HOST_DATA_DIR: ${TOURIST_HOST_DATA_DIR:-${PWD}/data}
       # Always-on OSRM (profile osrm) ИЛИ ephemeral (VPS 4 ГБ).
       OSRM_MODE: ${OSRM_MODE:-http}
       OSRM_BASE_URL: ${OSRM_DOCKER_BASE_URL:-http://osrm:5000}
       OSRM_DATASET: ${OSRM_DATASET:-kazan}
       OSRM_URL_BY_SLUG: ${OSRM_URL_BY_SLUG:-}
       # ephemeral: путь ХОСТА к data/cities (bind для docker run), сеть compose
-      OSRM_HOST_DATA_CITIES: ${OSRM_HOST_DATA_CITIES:-}
+      OSRM_HOST_DATA_CITIES: ${OSRM_HOST_DATA_CITIES:-${PWD}/data/cities}
       OSRM_DOCKER_NETWORK: ${OSRM_DOCKER_NETWORK:-tourist-assistant}
       OSRM_EPHEMERAL_URL: ${OSRM_EPHEMERAL_URL:-http://osrm-ephemeral:5000}
       OSRM_IMAGE: ${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v5.27.1}

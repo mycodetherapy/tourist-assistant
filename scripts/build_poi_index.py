@@ -18,7 +18,8 @@ try:
     import osmium
 except ImportError as exc:
     raise SystemExit(
-        "pyosmium не установлен. pip install osmium или prepare в Docker."
+        f"pyosmium недоступен ({exc}). "
+        "pip install osmium + libexpat1 (в Docker-образе worker)."
     ) from exc
 
 
