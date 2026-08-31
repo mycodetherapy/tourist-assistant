@@ -19,6 +19,7 @@ interface AuthContextValue {
   register: (email: string, password: string) => Promise<number | undefined>;
   logout: () => void;
   setTokenFromOAuth: (token: string, claimedTripId?: number) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -39,6 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthToken(null);
     setToken(null);
     setUser(null);
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!getAuthToken()) return;
+    const me = await fetchMe();
+    setUser(me);
   }, []);
 
   useEffect(() => {
@@ -103,8 +110,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       setTokenFromOAuth,
+      refreshUser,
     }),
-    [user, token, loading, login, register, logout, setTokenFromOAuth],
+    [user, token, loading, login, register, logout, setTokenFromOAuth, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

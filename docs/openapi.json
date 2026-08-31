@@ -275,6 +275,92 @@
         }
       }
     },
+    "/api/auth/verify-email": {
+      "post": {
+        "summary": "Confirm email via token from letter",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-2"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/resend-verification": {
+      "post": {
+        "summary": "Resend email verification letter",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-4"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/logout": {
       "post": {
         "summary": "Logout",
@@ -577,6 +663,29 @@
     },
     "/api/trips/{trip_id}/program": {
       "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "trip_id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/trips/{trip_id}/osrm-update": {
+      "get": {
+        "summary": "Есть ли более новый OSRM-граф, чем последняя сборка маршрутов",
+        "tags": [
+          "trips"
+        ],
         "parameters": [
           {
             "schema": {
@@ -1124,6 +1233,137 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/cities/osrm-eligible": {
+      "get": {
+        "summary": "Города каталога: FO есть, OSRM ещё нет (self-serve)",
+        "tags": [
+          "cities"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cities": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          },
+                          "federal_district": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "display_name",
+                          "federal_district"
+                        ]
+                      }
+                    },
+                    "quota_limit": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "cities",
+                    "quota_limit"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/osrm-prepares": {
+      "post": {
+        "summary": "Поставить подготовку OSRM в очередь",
+        "tags": [
+          "osrm"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "slug"
+                ],
+                "properties": {
+                  "slug": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "get": {
+        "summary": "Мои задачи подготовки OSRM",
+        "tags": [
+          "osrm"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/osrm-prepares/{id}": {
+      "get": {
+        "summary": "Статус задачи подготовки OSRM",
+        "tags": [
+          "osrm"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
           }
         }
       }

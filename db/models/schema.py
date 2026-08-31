@@ -34,6 +34,12 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(Text)
     google_sub: Mapped[str | None] = mapped_column(Text, unique=True)
     is_guest: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_verify_token_hash: Mapped[str | None] = mapped_column(Text)
+    email_verify_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    osrm_prepare_quota_used: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -41,6 +47,7 @@ class User(Base):
     settings: Mapped[UserSettings | None] = relationship(back_populates="user")
     profile: Mapped[UserProfile | None] = relationship(back_populates="user")
     trips: Mapped[list[Trip]] = relationship(back_populates="user")
+    osrm_prepare_jobs: Mapped[list[OsrmPrepareJob]] = relationship(back_populates="user")
 
 
 class UserSettings(Base):
@@ -292,6 +299,38 @@ class CityRequest(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class OsrmPrepareJob(Base):
+    """Self-serve / refresh подготовка OSRM-графа города."""
+
+    __tablename__ = "osrm_prepare_jobs"
+    __table_args__ = (
+        Index("ix_osrm_prepare_jobs_user_created", "user_id", "created_at"),
+        Index("ix_osrm_prepare_jobs_slug_status", "slug", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="queued")
+    stage: Mapped[str] = mapped_column(Text, nullable=False, server_default="queued")
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    error: Mapped[str | None] = mapped_column(Text)
+    counts_against_quota: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship(back_populates="osrm_prepare_jobs")
 
 
 class AuditEvent(Base):

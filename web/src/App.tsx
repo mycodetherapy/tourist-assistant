@@ -20,6 +20,7 @@ import { HomeRoute } from "./pages/HomeRoute";
 import { TripListPage } from "./pages/TripListPage";
 import { TryPage } from "./pages/TryPage";
 import { GuestTripDetailPage } from "./pages/GuestTripDetailPage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 
 const { Header, Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -44,7 +45,8 @@ export default function App() {
   const isAuthPage =
     location.pathname === "/login" ||
     location.pathname === "/register" ||
-    location.pathname === "/auth/callback";
+    location.pathname === "/auth/callback" ||
+    location.pathname === "/verify-email";
   const isLegalPage = location.pathname === "/terms" || location.pathname === "/privacy";
   const hideAppHeader = isLandingPage || isAuthPage || isGuestPage || isLegalPage;
 
@@ -167,6 +169,7 @@ export default function App() {
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route
             path="/trips"

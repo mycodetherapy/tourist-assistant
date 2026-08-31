@@ -16,6 +16,15 @@ export async function fetchMe(): Promise<UserInfo> {
   return data;
 }
 
+export async function verifyEmail(token: string): Promise<AuthResponse> {
+  const { data } = await apiClient.post<AuthResponse>("/auth/verify-email", { token });
+  return data;
+}
+
+export async function resendVerification(): Promise<void> {
+  await apiClient.post("/auth/resend-verification");
+}
+
 export function googleLoginUrl(): string {
   const frontend = encodeURIComponent(window.location.origin);
   return `/api/auth/google?frontend=${frontend}`;

@@ -17,12 +17,17 @@ export const authResponseSchema = z.object({
   user: z.object({
     id: z.number().int(),
     email: z.string().email(),
+    email_verified: z.boolean(),
   }),
+  claimed_trip_id: z.number().int().optional(),
 });
 
 export const userResponseSchema = z.object({
   id: z.number().int(),
   email: z.string().email(),
+  email_verified: z.boolean(),
+  osrm_prepare_quota_used: z.number().int(),
+  osrm_prepare_quota_limit: z.number().int(),
 });
 
 export const errorDetailSchema = z.object({

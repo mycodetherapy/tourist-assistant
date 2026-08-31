@@ -131,6 +131,9 @@ export interface ProfileResponse {
 export interface UserInfo {
   id: number;
   email: string;
+  email_verified?: boolean;
+  osrm_prepare_quota_used?: number;
+  osrm_prepare_quota_limit?: number;
 }
 
 export interface AuthResponse {
