@@ -71,28 +71,3 @@ export function buildVerifyEmailMail(params: {
 <p style="color:#666;font-size:12px">${url}</p>`,
   };
 }
-
-export function buildOsrmPrepareResultMail(params: {
-  email: string;
-  cityName: string;
-  ok: boolean;
-  error?: string;
-}): MailPayload {
-  if (params.ok) {
-    return {
-      to: params.email,
-      subject: `Город ${params.cityName} готов на карте — Прогуляй`,
-      text: `Пеший граф для «${params.cityName}» готов. Можно собирать маршруты с MapLibre.`,
-      html: `<p>Пеший граф для <strong>${params.cityName}</strong> готов.</p>
-<p>Можно собирать маршруты с картой MapLibre.</p>`,
-    };
-  }
-  return {
-    to: params.email,
-    subject: `Не удалось подготовить ${params.cityName} — Прогуляй`,
-    text: `Подготовка «${params.cityName}» не удалась.${params.error ? ` ${params.error}` : ""} Квота возвращена.`,
-    html: `<p>Подготовка <strong>${params.cityName}</strong> не удалась.</p>
-${params.error ? `<p>${params.error}</p>` : ""}
-<p>Квота возвращена — можно попробовать снова позже.</p>`,
-  };
-}

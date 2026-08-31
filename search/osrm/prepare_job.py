@@ -127,13 +127,10 @@ def run_prepare_pipeline(
 
 def prepare_osrm_task(graph_run_id: str, payload: dict) -> None:
     from db.postgres import osrm_prepare_jobs as jobs
-    from services.mailer_notify import notify_osrm_prepare_result
 
     job_id = str(payload.get("job_id") or graph_run_id)
     slug = str(payload.get("slug") or "").strip()
     federal_district = str(payload.get("federal_district") or "").strip()
-    display_name = str(payload.get("display_name") or slug)
-    user_id = int(payload.get("user_id") or 0)
 
     row = jobs.get_job(job_id)
     if row is None:
@@ -152,12 +149,6 @@ def prepare_osrm_task(graph_run_id: str, payload: dict) -> None:
         )
         if row.get("counts_against_quota"):
             jobs.refund_user_quota(int(row["user_id"]))
-        notify_osrm_prepare_result(
-            user_id=user_id or int(row["user_id"]),
-            city_name=display_name,
-            ok=False,
-            error="Сервер занят",
-        )
         return
 
     try:
@@ -180,11 +171,6 @@ def prepare_osrm_task(graph_run_id: str, payload: dict) -> None:
             progress=100,
             finished=True,
         )
-        notify_osrm_prepare_result(
-            user_id=user_id or int(row["user_id"]),
-            city_name=display_name,
-            ok=True,
-        )
     except Exception as exc:
         logger.exception("prepare_osrm failed job=%s slug=%s", job_id, slug)
         err = str(exc)[:500]
@@ -197,12 +183,6 @@ def prepare_osrm_task(graph_run_id: str, payload: dict) -> None:
         )
         if row.get("counts_against_quota"):
             jobs.refund_user_quota(int(row["user_id"]))
-        notify_osrm_prepare_result(
-            user_id=user_id or int(row["user_id"]),
-            city_name=display_name,
-            ok=False,
-            error=err,
-        )
         raise
     finally:
         _release_lock()

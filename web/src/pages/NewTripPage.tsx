@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Button, Form, Input, notification } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getErrorMessage, isLlmKeyRequiredError } from "../api/client";
 import type { RouteAnchor } from "../api/types";
 import { createTrip } from "../api/trips";
@@ -78,6 +78,12 @@ export function NewTripPage() {
           selectedCity={city}
           onSelect={(name) => form.setFieldsValue({ city: name })}
         />
+        <p className="mb-4 -mt-2 text-xs text-slate-500">
+          Нет нужного города в списке?{" "}
+          <Link to="/settings#osrm-cities" className="text-sky-700 underline-offset-2 hover:underline">
+            Добавить город на карту в настройках
+          </Link>
+        </p>
       </Form>
 
       <div className="relative max-w-2xl">
