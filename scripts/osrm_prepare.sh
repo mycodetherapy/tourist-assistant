@@ -4,6 +4,9 @@
 #
 # Требует: Docker, data/cities/<slug>/extract.osm.pbf
 # Результат: data/cities/<slug>/osrm/<slug>.osrm*
+#
+# В Docker-worker задайте TOURIST_HOST_DATA_DIR=<абсолютный путь хоста к data>
+# для bind mount через docker.sock (на Mac /app/data не шарится).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,9 +20,13 @@ if [[ -z "$SLUG" ]]; then
   exit 1
 fi
 
-CITY_DIR="$ROOT/data/cities/$SLUG"
+DATA_DIR="${TOURIST_DATA_DIR:-$ROOT/data}"
+HOST_DATA_DIR="${TOURIST_HOST_DATA_DIR:-$DATA_DIR}"
+
+CITY_DIR="$DATA_DIR/cities/$SLUG"
 EXTRACT="$CITY_DIR/extract.osm.pbf"
 OUT_DIR="$CITY_DIR/osrm"
+HOST_OUT_DIR="$HOST_DATA_DIR/cities/$SLUG/osrm"
 
 if [[ ! -f "$EXTRACT" ]]; then
   echo "Нет $EXTRACT — сначала соберите city pack (scripts/city_pack_prepare.sh $SLUG)" >&2
@@ -33,19 +40,19 @@ cp -f "$EXTRACT" "$WORK_PBF"
 
 echo "OSRM extract (foot) → $OUT_DIR …"
 docker run --rm -t \
-  -v "$OUT_DIR:/data" \
+  -v "$HOST_OUT_DIR:/data" \
   "$OSRM_IMAGE" \
   osrm-extract -p "$PROFILE_LUA" "/data/${SLUG}.osm.pbf"
 
 echo "OSRM partition …"
 docker run --rm -t \
-  -v "$OUT_DIR:/data" \
+  -v "$HOST_OUT_DIR:/data" \
   "$OSRM_IMAGE" \
   osrm-partition "/data/${SLUG}.osrm"
 
 echo "OSRM customize …"
 docker run --rm -t \
-  -v "$OUT_DIR:/data" \
+  -v "$HOST_OUT_DIR:/data" \
   "$OSRM_IMAGE" \
   osrm-customize "/data/${SLUG}.osrm"
 

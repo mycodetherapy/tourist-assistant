@@ -9,7 +9,7 @@ PYTHON="${PYTHON:-python3}"
 if [[ -x "$ROOT/.venv/bin/python" ]]; then
   PYTHON="$ROOT/.venv/bin/python"
 fi
-DATA_DIR="$ROOT/data/fo"
+DATA_DIR="${TOURIST_DATA_DIR:-$ROOT/data}/fo"
 CATALOG="$ROOT/config/federal_districts.yaml"
 
 if [[ ! -f "$CATALOG" ]]; then
@@ -46,7 +46,8 @@ is_valid_pbf() {
   size="$(wc -c <"$PBF" | tr -d ' ')"
   [[ "$size" -ge "$MIN_BYTES" ]] || return 1
   local head_bytes
-  head_bytes="$(head -c 16 "$PBF" 2>/dev/null || true)"
+  # Binary PBF: avoid bash $() null-byte warnings
+  head_bytes="$(head -c 16 "$PBF" 2>/dev/null | tr -d '\0' || true)"
   [[ "$head_bytes" != "<!DOCTYPE html>"* ]] || return 1
   [[ "$head_bytes" != "<html"* ]] || return 1
   return 0

@@ -5,6 +5,7 @@ import { getErrorMessage } from "../api/client";
 import { deleteLlmKey, fetchSettings, updateSettings } from "../api/settings";
 import type { LlmMode, UpdateSettingsPayload } from "../api/types";
 import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
+import { OsrmPreparePanel } from "../components/OsrmPreparePanel";
 import { FREE_VS_LLM } from "../content/buildModes";
 
 type SettingsFormValues = UpdateSettingsPayload & { llm_mode: LlmMode };
@@ -56,6 +57,7 @@ export function SettingsPage() {
   return (
     <div className="mx-auto w-full max-w-lg">
       <h1 className="mb-4 text-xl font-semibold sm:text-2xl">Настройки</h1>
+      <OsrmPreparePanel />
       <Alert
         className="mb-4"
         type="info"

@@ -1,54 +1,49 @@
 # Политика каталога городов (OSM / OSRM)
 
-Ветка: `feat/maplibre-osrm`. VPS сейчас: **4 ГБ RAM / 50 ГБ** (~5 пользователей).
+VPS: **~4 ГБ RAM / ~30 ГБ** диск. Self-serve OSRM для зарегистрированных пользователей.
 
 ## Роли данных
 
 | Артефакт | Где готовится | На VPS |
 |----------|---------------|--------|
-| FO Geofabrik `.osm.pbf` | **только Mac** | не обязателен (можно не хранить) |
-| `extract.osm.pbf` + `poi.sqlite` | Mac → rsync | да |
-| `osrm/*.osrm*` | Mac → rsync | да (файлы) |
+| FO Geofabrik `.osm.pbf` | Mac **или** VPS (`fo_ensure` / nightly) | **нужен subset** для self-serve extract |
+| `extract.osm.pbf` + `poi.sqlite` | Mac rsync **или** VPS worker | да |
+| `osrm/*.osrm*` | Mac rsync **или** VPS `prepare_osrm` | да |
 | `osrm-routed` | — | **эфемерный** `docker run` на время geometry |
-
-Geofabrik — это **файлы + разовые docker job’ы**, не постоянно крутящийся сервис.
 
 ## Полки
 
-### A — hot (всегда готовые файлы на диске)
+### A — hot / ready (есть `*.osrm.mldgr`)
 
-OSRM-граф на NVMe; при сборке маршрута worker поднимает эфемерный роутер.
+Чипы `GET /api/cities/osrm-ready`. Ephemeral роутер при сборке маршрута.
 
-Состав:
+### B — eligible (каталог + FO на диске, OSRM нет)
 
-- Поволжье (8): Казань, Йошкар-Ола, Самара, НН, Ижевск, Тольятти, Кострома (`central`), Ульяновск
-- Central+NW: Москва, Ярославль, Владимир, Суздаль, Сергиев Посад, Тула, Тверь, Калуга, Санкт-Петербург
-- Georgia / Armenia / Serbia: Тбилиси, Батуми, Кутаиси, Поти, Ереван, Белград (`georgia` / `armenia` / `serbia` в `federal_districts.yaml`)
+`GET /api/cities/osrm-eligible`. Пользователь с подтверждённым email ставит `POST /api/osrm-prepares` (лимит **3** новых города на аккаунт). Очередь `tourist:queue:prepare_osrm`, concurrency 1.
 
-### B — warm (каталог, extract+poi prebuild; OSRM по нужде)
+### C — вне каталога / без FO
 
-Списки в `config/city_packs.yaml` (`tier: warm`). OSRM-граф можно дособрать на Mac и залить, либо позже lazy.
+Wikidata + iframe. Wishlist: `POST /api/city-requests`.
 
-### C — вне каталога
+## Self-serve (free)
 
-Wikidata + iframe Яндекса. Заявка → ручной accept → появление в B/A.
+1. Email verified (Resend / письмо) или Google OAuth.
+2. Выбор города из eligible.
+3. Worker: `fo_ensure` → `city_pack_prepare` → `osrm_prepare`.
+   Для `docker run -v` из worker нужен **путь хоста**: `TOURIST_HOST_DATA_DIR` (локально `${PWD}/data`, VPS `/opt/tourist-assistant/data`). `TOURIST_DATA_DIR=/app/data` — только I/O внутри контейнере.
+4. Прогресс в UI + письмо об итоге. При ошибке квота возвращается.
+5. Диск: hard stop если свободно &lt; `OSRM_PREPARE_MIN_FREE_GB` (default 5). Soft-cap городов: `OSRM_PREPARE_MAX_CITIES` (40).
+6. Если у пользователя уже есть маршруты по городу и граф OSRM обновился (mtime `*.osrm.mldgr` новее `itinerary_versions.created_at`) — на странице прогулки баннер «Карта обновилась» + CTA пересбор (`GET /api/trips/:id/osrm-update`).
 
-## Runtime на 4 ГБ (`OSRM_MODE=ephemeral`)
+## Runtime ephemeral
 
-1. File lock (один роутер за раз).
-2. `docker run --rm` с графом города на общей docker-сети.
-3. HTTP `/route/v1/foot/...`.
-4. `docker rm -f`.
-
-Нужны: `docker.sock` у worker, `OSRM_HOST_DATA_CITIES` = **абсолютный путь на хосте** к `data/cities`.
-
-Масштаб позже: `OSRM_MODE=http` + несколько always-on / `OSRM_URL_BY_SLUG`.
+См. прежние правила: `OSRM_MODE=ephemeral`, `docker.sock`, `OSRM_HOST_DATA_CITIES`.
 
 ## Обновления
 
-- FO/extract/osrm: на Mac, раз в 30–90 дней или перед новым городом.
-- На VPS: rsync `data/cities/<slug>/`, без тяжёлого extract на 4 ГБ.
+- Nightly staggered: `scripts/osrm_nightly_refresh.py` (окно 02–06 Europe/Moscow, цикл ~14 дней: 1 FO / ночь, затем 2 города / ночь).
+- User prepare и nightly делят lock `tourist:lock:osrm_prepare`.
 
-## Заявки
+## Заявки вне каталога
 
-Таблица `city_requests` + `POST /api/city-requests` + CLI `python scripts/city_requests_cli.py`.
+Таблица `city_requests` + CLI `python scripts/city_requests_cli.py` — без авто-extract.

@@ -21,13 +21,16 @@
 | **Аналитика** | ✅ | Яндекс.Метрика + воронка guest (`try_*`, `guest_register_*`) |
 | **Wikidata** | ✅ | Fallback `P131` без `*` для крупных городов (Москва — таймаут transitive SPARQL) |
 | **UI guest** | ✅ | «Прогулка: {город}», `/try` без слова «бесплатно» в публичном UI |
+| **MapLibre + OSRM** | ✅ | Opt-in web, ephemeral worker, city chips `osrm-ready` |
+| **Self-serve OSRM** | ✅ | Eligible города (FO на диске), очередь prepare, лимит 3/аккаунт, email verify |
+| **Email verify** | ✅ | Письмо после register (Resend); Google — сразу verified |
 
 ### В процессе
 
 | Задача | Действие |
 | ------ | -------- |
 | **Prod-деплой** | Merge PR `develop` → `main` → CI Deploy; `.env`: `YANDEX_SMARTCAPTCHA_SERVER_KEY`; secret `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` |
-| **Миграции** | Авто при старте worker (`alembic upgrade head`); проверка: `e2b3c4d5f6a7` (guest_sessions) |
+| **Миграции** | Авто при старте worker (`alembic upgrade head`); head: `g2h3i4j5k6l7` (email verify + osrm_prepare_jobs) |
 | **Локальные фиксы** | Кнопка «Пересобрать» (captcha disabled), крестик cookie-баннера — закоммитить в `develop` |
 
 ### Ближайшие планы (phase 2)
@@ -221,7 +224,7 @@ python3 scripts/export_openapi.py
 
 Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/openapi.json` автоматически.
 
-**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На форме новой прогулки и `/try` — чипы городов с OSRM: `GET /api/cities/osrm-ready` (скан `data/cities/*/osrm/*.osrm.mldgr`). На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
+**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На форме новой прогулки и `/try` — чипы городов с OSRM: `GET /api/cities/osrm-ready`. Self-serve (Настройки): `GET /api/cities/osrm-eligible`, `POST /api/osrm-prepares` (лимит 3, нужен verified email). На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
 
 Один раз установить автообновление схемы перед коммитом:
 
@@ -499,7 +502,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY`                       | Нет         | Public key проекта LangFuse                                                                                                    |
 | `LANGFUSE_SECRET_KEY`                       | Нет         | Secret key проекта LangFuse                                                                                                    |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `YANDEX_SMARTCAPTCHA_SERVER_KEY` + `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` (CAPTCHA на guest `/try`); `VITE_MAP_PROVIDER` (Docker/CI: `maplibre`; без geometry — iframe); `OSRM_MODE` / `OSRM_HOST_DATA_CITIES` (план [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md)); `VITE_DEV_HTTPS` (HTTPS dev для геолокации с телефона); `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY` (HTTP Geocoder на бэкенде).
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `YANDEX_SMARTCAPTCHA_SERVER_KEY` + `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` (CAPTCHA на guest `/try`); `VITE_MAP_PROVIDER` (Docker/CI: `maplibre`; без geometry — iframe); `RESEND_API_KEY` / `MAIL_FROM` (email verify + OSRM notify); `OSRM_PREPARE_*` / `OSRM_REFRESH_*` ([`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)); `OSRM_MODE` / `OSRM_HOST_DATA_CITIES`; `VITE_DEV_HTTPS`; `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY`.
 
 #### Google OAuth (prod + local)
 

@@ -17,6 +17,11 @@ fi
 : "${ROUTE_BBOX:?}"
 : "${POI_BBOX:?}"
 
+# В контейнере worker: TOURIST_DATA_DIR=/app/data (файлы),
+# TOURIST_HOST_DATA_DIR=<host>/data (для docker run -v через docker.sock).
+DATA_DIR="${TOURIST_DATA_DIR:-$ROOT/data}"
+HOST_DATA_DIR="${TOURIST_HOST_DATA_DIR:-$DATA_DIR}"
+
 OSMIUM_IMAGE="${OSMIUM_IMAGE:-local-osmium-tool}"
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-}"
 
@@ -30,10 +35,11 @@ IFS=',' read -r ROUTE_W ROUTE_S ROUTE_E ROUTE_N <<< "$ROUTE_BBOX"
 
 if [[ ! -f "$EXTRACT_PBF" ]] || [[ "${FORCE_EXTRACT:-}" == "1" ]]; then
   echo "osmium extract …"
+  mkdir -p "$PACK_DIR"
   docker run --rm \
     ${DOCKER_PLATFORM:+--platform "$DOCKER_PLATFORM"} \
-    -v "$ROOT/data/fo:/fo:ro" \
-    -v "$PACK_DIR:/out" \
+    -v "$HOST_DATA_DIR/fo:/fo:ro" \
+    -v "$HOST_DATA_DIR/cities/$SLUG:/out" \
     "$OSMIUM_IMAGE" \
     extract -b "$ROUTE_W,$ROUTE_S,$ROUTE_E,$ROUTE_N" "/fo/$FO_PBF_NAME" -o "/out/extract.osm.pbf" --overwrite
 fi

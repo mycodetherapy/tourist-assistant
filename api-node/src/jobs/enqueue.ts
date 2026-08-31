@@ -1,6 +1,8 @@
 export const QUEUE_BUILD_ROUTES = "tourist:queue:build_routes";
 export const QUEUE_CITY_FACT = "tourist:queue:city_fact";
 export const QUEUE_POI_FACT = "tourist:queue:poi_fact";
+export const QUEUE_PREPARE_CITY_PACK = "tourist:queue:prepare_city_pack";
+export const QUEUE_PREPARE_OSRM = "tourist:queue:prepare_osrm";
 
 export interface JsonJob {
   task: string;
@@ -48,4 +50,18 @@ export async function enqueueCityFact(
     payload,
   };
   await redis.rPush(QUEUE_CITY_FACT, JSON.stringify(job));
+}
+
+export async function enqueuePrepareOsrm(
+  jobId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const { getRedis } = await import("../db/redis.js");
+  const redis = await getRedis();
+  const job: JsonJob = {
+    task: "prepare_osrm",
+    graph_run_id: jobId,
+    payload,
+  };
+  await redis.rPush(QUEUE_PREPARE_OSRM, JSON.stringify(job));
 }
