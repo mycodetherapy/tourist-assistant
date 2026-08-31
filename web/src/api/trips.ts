@@ -30,6 +30,20 @@ export async function fetchProgram(id: number): Promise<ProgramResponse> {
   return data;
 }
 
+export type TripOsrmUpdateStatus = {
+  slug: string | null;
+  display_name: string | null;
+  osrm_ready: boolean;
+  osrm_updated_at: string | null;
+  routes_built_at: string | null;
+  update_available: boolean;
+};
+
+export async function fetchTripOsrmUpdate(id: number): Promise<TripOsrmUpdateStatus> {
+  const { data } = await apiClient.get<TripOsrmUpdateStatus>(`/trips/${id}/osrm-update`);
+  return data;
+}
+
 export async function submitItemFeedback(
   tripId: number,
   payload: ItemFeedbackPayload,

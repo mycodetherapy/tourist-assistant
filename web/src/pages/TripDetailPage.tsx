@@ -13,6 +13,7 @@ import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
 import { ProgramTabs } from "../components/ProgramTabs";
 import { TripAnchorCard } from "../components/TripAnchorCard";
 import { TripMetaCard } from "../components/TripMetaCard";
+import { OsrmGraphUpdateBanner } from "../components/OsrmGraphUpdateBanner";
 import { FREE_VS_LLM } from "../content/buildModes";
 import { useRunPolling } from "../hooks/useRunPolling";
 import { useTrip, useTripProgram } from "../hooks/useTrip";
@@ -120,6 +121,7 @@ export function TripDetailPage() {
       setActiveRunScope("full");
       queryClient.invalidateQueries({ queryKey: ["trips", tripId] });
       queryClient.invalidateQueries({ queryKey: ["trips", tripId, "program"] });
+      queryClient.invalidateQueries({ queryKey: ["trip-osrm-update", tripId] });
       queryClient.invalidateQueries({ queryKey: ["trips"] });
       if (status === "failed" && runQuery.data?.error) {
         setLastBuildError(runQuery.data.error);
@@ -235,6 +237,18 @@ export function TripDetailPage() {
             Собрать маршруты
           </Button>
         </Card>
+      )}
+
+      {canRebuild && (
+        <OsrmGraphUpdateBanner
+          tripId={tripId}
+          hasRoutes={hasProgram}
+          rebuilding={rebuildMutation.isPending}
+          onRebuildRoutes={() => {
+            setActiveRunScope("routes");
+            rebuildMutation.mutate("routes");
+          }}
+        />
       )}
 
       {canRebuild && (
