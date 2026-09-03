@@ -21,6 +21,7 @@ import { TripListPage } from "./pages/TripListPage";
 import { TryPage } from "./pages/TryPage";
 import { GuestTripDetailPage } from "./pages/GuestTripDetailPage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
+import { SeoHead } from "./seo/SeoHead";
 
 const { Header, Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -73,6 +74,7 @@ export default function App() {
 
   return (
     <Layout className="min-h-screen flex flex-1 flex-col bg-[#f5f5f5]">
+      <SeoHead />
       {!hideAppHeader ? (
         <Header className="app-header flex shrink-0 items-center gap-2 px-3 sm:gap-6 sm:px-6">
           {isMobile ? (

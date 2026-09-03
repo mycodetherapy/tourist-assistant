@@ -7,6 +7,7 @@ import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import { defineConfig, loadEnv } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { seoPlugin } from "./seoPlugin";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 const repoRoot = path.resolve(webRoot, "..");
@@ -78,6 +79,7 @@ export default defineConfig(({ mode }) => {
       : []),
     react(),
     tailwindcss(),
+    seoPlugin(),
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "apple-touch-icon.png", "icons/icon-192.png", "icons/icon-512.png"],
@@ -86,7 +88,13 @@ export default defineConfig(({ mode }) => {
         // maplibre + antd раздувают chunk выше дефолтных 2 MiB
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         // /docs — Swagger на api-node; без denylist SW отдаёт старый index.html (лендинг)
-        navigateFallbackDenylist: [/^\/docs/, /^\/api\//, /^\/health$/],
+        navigateFallbackDenylist: [
+          /^\/docs/,
+          /^\/api\//,
+          /^\/health$/,
+          /^\/robots\.txt$/,
+          /^\/sitemap\.xml$/,
+        ],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith("/api/"),
