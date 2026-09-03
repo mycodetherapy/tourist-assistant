@@ -17,6 +17,7 @@ import { RouteMapView } from "./RouteMapView";
 import { RoutePinButton } from "./RoutePinButton";
 import { FREE_VS_LLM } from "../content/buildModes";
 import { usePoiFact } from "../hooks/usePoiFact";
+import { markdownExternalLinkComponents } from "./markdownExternalLink";
 
 const { useBreakpoint } = Grid;
 
@@ -45,7 +46,7 @@ function MarkdownBlock({
     <div
       className={`prose max-w-none ${compact ? "" : "whitespace-pre-wrap"} ${className}`}
     >
-      <ReactMarkdown>
+      <ReactMarkdown components={markdownExternalLinkComponents}>
         {text}
       </ReactMarkdown>
     </div>

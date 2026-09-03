@@ -545,7 +545,8 @@ export async function registerTripsRoutes(app: FastifyInstance): Promise<void> {
       if (
         existing?.status === "ready" &&
         existing.text &&
-        !poiFactsRepo.looksLikeSearchGarbage(existing.text)
+        !poiFactsRepo.looksLikeSearchGarbage(existing.text) &&
+        !poiFactsRepo.wikipediaSnippetIsStale(existing)
       ) {
         return poiFactsRepo.toPoiFactResponse(existing);
       }

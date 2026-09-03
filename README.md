@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
 
-**Прогуляй** — веб-сервис пеших прогулок по городу: три альтернативных маршрута A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 6–8 предложений с историческими фактами). Центральная функция — маршруты и базовая точка старта (`route_anchor`). Прогулки, предпочтения и версии программы хранятся в **PostgreSQL**.
+**Прогуляй** — веб-сервис пеших прогулок по городу: три альтернативных маршрута A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 8–12 предложений с историческими фактами, ссылка на статью Wikipedia). Центральная функция — маршруты и базовая точка старта (`route_anchor`). Прогулки, предпочтения и версии программы хранятся в **PostgreSQL**.
 
 ## Статус и планы
 
@@ -238,7 +238,7 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 | **Настройки**          | Режим AI: `none` (бесплатный алгоритм, 30/сутки), `byok` (свой ключ), `platform` (скоро). BYOK: API key, Base URL, модель |
 | **Список прогулок**    | Только прогулки текущего пользователя                                                                                                                                                                                                           |
 | **Новая прогулка**     | Wizard: город → запуск → фоновая сборка (polling 1–2 мин)                                                                                                                                                                                       |
-| **Карточка прогулки**  | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`); пересбор маршрутов одной кнопкой |
+| **Карточка прогулки**  | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling; в бесплатном режиме — Wikipedia без обрыва на «…» и ссылка «Читать далее в Wikipedia»); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`; free — Wikipedia до ~2800 символов, обрезка по предложению + « …» и ссылка; LLM — 8–12 предложений до 2800 + ссылка на статью); пересбор маршрутов одной кнопкой |
 
 Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
@@ -639,8 +639,8 @@ python3 scripts/render_graph.py
 | `executor`               | `agents/nodes.py`                                  | Выполняет tools, пишет строки в `tool_runs`                                                          |
 | `writer`                 | `agents/nodes.py`                                  | Structured output → маршруты (`RoutesDraft`), merge; факт о городе — не здесь                        |
 | `critic`                 | `agents/critic.py`                                 | Детерминированные проверки; retry: tools → `researcher`, качество программы → `writer`               |
-| _(async)_ `city_fact`    | `agents/city_fact.py`, `services/city_fact_job.py` | Wikidata/Nominatim → LLM-polish; патч `lifehacks` + `city_fact_status` в SQLite параллельно с графом |
-| _(on-demand)_ `poi_fact` | `agents/poi_fact.py`, `poi_facts`                  | Клик по остановке → Wikipedia (free) или LLM (BYOK); кэш в Postgres                                 |
+| _(async)_ `city_fact`    | `agents/city_fact.py`, `services/city_fact_job.py` | Wikidata/Nominatim → LLM-polish 280–2800 символов + ссылка Wikipedia (BYOK) или Wikipedia до ~2800 с « …» и ссылкой (free); патч `lifehacks` + `city_fact_status` параллельно с графом |
+| _(on-demand)_ `poi_fact` | `agents/poi_fact.py`, `poi_facts`                  | Клик по остановке → Wikipedia до ~1400 символов без «…» + ссылка на статью (free) или LLM (BYOK); кэш в Postgres |
 
 **Инструменты** (`search/tools.py`):
 
@@ -731,12 +731,13 @@ python3 scripts/render_graph.py
 | **Дизлайк остановки и пересборка**  | 👎 на `route_stops` не сбрасывается после rebuild; `banned_poi_ids` в snapshot + `enforce_route_poi_policy` исключают POI даже при готовых `maps_route_url`                                 |
 | **📌 маршрута и пересборка**        | `route_pins` + `preserved`; sync после save пишет только pins (не soft 👍); снятие 📌 очищает `preserved`                                                                                  |
 | **Гостевая сессия `/try`**          | HttpOnly cookie; лимит **1× full** + **1× routes**; geocode **40/ч** на сессию (Redis); SmartCaptcha перед сборкой/пересбором (если задан `YANDEX_SMARTCAPTCHA_SERVER_KEY`); cleanup истёкших guest-user; soft gate → register; claim trip при login |
+| **Wikipedia обрезает extract**      | Не используем `exchars` (потолок ~1200 и «…»): intro или полный extract, обрезка по предложению (POI ~1400; «О городе» ~2800). Free «О городе»: « …» перед ссылкой «Читать далее в Wikipedia». LLM: обрезка по предложению, не посреди слова; ссылка на статью тоже ставится |
 
 ### Как понять, что агент работает хорошо?
 
 | Критерий                           | Приемлемый результат                                                                                                                                                                                                           |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Полнота программы**              | 3 варианта маршрута A/B/C; факт о городе 280–2200 символов; справка по POI до 2200 символов (Wikipedia или LLM, on-demand)                                                                                                       |
+| **Полнота программы**              | 3 варианта маршрута A/B/C; факт о городе 280–2800 символов (free: Wikipedia + « …» и ссылка «Читать далее»; LLM: 8–12 предложений + ссылка на статью); справка по POI до 2200 символов LLM или ~1400 Wikipedia без обрыва на «…» (on-demand) |
 | **Опора на поиск**                 | Маршруты A/B/C: сложность по **протяжённости** (A ~2–3.5 км, B ~4–5.5, C ~6–8.5), до 8 плотных leisure-точек; без повторов названий; `maps_route_url` по координатам (иногда кольцевой); POI только из Wikidata/discovery-пула |
 | **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят                                                                                                                                          |
 

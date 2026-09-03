@@ -138,7 +138,14 @@ class TestPoiFactWikipedia(unittest.TestCase):
             "культуре региона; в фондах более 100000 предметов."
         )
 
-        def _extract(*, title: str, max_chars: int = 2200, lang: str = "ru", ellipsis: bool = False):
+        def _extract(
+            *,
+            title: str,
+            max_chars: int = 2200,
+            lang: str = "ru",
+            ellipsis: bool = False,
+            intro_only: bool = False,
+        ):
             if title == "Йошкар-Ола":
                 return city_text
             if "музей" in title.lower():
@@ -158,12 +165,20 @@ class TestPoiFactWikipedia(unittest.TestCase):
                 text = fetch_poi_fact_wikipedia(ctx)
         self.assertIn("музей", text.lower())
         self.assertNotIn("столица республики", text.lower())
+        self.assertIn("Читать далее в Wikipedia", text)
+        self.assertIn("wikipedia.org", text)
 
     @patch("search.wikidata.city_description.fetch_wikipedia_poi_for_wikidata")
     def test_wikidata_path_without_name_match(self, mock_wiki) -> None:
-        mock_wiki.return_value = (
-            "Академический русский театр драмы имени Георгия Константинова — "
-            "государственное автономное учреждение культуры Республики Марий Эл."
+        from search.wikidata.city_description import WikipediaSnippet
+
+        mock_wiki.return_value = WikipediaSnippet(
+            text=(
+                "Академический русский театр драмы имени Георгия Константинова — "
+                "государственное автономное учреждение культуры Республики Марий Эл."
+            ),
+            title="Академический русский театр драмы имени Георгия Константинова",
+            lang="ru",
         )
         ctx = PoiFactContext(
             cache_key="Q4059185",
@@ -175,6 +190,8 @@ class TestPoiFactWikipedia(unittest.TestCase):
         )
         text = fetch_poi_fact_wikipedia(ctx)
         self.assertIn("театр", text.lower())
+        self.assertIn("Читать далее в Wikipedia", text)
+        self.assertIn("wikipedia.org/wiki/", text)
 
     @patch("search.wikidata.city_description.search_wikipedia_titles", return_value=[])
     def test_search_without_article_fails(self, _mock_search) -> None:
@@ -188,6 +205,49 @@ class TestPoiFactWikipedia(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, POI_FACT_NOT_FOUND):
             fetch_poi_fact_wikipedia(ctx)
+
+
+class TestWikipediaSnippetTrim(unittest.TestCase):
+    def test_drops_truncated_ellipsis(self) -> None:
+        from search.wikidata.city_description import (
+            WIKIPEDIA_READ_MORE_LABEL,
+            append_wikipedia_read_more,
+            drop_incomplete_sentence,
+            trim_wikipedia_text,
+        )
+
+        truncated = (
+            "Святая Варвара жила в III веке в городе Илиополе Финикийском. "
+            "Её отец — Диоскур (Диоскор) — был представителем..."
+        )
+        complete = drop_incomplete_sentence(truncated)
+        self.assertTrue(complete.endswith("Финикийском."))
+        self.assertNotIn("Диоскур", complete)
+
+        trimmed = trim_wikipedia_text(truncated, 1400, ellipsis=False)
+        self.assertTrue(trimmed.endswith("Финикийском."))
+        self.assertNotIn("…", trimmed)
+
+        linked = append_wikipedia_read_more(
+            trimmed, title="Варвара Илиопольская", lang="ru"
+        )
+        self.assertIn(WIKIPEDIA_READ_MORE_LABEL, linked)
+        self.assertIn("wikipedia.org/wiki/", linked)
+
+    def test_keeps_extra_chars_without_ellipsis(self) -> None:
+        from search.wikidata.city_description import trim_wikipedia_text
+
+        body = (
+            "Первое предложение заканчивается здесь. "
+            "Второе предложение тоже полное и достаточно длинное для проверки. "
+            "Третье предложение добавляет ещё фактов про век и дату 1552 года."
+        )
+        long = body * 20
+        out = trim_wikipedia_text(long, 1400, ellipsis=False)
+        self.assertLessEqual(len(out), 1400)
+        self.assertTrue(out.endswith((".", "!", "?")))
+        self.assertFalse(out.endswith("..."))
+        self.assertFalse(out.endswith("…"))
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-_LIFEHACKS_MAX_CHARS = 1200
+_LIFEHACKS_MAX_CHARS = 3600  # поле lifehacks хранит факт о городе (до 2800) + ссылку Wikipedia
 
 _LLM_META = re.compile(
     r"|".join(

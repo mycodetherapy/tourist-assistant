@@ -86,6 +86,94 @@ class CityFactGenerationTests(unittest.TestCase):
         self.assertGreaterEqual(len(out), 80)
         self.assertIn("Казань", out)
 
+    @patch("agents.city_fact.fetch_raw_city_fact")
+    def test_generate_without_llm_appends_wikipedia_link(
+        self, mock_raw: MagicMock
+    ) -> None:
+        mock_raw.return_value = (
+            "Город: Казань\n"
+            "Wikipedia: Казань основана в 1005 году и стала столицей Казанского ханства. "
+            "В 1552 году город вошёл в состав России; Казанский кремль XVI века — объект UNESCO. "
+            "Улица Баумана и старый татарский город привлекают прогулки у слияния Волги и Казанки.\n"
+            "Wikipedia-URL: https://ru.wikipedia.org/wiki/%D0%9A%D0%B0%D0%B7%D0%B0%D0%BD%D1%8C"
+        )
+        out = generate_city_fact(city="Казань", use_llm=False)
+        self.assertIn("Казань", out)
+        self.assertIn("Читать далее в Wikipedia", out)
+        self.assertIn("wikipedia.org/wiki/", out)
+        preview = out.split("[Читать")[0].strip()
+        self.assertRegex(preview, r"[.!?]\s*…$")
+        self.assertNotRegex(preview, r"\w…$")
+
+    @patch("agents.city_fact.fetch_raw_city_fact")
+    @patch("agents.city_fact.polish_city_fact_llm")
+    def test_generate_with_llm_appends_wikipedia_link(
+        self, mock_polish: MagicMock, mock_raw: MagicMock
+    ) -> None:
+        mock_raw.return_value = (
+            "Город: Казань\n"
+            "Wikipedia: источник\n"
+            "Wikipedia-URL: https://ru.wikipedia.org/wiki/Казань"
+        )
+        mock_polish.return_value = self._VALID_FACT
+        out = generate_city_fact(city="Казань", use_llm=True)
+        self.assertEqual(out.split("[Читать")[0].strip(), self._VALID_FACT)
+        self.assertIn("Читать далее в Wikipedia", out)
+        self.assertIn("wikipedia.org/wiki/", out)
+        self.assertNotIn(" …\n\n[", out)
+
+    def test_valid_fact_ignores_wikipedia_read_more(self) -> None:
+        text = (
+            self._VALID_FACT
+            + "\n\n[Читать далее в Wikipedia](https://ru.wikipedia.org/wiki/Казань)"
+        )
+        self.assertTrue(is_valid_city_fact(text))
+
+    def test_llm_trim_drops_mid_sentence(self) -> None:
+        from search.wikidata.city_description import trim_to_semantic_boundary
+
+        cut = self._VALID_FACT + " Следующая фраза обрывается на полуслове Казан"
+        out = trim_to_semantic_boundary(cut, 2800, ellipsis=False)
+        self.assertTrue(out.endswith((".", "!", "?")))
+        self.assertFalse(out.endswith("Казан"))
+        self.assertIn("Поволжья.", out)
+
+    def test_trim_long_text_at_sentence(self) -> None:
+        from search.wikidata.city_description import trim_to_semantic_boundary
+
+        sentence = "Казань основана в 1005 году и известна кремлём XVI века. "
+        blob = sentence * 80
+        out = trim_to_semantic_boundary(blob, 800, ellipsis=True)
+        self.assertLessEqual(len(out), 810)
+        self.assertRegex(out, r"[.!?]\s*…$")
+        self.assertNotRegex(out, r"\w…$")
+
+    def test_trim_rolls_back_initial_and_list_item(self) -> None:
+        from search.wikidata.city_description import (
+            drop_incomplete_sentence,
+            trim_to_semantic_boundary,
+        )
+
+        cut = (
+            "В городе работают Марийский государственный университет, "
+            "Марийский национальный театр драмы имени М."
+        )
+        dropped = drop_incomplete_sentence(cut)
+        self.assertIn("университет", dropped)
+        self.assertNotIn("имени М.", dropped)
+        out = trim_to_semantic_boundary(cut, 2800, ellipsis=True)
+        self.assertIn("университет", out)
+        self.assertNotIn("имени М.", out)
+        self.assertTrue(out.endswith("…"))
+
+    def test_keeps_initial_inside_complete_sentence(self) -> None:
+        from search.wikidata.city_description import drop_incomplete_sentence
+
+        full = (
+            "Марийский национальный театр драмы имени М. Шкетана открыт в 1919 году."
+        )
+        self.assertEqual(drop_incomplete_sentence(full), full)
+
 
 if __name__ == "__main__":
     unittest.main()
