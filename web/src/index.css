@@ -268,6 +268,40 @@ body {
   cursor: default;
 }
 
+.route-case-swipe {
+  touch-action: pan-y;
+}
+
+.route-case-swipe-in-left {
+  animation: route-case-swipe-in-left 220ms ease-out;
+}
+
+.route-case-swipe-in-right {
+  animation: route-case-swipe-in-right 220ms ease-out;
+}
+
+@keyframes route-case-swipe-in-left {
+  from {
+    transform: translateX(28px);
+    opacity: 0.55;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes route-case-swipe-in-right {
+  from {
+    transform: translateX(-28px);
+    opacity: 0.55;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
 @media (min-width: 768px) {
   .route-map-scroll {
     overflow: hidden;

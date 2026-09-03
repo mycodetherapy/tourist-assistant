@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Alert, Grid, Skeleton, notification } from "antd";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { getErrorMessage } from "../api/client";
 import { submitItemFeedback } from "../api/trips";
@@ -16,6 +16,7 @@ import { RouteCaseSwitcher } from "./RouteCaseSwitcher";
 import { RouteMapView } from "./RouteMapView";
 import { RoutePinButton } from "./RoutePinButton";
 import { FREE_VS_LLM } from "../content/buildModes";
+import { adjacentCaseId, useHorizontalSwipe, type SwipeDirection } from "../hooks/useHorizontalSwipe";
 import { usePoiFact } from "../hooks/usePoiFact";
 import { markdownExternalLinkComponents } from "./markdownExternalLink";
 
@@ -76,7 +77,39 @@ export function ProgramTabs({
   const [selectedRouteCaseId, setSelectedRouteCaseId] = useState<string | undefined>(
     defaultRouteCaseId,
   );
+  const [swipeDir, setSwipeDir] = useState<SwipeDirection | null>(null);
   const activeRouteCaseId = selectedRouteCaseId ?? defaultRouteCaseId;
+  const routeCaseIds = useMemo(
+    () => routeCases.map((routeCase) => String(routeCase.case_id)),
+    [routeCases],
+  );
+  const activeRouteCaseIdRef = useRef(activeRouteCaseId);
+  activeRouteCaseIdRef.current = activeRouteCaseId;
+  const swipeEnabled = isMobile && routeCaseIds.length > 1;
+
+  const handleRouteCaseChange = useCallback((caseId: string) => {
+    setSwipeDir(null);
+    setSelectedRouteCaseId(caseId);
+  }, []);
+
+  const handleRouteCaseSwipe = useCallback(
+    (direction: SwipeDirection) => {
+      const nextId = adjacentCaseId(routeCaseIds, activeRouteCaseIdRef.current, direction);
+      if (!nextId) {
+        return;
+      }
+      setSwipeDir(direction);
+      setSelectedRouteCaseId(nextId);
+    },
+    [routeCaseIds],
+  );
+  const swipeHandlers = useHorizontalSwipe(swipeEnabled, handleRouteCaseSwipe);
+  const swipeInClass =
+    swipeDir === "left"
+      ? "route-case-swipe-in-left"
+      : swipeDir === "right"
+        ? "route-case-swipe-in-right"
+        : "";
   const stopVoteByPoi = new Map(
     (data.sections.route_stops?.items ?? [])
       .filter((item) => item.poi_id)
@@ -206,17 +239,21 @@ export function ProgramTabs({
     <div className="space-y-3">
       <PoolSourceBanner summary={poolSummary} />
       <p className="m-0 text-xs leading-relaxed text-slate-500">{FREE_VS_LLM.likesHint}</p>
-      {isMobile && routeCases.length > 1 && (
-        <RouteCaseSwitcher
-          cases={routeCases}
-          value={activeRouteCaseId ?? String(routeCases[0]?.case_id)}
-          onChange={setSelectedRouteCaseId}
-        />
-      )}
-      <MarkdownBlock text={routesIntro} />
-      {data.sections.routes.items.length === 0 && data.program.routes_text?.trim() ? (
-        <MarkdownBlock text={data.program.routes_text} />
-      ) : (
+      <div
+        className={swipeEnabled ? "route-case-swipe flex flex-col gap-3" : "contents"}
+        {...(swipeEnabled ? swipeHandlers : {})}
+      >
+        {isMobile && routeCases.length > 1 && (
+          <RouteCaseSwitcher
+            cases={routeCases}
+            value={activeRouteCaseId ?? String(routeCases[0]?.case_id)}
+            onChange={handleRouteCaseChange}
+          />
+        )}
+        <MarkdownBlock text={routesIntro} />
+        {data.sections.routes.items.length === 0 && data.program.routes_text?.trim() ? (
+          <MarkdownBlock text={data.program.routes_text} />
+        ) : (
         <ul className="space-y-2">
           {data.sections.routes.items
             .filter((item) => {
@@ -286,7 +323,7 @@ export function ProgramTabs({
                 return (
                   <li
                     key={`routes-${item.item_key}`}
-                    className="route-item--with-map flex flex-col rounded-lg border border-gray-100 bg-white"
+                    className={`route-item--with-map flex flex-col rounded-lg border border-gray-100 bg-white ${swipeInClass}`.trim()}
                   >
                     <RouteMapView
                       routeCase={routeCase!}
@@ -305,7 +342,7 @@ export function ProgramTabs({
                   key={`routes-${item.item_key}`}
                   className={`flex items-start gap-2 rounded-lg border border-gray-100 bg-white px-2.5 py-2 ${
                     isMobile ? "flex-col" : ""
-                  }`}
+                  } ${isMobile ? swipeInClass : ""}`.trim()}
                 >
                   <div className="min-w-0 flex-1">
                     {hasMap && routeCase ? (
@@ -322,7 +359,8 @@ export function ProgramTabs({
               );
             })}
         </ul>
-      )}
+        )}
+      </div>
 
       <div className="rounded-lg border border-gray-100 bg-white px-3 py-3">
         <h3 className="mb-2 text-sm font-semibold text-gray-700">О городе</h3>
