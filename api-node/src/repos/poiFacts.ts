@@ -90,6 +90,14 @@ export function toPoiFactResponse(row: PoiFactRow) {
   };
 }
 
+export function wikipediaSnippetIsStale(row: PoiFactRow): boolean {
+  if (row.used_llm) return false;
+  const text = (row.text || "").trim();
+  if (!text) return true;
+  if (!/Читать далее в Wikipedia/i.test(text)) return true;
+  return /#:~:text=/.test(text);
+}
+
 export function looksLikeSearchGarbage(text: string): boolean {
   const blob = (text || "").trim();
   if (!blob) return true;

@@ -1,0 +1,15 @@
+# Фрагмент Caddy на VPS: www и apex не должны отдавать один контент с 200.
+#
+# Проверка: curl -sI https://www.progulyai.ru | head
+# Ожидается: HTTP/2 301  и  location: https://progulyai.ru/
+#
+# Подставьте свой reverse_proxy / tls, если они уже настроены иначе.
+
+www.progulyai.ru {
+	redir https://progulyai.ru{uri} permanent
+}
+
+progulyai.ru {
+	encode gzip
+	reverse_proxy 127.0.0.1:5173
+}

@@ -175,7 +175,7 @@ def generate_poi_fact(ctx: PoiFactContext, *, use_llm: bool = True) -> PoiFactRe
         )
     text = fetch_poi_fact_wikipedia(ctx)
     return PoiFactResult(
-        text=_trim_to_max(text),
+        text=text.strip(),
         used_llm=False,
         source_kind="wikipedia",
     )
@@ -208,23 +208,22 @@ def _resolve_poi_wikidata_qid(ctx: PoiFactContext) -> str | None:
 def _fetch_poi_fact_by_wikidata(qid: str) -> str:
     """Статья по Wikidata QID — как для маршрутов из Wikidata, без Wikipedia-поиска."""
     from search.wikidata.city_description import (
-        clean_wikipedia_plain,
+        WIKI_SNIPPET_MAX_CHARS,
         fetch_wikipedia_poi_for_wikidata,
     )
 
-    text = clean_wikipedia_plain(
-        fetch_wikipedia_poi_for_wikidata(qid, max_chars=_MAX_CHARS)
-    )
+    snippet = fetch_wikipedia_poi_for_wikidata(qid, max_chars=WIKI_SNIPPET_MAX_CHARS)
+    text = (snippet.text or "").strip()
     if text and len(text) >= _WIKI_MIN_CHARS:
-        return text
+        return snippet.formatted(read_more=True)
     raise RuntimeError(POI_FACT_NOT_FOUND)
 
 
 def _fetch_poi_fact_by_search(*, name: str, city: str) -> str:
     """POI из city pack без Wikidata-тега: только явная статья, не справка о городе."""
     from search.wikidata.city_description import (
+        WIKI_SNIPPET_MAX_CHARS,
         city_wikipedia_titles,
-        clean_wikipedia_plain,
         fetch_wikipedia_poi_text,
         normalize_wiki_title,
         search_wikipedia_titles,
@@ -249,14 +248,15 @@ def _fetch_poi_fact_by_search(*, name: str, city: str) -> str:
             seen_titles.add(norm)
             if not _search_title_matches_place(title, place):
                 continue
-            text = clean_wikipedia_plain(
-                fetch_wikipedia_poi_text(title=title, max_chars=_MAX_CHARS)
+            snippet = fetch_wikipedia_poi_text(
+                title=title, max_chars=WIKI_SNIPPET_MAX_CHARS
             )
+            text = (snippet.text or "").strip()
             if len(text) < _WIKI_MIN_CHARS:
                 continue
             if looks_like_city_article(text):
                 continue
-            return text
+            return snippet.formatted(read_more=True)
 
     raise RuntimeError(POI_FACT_NOT_FOUND)
 

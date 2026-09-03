@@ -1,6 +1,7 @@
 import { Alert, Modal, Spin } from "antd";
 import ReactMarkdown from "react-markdown";
 import type { PoiFactResponse } from "../api/poiFacts";
+import { markdownExternalLinkComponents } from "./markdownExternalLink";
 
 interface PoiFactModalProps {
   open: boolean;
@@ -27,7 +28,7 @@ export function PoiFactModal({
       onCancel={onClose}
       destroyOnHidden
       width={560}
-      classNames={{ body: "max-h-[60vh] overflow-y-auto" }}
+      classNames={{ body: "max-h-[calc(60vh+76px)] overflow-y-auto" }}
     >
       {loading ? (
         <div className="flex min-h-[120px] items-center justify-center py-6">
@@ -37,7 +38,7 @@ export function PoiFactModal({
         <Alert type="warning" showIcon title="Справка недоступна" description={error} />
       ) : data?.text ? (
         <div className="prose max-w-none text-sm leading-relaxed text-gray-800">
-          <ReactMarkdown>{data.text}</ReactMarkdown>
+          <ReactMarkdown components={markdownExternalLinkComponents}>{data.text}</ReactMarkdown>
         </div>
       ) : (
         <Alert type="info" showIcon title="Нет данных" description="Попробуйте открыть точку позже." />

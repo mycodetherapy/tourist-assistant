@@ -13,7 +13,7 @@ from search.wikidata.city_description import fetch_raw_city_fact
 CityFactStatus = Literal["pending", "ready", "failed", "skipped"]
 
 _MIN_CHARS = 280
-_MAX_CHARS = 2200
+_MAX_CHARS = 2800
 
 _URL_RE = re.compile(r"https?://", re.I)
 _MUSEUM_LIST_RE = re.compile(
@@ -68,8 +68,10 @@ def has_enough_city_facts(text: str) -> bool:
 
 
 def is_valid_city_fact(text: str) -> bool:
-    """280–1400 символов, факты без административной «воды» и абстракций."""
-    blob = (text or "").strip()
+    """280–2800 символов тела (без ссылки Wikipedia), факты без административной «воды»."""
+    from search.wikidata.city_description import strip_wikipedia_read_more
+
+    blob = strip_wikipedia_read_more(text)
     if len(blob) < _MIN_CHARS or len(blob) > _MAX_CHARS:
         return False
     if _URL_RE.search(blob):
@@ -97,20 +99,28 @@ def looks_like_abstract_city_fact(text: str) -> bool:
 
 
 def _fallback_fact(city: str, raw: str) -> str:
-    """Без LLM: связный текст из Wikipedia lead без обрыва на «…»."""
-    from search.wikidata.city_description import clean_wikipedia_plain
+    """Без LLM: Wikipedia-фрагмент, обрезка по предложению (ссылку добавит generate_city_fact)."""
+    from search.wikidata.city_description import (
+        CITY_WIKI_MAX_CHARS,
+        clean_wikipedia_plain,
+        drop_incomplete_sentence,
+        strip_wikipedia_meta,
+        trim_to_semantic_boundary,
+    )
 
-    text = (raw or "").strip()
+    raw_text = strip_wikipedia_meta(raw)
+    text = (raw_text or "").strip()
     wiki_match = re.search(r"(?m)^Wikipedia:\s*(.+)$", text, re.S)
     if wiki_match:
         text = wiki_match.group(1).strip()
+        text = re.sub(r"(?m)^(Известные места|Wikidata|Регион):.*$", "", text).strip()
     else:
         text = re.sub(r"(?m)^(Город|Известные места|Wikidata|Регион):.*$", "", text).strip()
 
-    text = clean_wikipedia_plain(text)
+    text = drop_incomplete_sentence(clean_wikipedia_plain(text))
 
     if not text:
-        landmarks = re.search(r"Известные места \(Wikidata\):\s*(.+)$", raw or "", re.M)
+        landmarks = re.search(r"Известные места \(Wikidata\):\s*(.+)$", raw_text or "", re.M)
         if landmarks:
             names = landmarks.group(1).split(",")[:2]
             places = " и ".join(n.strip() for n in names if n.strip())
@@ -124,23 +134,16 @@ def _fallback_fact(city: str, raw: str) -> str:
                 f"и знакомства с местной историей."
             )
 
-    parts = [p.strip() for p in re.split(r"(?<=[.!?…])\s+", text) if p.strip()]
-    parts = [p for p in parts if not p.startswith("==")]
-    short = " ".join(parts[:10]).strip()
-    if len(short) < _MIN_CHARS and len(parts) > 10:
-        short = " ".join(parts[:14]).strip()
-    if len(short) > _MAX_CHARS:
-        short = short[:_MAX_CHARS].rsplit(" ", 1)[0].strip()
-        if short and short[-1].isalnum():
-            short = short.rstrip(".,;:") + "."
-    if len(short) < _MIN_CHARS:
-        short = f"{city}: {short}"[:_MAX_CHARS]
-    return short.strip()
+    text = trim_to_semantic_boundary(text, CITY_WIKI_MAX_CHARS, ellipsis=False)
+    if len(text) < _MIN_CHARS:
+        text = f"{city}: {text}"
+        text = trim_to_semantic_boundary(text, CITY_WIKI_MAX_CHARS, ellipsis=False)
+    return text.strip()
 
 
 _SYSTEM_PROMPT = (
     "Ты — travel-редактор. Напиши для туриста фактологичный текст о городе "
-    f"({_MIN_CHARS}–{_MAX_CHARS} символов, русский, 6–8 предложений).\n\n"
+    f"({_MIN_CHARS}–{_MAX_CHARS} символов, русский, 8–12 предложений).\n\n"
     "Нужно:\n"
     "— Исторические факты: год основания, переименования, ключевые эпохи и войны (с датами из источника).\n"
     "— 3–4 конкретных места или черты города из источника (кремль, собор, набережная, музей…).\n"
@@ -171,36 +174,62 @@ _FACT_RETRY_PROMPT = (
 
 def polish_city_fact_llm(raw: str, *, city: str) -> str:
     """Короткий LLM-вызов: живой туристический текст на русском."""
-    llm = get_llm_chat().bind(max_tokens=2048)
+    from search.wikidata.city_description import trim_to_semantic_boundary
+
+    llm = get_llm_chat().bind(max_tokens=3072)
     messages = [
         SystemMessage(content=_SYSTEM_PROMPT),
         HumanMessage(content=f"Город: {city}\n\nИсточник:\n{raw}"),
     ]
+    best = ""
     for attempt in range(3):
         response = llm.invoke(messages)
         content = getattr(response, "content", response)
-        text = str(content).strip()
+        text = trim_to_semantic_boundary(str(content).strip(), _MAX_CHARS, ellipsis=False)
         if is_valid_city_fact(text):
             return text
+        if text and (not best or len(text) > len(best)):
+            best = text
         if attempt == 0:
             messages.append(response)
             messages.append(HumanMessage(content=_RETRY_PROMPT))
         elif attempt == 1:
             messages.append(response)
             messages.append(HumanMessage(content=_FACT_RETRY_PROMPT))
-    return _fallback_fact(city, raw)
+    if best:
+        return trim_to_semantic_boundary(best, _MAX_CHARS, ellipsis=False)
+    return ""
 
 
 def generate_city_fact(*, city: str, use_llm: bool = True) -> str:
-    """Полный pipeline: raw → polish (или fallback)."""
+    """Полный pipeline: raw → polish (или Wikipedia) + ссылка на статью."""
+    from search.wikidata.city_description import (
+        append_wikipedia_read_more,
+        extract_wikipedia_url,
+        strip_wikipedia_meta,
+        trim_to_semantic_boundary,
+    )
+
     raw = fetch_raw_city_fact(city)
+    wiki_url = extract_wikipedia_url(raw)
+    raw_for_model = strip_wikipedia_meta(raw)
+    used_wikipedia = False
+    body = ""
     if use_llm:
         try:
-            return polish_city_fact_llm(raw, city=city)
+            body = polish_city_fact_llm(raw_for_model, city=city)
         except Exception:
-            pass
-    fact = _fallback_fact(city, raw)
-    if is_valid_city_fact(fact):
-        return fact
-    padded = f"{city}: {fact}"
-    return padded[:_MAX_CHARS].strip()
+            body = ""
+    if not body:
+        used_wikipedia = True
+        body = _fallback_fact(city, raw)
+        if not is_valid_city_fact(body):
+            padded = f"{city}: {body}"
+            body = trim_to_semantic_boundary(padded, _MAX_CHARS, ellipsis=False)
+    if wiki_url:
+        return append_wikipedia_read_more(
+            body,
+            url=wiki_url,
+            preview_ellipsis=used_wikipedia,
+        )
+    return body

@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mycodetherapy/tourist-assistant/actions/workflows/ci.yml)
 
-**Прогуляй** — веб-сервис пеших прогулок по городу: три альтернативных маршрута A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 6–8 предложений с историческими фактами). Центральная функция — маршруты и базовая точка старта (`route_anchor`). Прогулки, предпочтения и версии программы хранятся в **PostgreSQL**.
+**Прогуляй** — веб-сервис пеших прогулок по городу: три альтернативных маршрута A/B/C на основе пула POI из **Wikidata/OSM**, с deep link в Яндекс.Карты и блоком **«О городе»** (Wikipedia/Wikidata → LLM, 8–12 предложений с историческими фактами, ссылка на статью Wikipedia). Центральная функция — маршруты и базовая точка старта (`route_anchor`). Прогулки, предпочтения и версии программы хранятся в **PostgreSQL**.
 
 ## Статус и планы
 
@@ -24,6 +24,7 @@
 | **MapLibre + OSRM** | ✅ | Opt-in web, ephemeral worker, city chips `osrm-ready` |
 | **Self-serve OSRM** | ✅ | Eligible города (FO на диске), очередь prepare, лимит 3/аккаунт, email verify |
 | **Email verify** | ✅ | Письмо после register (Resend); Google — сразу verified |
+| **SEO / индекс** | ✅ | `robots.txt`, sitemap, canonical, Open Graph, JSON-LD, noscript; заявка в Вебмастере — вручную (см. ниже) |
 
 ### В процессе
 
@@ -176,6 +177,37 @@ npm run dev
 
 Без `VITE_YANDEX_METRIKA_ID` счётчик не загружается (no-op в dev).
 
+### Индексация в поиске (Яндекс и Google)
+
+Сайт — SPA: без `robots.txt` nginx отдавал HTML лендинга на `/robots.txt` и `/sitemap.xml`, а в `<body>` для робота был пустой `#root`. Поэтому `site:progulyai.ru` ничего не находил.
+
+**В коде уже есть:**
+
+- [`web/public/robots.txt`](web/public/robots.txt) — `Allow: /`, sitemap; закрыты кабинет, API, `/docs`
+- [`web/public/sitemap.xml`](web/public/sitemap.xml) — `/`, `/try`, `/terms`, `/privacy`
+- canonical `https://progulyai.ru/`, Open Graph, JSON-LD (`WebApplication`), `<noscript>` с текстом лендинга
+- nginx отдаёт `robots.txt` / `sitemap.xml` как файлы, не как SPA
+- www → https://progulyai.ru (nginx, если Caddy передаёт `Host`; плюс пример [`deploy/Caddyfile.example`](deploy/Caddyfile.example))
+
+После деплоя проверьте:
+
+```bash
+curl -sI https://progulyai.ru/robots.txt   # content-type: text/plain
+curl -sI https://progulyai.ru/sitemap.xml  # application/xml (не text/html)
+curl -sI https://www.progulyai.ru          # 301 на https://progulyai.ru/
+```
+
+**Нужно сделать один раз вручную** (поисковик сам новый домен почти не находит):
+
+1. [Яндекс.Вебмастер](https://webmaster.yandex.ru/) → добавить `https://progulyai.ru` → подтвердить права (**DNS TXT** или meta-тег).
+2. [Google Search Console](https://search.google.com/search-console) → ресурс с префиксом URL `https://progulyai.ru` → подтвердить (**DNS TXT** или meta-тег).
+3. В обоих кабинетах отправить sitemap: `https://progulyai.ru/sitemap.xml` и запросить переобход `/` и `/try`.
+4. На VPS в Caddy: www → apex, см. [`deploy/Caddyfile.example`](deploy/Caddyfile.example).
+
+Meta-тег верификации (если не DNS): секреты GitHub `VITE_YANDEX_VERIFICATION` и `VITE_GOOGLE_SITE_VERIFICATION` → пересборка образа `web`. Файл `google*.html` / `yandex_*.html` в корень **не кладите** — SPA его подменит, пока файл не лежит в `web/public/`.
+
+Проверка индекса через 3–14 дней: `site:progulyai.ru` в Яндексе и Google.
+
 ### City pack (POI из OSM-выжимки)
 
 POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml), полки `hot`/`warm` — [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута: **MapLibre** при `VITE_MAP_PROVIDER=maplibre` (Docker/CI дефолт) и `route_geometry`; иначе iframe Яндекса. Пешая геометрия OSRM: подготовка **на Mac** (`city_pack_prepare` / `osrm_prepare_batch`), на VPS — rsync `data/cities/` + **`OSRM_MODE=ephemeral`** (`docker.sock` + `OSRM_HOST_DATA_CITIES=/opt/tourist-assistant/data/cities`). Локально можно always-on: `docker compose --profile osrm up -d osrm` + `OSRM_MODE=http`. Без графа сборка не падает. План: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md). Заявки на город вне каталога: `POST /api/city-requests`, CLI `python scripts/city_requests_cli.py`. Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
@@ -224,7 +256,7 @@ python3 scripts/export_openapi.py
 
 Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/openapi.json` автоматически.
 
-**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На форме новой прогулки и `/try` — чипы городов с OSRM: `GET /api/cities/osrm-ready`. Self-serve (Настройки): `GET /api/cities/osrm-eligible`, `POST /api/osrm-prepares` (лимит 3, нужен verified email). На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C (один вариант на экран); на десктопе — три карточки списком.
+**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На форме новой прогулки и `/try` — чипы городов с OSRM: `GET /api/cities/osrm-ready`. Self-serve (Настройки): `GET /api/cities/osrm-eligible`, `POST /api/osrm-prepares` (лимит 3, нужен verified email). На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C и свайп влево/вправо (один вариант на экран; жест по карте не переключает вариант); на десктопе — три карточки списком.
 
 Один раз установить автообновление схемы перед коммитом:
 
@@ -238,7 +270,7 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 | **Настройки**          | Режим AI: `none` (бесплатный алгоритм, 30/сутки), `byok` (свой ключ), `platform` (скоро). BYOK: API key, Base URL, модель |
 | **Список прогулок**    | Только прогулки текущего пользователя                                                                                                                                                                                                           |
 | **Новая прогулка**     | Wizard: город → запуск → фоновая сборка (polling 1–2 мин)                                                                                                                                                                                       |
-| **Карточка прогулки**  | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`); пересбор маршрутов одной кнопкой |
+| **Карточка прогулки**  | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling; в бесплатном режиме — Wikipedia без обрыва на «…» и ссылка «Читать далее в Wikipedia»); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`; free — Wikipedia до ~2800 символов, обрезка по предложению + « …» и ссылка; LLM — 8–12 предложений до 2800 + ссылка на статью); пересбор маршрутов одной кнопкой |
 
 Docker (веб + API): см. [Запуск в Docker](#запуск-в-docker-docker-compose).
 
@@ -480,6 +512,8 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `GUEST_CLEANUP_ORPHAN_GRACE_HOURS`        | Нет         | Удалять guest-user без session row через N часов (default 24)                                                                  |
 | `YANDEX_SMARTCAPTCHA_SERVER_KEY`          | Нет         | Серверный ключ SmartCaptcha для guest-сборок (`/try`); без ключа проверка отключена                                              |
 | `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY`     | Нет         | Клиентский ключ SmartCaptcha (сборка web); нужен вместе с server key                                                           |
+| `VITE_YANDEX_VERIFICATION`                | Нет         | Код meta `yandex-verification` (сборка web); иначе подтверждение домена в Вебмастере через DNS TXT                               |
+| `VITE_GOOGLE_SITE_VERIFICATION`           | Нет         | Код meta `google-site-verification` (сборка web); иначе DNS TXT в Search Console                                                 |
 | `ESTIMATED_AI_RUN_COST_RUB`                 | Нет         | Оценка стоимости AI-прогона для UI (default 4)                                                                                   |
 | `JWT_ACCESS_TTL_MINUTES`                    | Нет         | Срок жизни access token (по умолчанию 60)                                                                                      |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет         | Google OAuth (опционально). Один OAuth client — несколько **Authorized redirect URIs** в Google Console                        |
@@ -502,7 +536,7 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `LANGFUSE_PUBLIC_KEY`                       | Нет         | Public key проекта LangFuse                                                                                                    |
 | `LANGFUSE_SECRET_KEY`                       | Нет         | Secret key проекта LangFuse                                                                                                    |
 
-**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `YANDEX_SMARTCAPTCHA_SERVER_KEY` + `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` (CAPTCHA на guest `/try`); `VITE_MAP_PROVIDER` (Docker/CI: `maplibre`; без geometry — iframe); `RESEND_API_KEY` / `MAIL_FROM` (email verify); `OSRM_PREPARE_*` / `OSRM_REFRESH_*` ([`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)); `OSRM_MODE` / `OSRM_HOST_DATA_CITIES`; `VITE_DEV_HTTPS`; `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY`.
+**Дополнительно** (дефолты в коде, в `.env.example` нет): `TAVILY_API_KEY` (иначе `ddgs`, ru-ru); `VITE_YANDEX_MAPS_API_KEY` (корневой `.env` или `web/.env`, карта стартовой точки); `VITE_YANDEX_METRIKA_ID` (аналитика лендинга); `VITE_YANDEX_VERIFICATION` / `VITE_GOOGLE_SITE_VERIFICATION` (meta подтверждения сайта, см. [Индексация](#индексация-в-поиске-яндекс-и-google)); `YANDEX_SMARTCAPTCHA_SERVER_KEY` + `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` (CAPTCHA на guest `/try`); `VITE_MAP_PROVIDER` (Docker/CI: `maplibre`; без geometry — iframe); `RESEND_API_KEY` / `MAIL_FROM` (email verify); `OSRM_PREPARE_*` / `OSRM_REFRESH_*` ([`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)); `OSRM_MODE` / `OSRM_HOST_DATA_CITIES`; `VITE_DEV_HTTPS`; `POI_USE_WIKIDATA`, `POI_USE_DISCOVERY`; `NOMINATIM_URL`, `NOMINATIM_USER_AGENT`; `YANDEX_MAPS_API_KEY`.
 
 #### Google OAuth (prod + local)
 
@@ -625,7 +659,7 @@ LLM_OPENROUTER_PROVIDERS=DeepInfra
 
 После `executor` готовность tools проверяется **кодом** ([`planning/tools_readiness.py`](planning/tools_readiness.py)): при успешном `search_route_materials` граф идёт сразу в `writer`, без второго LLM-вызова researcher. При ошибке tool — retry `researcher`.
 
-**API и БД:** `api-node/` (Fastify) вызывает Postgres; фоновые прогоны — `python -m worker` (LangGraph). `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions`. Веб: `web/` (React 19, Ant Design, TanStack Query).
+**API и БД:** `api-node/` (Fastify) вызывает Postgres; фоновые прогоны — `python -m worker` (LangGraph). `executor` пишет `tool_runs`, финальная версия — в `itinerary_versions`. Веб: `web/` (React 19, Ant Design, TanStack Query). Публичные URL для роботов: `web/public/robots.txt`, `web/public/sitemap.xml`; мета и `<noscript>` — `web/index.html`, маршруты — `web/src/seo/`.
 
 После изменения графа перегенерируйте PNG:
 
@@ -639,8 +673,8 @@ python3 scripts/render_graph.py
 | `executor`               | `agents/nodes.py`                                  | Выполняет tools, пишет строки в `tool_runs`                                                          |
 | `writer`                 | `agents/nodes.py`                                  | Structured output → маршруты (`RoutesDraft`), merge; факт о городе — не здесь                        |
 | `critic`                 | `agents/critic.py`                                 | Детерминированные проверки; retry: tools → `researcher`, качество программы → `writer`               |
-| _(async)_ `city_fact`    | `agents/city_fact.py`, `services/city_fact_job.py` | Wikidata/Nominatim → LLM-polish; патч `lifehacks` + `city_fact_status` в SQLite параллельно с графом |
-| _(on-demand)_ `poi_fact` | `agents/poi_fact.py`, `poi_facts`                  | Клик по остановке → Wikipedia (free) или LLM (BYOK); кэш в Postgres                                 |
+| _(async)_ `city_fact`    | `agents/city_fact.py`, `services/city_fact_job.py` | Wikidata/Nominatim → LLM-polish 280–2800 символов + ссылка Wikipedia (BYOK) или Wikipedia до ~2800 с « …» и ссылкой (free); патч `lifehacks` + `city_fact_status` параллельно с графом |
+| _(on-demand)_ `poi_fact` | `agents/poi_fact.py`, `poi_facts`                  | Клик по остановке → Wikipedia до ~1400 символов без «…» + ссылка на статью (free) или LLM (BYOK); кэш в Postgres |
 
 **Инструменты** (`search/tools.py`):
 
@@ -687,6 +721,7 @@ python3 scripts/render_graph.py
 | **LangFuse** (опционально)                   | Трейсы запусков LangGraph/LLM/tools (self-hosted через Docker)                                                     |
 | **LangSmith** (опционально)                  | Трейсы графа (`observability/tracing.py`)                                                                          |
 | **Яндекс.Карты (Geocoder + JS API)**         | Геокодинг; карта стартовой точки; **карта маршрута по умолчанию** — iframe + deep link `maps_route_url` |
+| **Яндекс.Вебмастер / Google Search Console** | Индексация публичных URL; sitemap `https://progulyai.ru/sitemap.xml` (заявка вручную, см. [Индексация](#индексация-в-поиске-яндекс-и-google)) |
 | **OSRM** (опционально)                       | Пешая `route_geometry`; `OSRM_MODE=http` или `ephemeral`; без графа — тихий skip; [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md) |
 | **MapLibre + OpenFreeMap**                   | Карта маршрута (`VITE_MAP_PROVIDER=maplibre` в Docker/CI): клики, follow GPS; без geometry — iframe        |
 | **City pack**                                | POI из `poi.sqlite`; каталог `city_packs` в Postgres                                                               |
@@ -731,12 +766,14 @@ python3 scripts/render_graph.py
 | **Дизлайк остановки и пересборка**  | 👎 на `route_stops` не сбрасывается после rebuild; `banned_poi_ids` в snapshot + `enforce_route_poi_policy` исключают POI даже при готовых `maps_route_url`                                 |
 | **📌 маршрута и пересборка**        | `route_pins` + `preserved`; sync после save пишет только pins (не soft 👍); снятие 📌 очищает `preserved`                                                                                  |
 | **Гостевая сессия `/try`**          | HttpOnly cookie; лимит **1× full** + **1× routes**; geocode **40/ч** на сессию (Redis); SmartCaptcha перед сборкой/пересбором (если задан `YANDEX_SMARTCAPTCHA_SERVER_KEY`); cleanup истёкших guest-user; soft gate → register; claim trip при login |
+| **Сайт не в поиске**                | `robots.txt` + sitemap в `web/public/`; заявка в Яндекс.Вебмастере и Google Search Console (новый домен без ссылок сам не индексируется) |
+| **Wikipedia обрезает extract**      | Не используем `exchars` (потолок ~1200 и «…»): intro или полный extract, обрезка по предложению (POI ~1400; «О городе» ~2800). Free «О городе»: « …» перед ссылкой «Читать далее в Wikipedia». LLM: обрезка по предложению, не посреди слова; ссылка на статью тоже ставится |
 
 ### Как понять, что агент работает хорошо?
 
 | Критерий                           | Приемлемый результат                                                                                                                                                                                                           |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Полнота программы**              | 3 варианта маршрута A/B/C; факт о городе 280–2200 символов; справка по POI до 2200 символов (Wikipedia или LLM, on-demand)                                                                                                       |
+| **Полнота программы**              | 3 варианта маршрута A/B/C; факт о городе 280–2800 символов (free: Wikipedia + « …» и ссылка «Читать далее»; LLM: 8–12 предложений + ссылка на статью); справка по POI до 2200 символов LLM или ~1400 Wikipedia без обрыва на «…» (on-demand) |
 | **Опора на поиск**                 | Маршруты A/B/C: сложность по **протяжённости** (A ~2–3.5 км, B ~4–5.5, C ~6–8.5), до 8 плотных leisure-точек; без повторов названий; `maps_route_url` по координатам (иногда кольцевой); POI только из Wikidata/discovery-пула |
 | **Надёжность и воспроизводимость** | `python3 -m unittest discover -s tests -v` и `python3 -m eval --suite smoke` проходят                                                                                                                                          |
 
@@ -827,7 +864,7 @@ tourist-assistant/
 ├── docs/openapi.json       # OpenAPI 3 (npm run export:openapi)
 ├── services/               # TripService, RunManager, json_job_queue
 ├── worker/                 # Python worker (JSON Redis queue, python -m worker)
-├── web/                    # Vite + React 19, Ant Design, TanStack Query
+├── web/                    # Vite + React 19; SEO: public/robots.txt, sitemap.xml, src/seo/
 ├── alembic/                # Миграции Postgres (Alembic)
 ├── db/
 │   ├── models/             # SQLAlchemy models (PG)
@@ -888,7 +925,7 @@ tourist-assistant/
 ├── requirements.txt
 ├── Dockerfile              # Python worker image
 ├── .github/workflows/      # CI (PR) и Deploy (main → GHCR + VPS)
-├── deploy/                 # docker-compose.prod.yml, env.example для VPS
+├── deploy/                 # docker-compose.prod.yml, env.example, Caddyfile.example (www → apex)
 ├── docker-compose.yml      # лок/dev: postgres, redis, api-node, worker, web
 ├── .env.example
 ├── LICENSE                 # MIT

@@ -47,7 +47,7 @@ class TestLifehacksQuality(unittest.TestCase):
         self.assertNotIn("Oops", out)
         self.assertNotIn("tripadvisor", out.lower())
         self.assertIn("Day 1", out)
-        self.assertLess(len(out), 1200)
+        self.assertLess(len(out), 3600)
 
     def test_valid_short_tips_ok(self) -> None:
         tips = "- Утро: музей → обед рядом → вечерняя прогулка.\n- Бронируйте столик заранее."

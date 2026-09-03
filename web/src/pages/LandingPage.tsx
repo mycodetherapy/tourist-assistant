@@ -11,45 +11,8 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { APP_DESCRIPTION, APP_DOMAIN, APP_HERO, APP_NAME, APP_TAGLINE } from "../brand";
 import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
+import { LANDING_FEATURES, LANDING_H1, LANDING_HOW_INTRO, LANDING_STEPS } from "../content/landing";
 import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
-
-const STEPS = [
-  {
-    title: "Выберите город",
-    text: "Укажите город и при желании точку старта — отель или адрес, откуда начнёте прогулку.",
-  },
-  {
-    title: "Получите три маршрута",
-    text: "Сначала — открытые данные Wikipedia; с AI-ключом, если город у нас подготовлен, — расширенный справочник мест. Варианты A, B и C — разная длина и набор остановок.",
-  },
-  {
-    title: "Сравните и отметьте",
-    text: "Посмотрите A/B/C на карте. Лайкните удачный маршрут или отдельные остановки — при пересборе учтём оценку; понравившийся вариант можно сохранить.",
-  },
-  {
-    title: "Идите по маршруту",
-    text: "Линия прогулки и метки остановок на карте — для похода откройте маршрут в Яндекс.Картах по ссылке из приложения.",
-  },
-] as const;
-
-const FEATURES = [
-  {
-    title: "Три варианта A / B / C",
-    text: "Не один «идеальный» маршрут, а три пешие прогулки на выбор — от короткой до более насыщенной.",
-  },
-  {
-    title: "Карта маршрута",
-    text: "Маршрут на карте с линией и остановками. При выборе стартовой точки можно подставить текущую геолокацию — на телефоне для этого нужен HTTPS.",
-  },
-  {
-    title: "Старт от вашего адреса",
-    text: "Отель или адрес проживания — маршруты строятся от вашей точки, а не от абстрактного центра города.",
-  },
-  {
-    title: "Лайки и пересбор",
-    text: "📌 сохраняет маршрут при пересборе. 👍/👎 у варианта и остановок мягко влияют на следующую сборку: неудачные места уходят, удачные мотивы подсказывают новые A/B/C.",
-  },
-] as const;
 
 export function LandingPage() {
   useEffect(() => {
@@ -84,7 +47,7 @@ export function LandingPage() {
             {APP_DOMAIN} · {APP_TAGLINE.toLowerCase()}
           </p>
           <h1 className="mb-5 max-w-3xl text-3xl font-bold leading-tight text-[#001529] sm:text-4xl lg:text-5xl">
-            Собери прогулку по городу — три маршрута на выбор
+            {LANDING_H1}
           </h1>
           <p className="mb-8 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
             <strong className="font-semibold text-slate-800">{APP_NAME}</strong> — {APP_HERO}
@@ -104,7 +67,7 @@ export function LandingPage() {
           <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Зачем {APP_NAME}</h2>
           <p className="mb-10 max-w-2xl text-slate-600">{APP_DESCRIPTION}</p>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {FEATURES.map((item) => (
+            {LANDING_FEATURES.map((item) => (
               <article
                 key={item.title}
                 className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 shadow-sm transition hover:border-sky-200 hover:shadow-md"
@@ -120,12 +83,9 @@ export function LandingPage() {
       <section className="px-4 py-14 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-6xl">
           <h2 className="mb-3 text-2xl font-bold text-[#001529] sm:text-3xl">Как это работает</h2>
-          <p className="mb-10 max-w-2xl text-slate-600">
-            Укажите город — получите три маршрута на карте. Аккаунт нужен, чтобы сохранить прогулки; ключ
-            LLM — по желанию: более живые описания и расширенный справочник города, если он загружен у нас.
-          </p>
+          <p className="mb-10 max-w-2xl text-slate-600">{LANDING_HOW_INTRO}</p>
           <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map((step, index) => (
+            {LANDING_STEPS.map((step, index) => (
               <li
                 key={step.title}
                 className="relative rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"

@@ -1,0 +1,15 @@
+# https://progulyai.ru — пешие маршруты по городу
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /docs
+Disallow: /trips
+Disallow: /settings
+Disallow: /login
+Disallow: /register
+Disallow: /auth/
+Disallow: /verify-email
+Disallow: /try/
+
+Host: https://progulyai.ru
+Sitemap: https://progulyai.ru/sitemap.xml
