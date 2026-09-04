@@ -216,6 +216,7 @@ POI строятся из `extract.osm.pbf` на город ([`config/city_packs
 
 ```bash
 bash scripts/fo_ensure.sh volga              # FO PBF ~730 MB (один раз)
+# На VPS nightly качает FO внутри worker: в образе нужен curl; PBF подменяется только после успешной загрузки.
 bash scripts/city_pack_prepare.sh kazan      # extract + poi.sqlite (~2–4 мин)
 bash scripts/city_pack_prepare.sh yoshkar-ola
 # extract+poi для hot+warm (на Mac):

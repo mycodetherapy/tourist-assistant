@@ -10,7 +10,7 @@ if [[ -x "$ROOT/.venv/bin/python" ]]; then
   PYTHON="$ROOT/.venv/bin/python"
 fi
 DATA_DIR="${TOURIST_DATA_DIR:-$ROOT/data}/fo"
-CATALOG="$ROOT/config/federal_districts.yaml"
+CATALOG="${FEDERAL_DISTRICTS_YAML:-$ROOT/config/federal_districts.yaml}"
 
 if [[ ! -f "$CATALOG" ]]; then
   echo "Нет $CATALOG" >&2
@@ -41,28 +41,55 @@ if [[ ! -f "$PBF" ]] && [[ -f "$LEGACY" ]]; then
 fi
 
 is_valid_pbf() {
-  [[ -f "$PBF" ]] || return 1
+  local file="$1"
+  [[ -f "$file" ]] || return 1
   local size
-  size="$(wc -c <"$PBF" | tr -d ' ')"
+  size="$(wc -c <"$file" | tr -d ' ')"
   [[ "$size" -ge "$MIN_BYTES" ]] || return 1
   local head_bytes
   # Binary PBF: avoid bash $() null-byte warnings
-  head_bytes="$(head -c 16 "$PBF" 2>/dev/null | tr -d '\0' || true)"
+  head_bytes="$(head -c 16 "$file" 2>/dev/null | tr -d '\0' || true)"
   [[ "$head_bytes" != "<!DOCTYPE html>"* ]] || return 1
   [[ "$head_bytes" != "<html"* ]] || return 1
   return 0
 }
 
-if [[ "${FORCE_DOWNLOAD:-}" == "1" ]] || ! is_valid_pbf; then
-  if [[ -f "$PBF" ]]; then
-    echo "Удаляю повреждённый файл: $PBF"
-    rm -f "$PBF"
+download_to() {
+  local dest="$1"
+  if command -v curl >/dev/null 2>&1; then
+    curl -L --fail --retry 3 --retry-delay 5 -o "$dest" "$PBF_URL"
+  elif command -v wget >/dev/null 2>&1; then
+    wget --tries=3 -O "$dest" "$PBF_URL"
+  else
+    echo "curl/wget нет — скачиваю через python" >&2
+    "$PYTHON" - "$PBF_URL" "$dest" <<'PY'
+import sys
+import urllib.request
+
+url, dest = sys.argv[1], sys.argv[2]
+urllib.request.urlretrieve(url, dest)
+PY
   fi
+}
+
+if [[ "${FORCE_DOWNLOAD:-}" == "1" ]] || ! is_valid_pbf "$PBF"; then
+  TMP="$PBF.partial"
+  rm -f "$TMP"
   echo "Скачивание $PBF_URL …"
-  curl -L --fail --retry 3 --retry-delay 5 -o "$PBF" "$PBF_URL"
+  if ! download_to "$TMP"; then
+    rm -f "$TMP"
+    echo "Ошибка скачивания FO (старый файл не тронут, если был)" >&2
+    exit 1
+  fi
+  if ! is_valid_pbf "$TMP"; then
+    rm -f "$TMP"
+    echo "Ошибка: скачанный файл не похож на .osm.pbf (старый файл не тронут, если был)" >&2
+    exit 1
+  fi
+  mv -f "$TMP" "$PBF"
 fi
 
-if ! is_valid_pbf; then
+if ! is_valid_pbf "$PBF"; then
   echo "Ошибка: файл не похож на .osm.pbf" >&2
   exit 1
 fi
