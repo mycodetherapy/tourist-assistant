@@ -49,7 +49,7 @@ export function isLlmKeyRequiredError(error: unknown): boolean {
 
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const detail = error.response.data?.detail;
+    const detail = error.response?.data?.detail;
     if (typeof detail === "object" && detail !== null && "message" in detail) {
       return String((detail as { message: string }).message);
     }
