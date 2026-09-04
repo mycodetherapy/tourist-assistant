@@ -204,7 +204,7 @@ curl -sI https://www.progulyai.ru          # 301 на https://progulyai.ru/
 3. В обоих кабинетах отправить sitemap: `https://progulyai.ru/sitemap.xml` и запросить переобход `/` и `/try`.
 4. На VPS в Caddy: www → apex, см. [`deploy/Caddyfile.example`](deploy/Caddyfile.example).
 
-Meta-тег верификации (если не DNS): секреты GitHub `VITE_YANDEX_VERIFICATION` и `VITE_GOOGLE_SITE_VERIFICATION` → пересборка образа `web`. Файл `google*.html` / `yandex_*.html` в корень **не кладите** — SPA его подменит, пока файл не лежит в `web/public/`.
+HTML-тег Google Search Console уже в [`web/index.html`](web/index.html) (`google-site-verification`). Для Яндекса: секрет GitHub `VITE_YANDEX_VERIFICATION` → пересборка образа `web`. Файл `google*.html` / `yandex_*.html` в корень **не кладите** — SPA его подменит, пока файл не лежит в `web/public/`.
 
 Проверка индекса через 3–14 дней: `site:progulyai.ru` в Яндексе и Google.
 
