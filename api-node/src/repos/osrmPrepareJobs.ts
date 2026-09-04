@@ -81,6 +81,21 @@ export async function findActiveOsrmPrepareJob(
   return rows[0] ? mapJob(rows[0]) : null;
 }
 
+export async function findLatestOsrmPrepareJob(
+  slug: string,
+): Promise<OsrmPrepareJob | null> {
+  const { rows } = await query<OsrmPrepareJob>(
+    `SELECT id, user_id, slug, status, stage, progress, error,
+            counts_against_quota, created_at, updated_at, finished_at
+     FROM osrm_prepare_jobs
+     WHERE slug = $1
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [slug],
+  );
+  return rows[0] ? mapJob(rows[0]) : null;
+}
+
 export async function listUserOsrmPrepareJobs(
   userId: number,
   limit = 20,

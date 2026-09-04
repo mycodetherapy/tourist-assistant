@@ -61,6 +61,35 @@ def _fail_snippet(stdout: str, stderr: str, *, limit: int = 600) -> str:
     return text[-limit:].strip()
 
 
+def _job_error_text(exc: BaseException, *, limit: int = 500) -> str:
+    text = str(exc).strip()
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
+
+
+def _cleanup_failed_pack(data_root: Path, slug: str, error: str) -> None:
+    """Убрать обрезанный extract, чтобы retry не скипал вырезку."""
+    from search.osm.pbf_usable import is_pbf_usable
+
+    city = data_root / "cities" / slug
+    (city / "extract.osm.pbf.partial").unlink(missing_ok=True)
+    extract = city / "extract.osm.pbf"
+    poi = city / "poi.sqlite"
+    if not extract.is_file():
+        return
+    corrupt = (
+        not is_pbf_usable(extract)
+        or "build_poi_index" in error
+        or "apply_file" in error
+        or extract.stat().st_size < 65_536
+    )
+    if corrupt:
+        extract.unlink(missing_ok=True)
+        poi.unlink(missing_ok=True)
+        logger.warning("osrm prepare: removed unusable extract for %s", slug)
+
+
 def _run(cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> None:
     logger.info("osrm prepare: %s", " ".join(cmd))
     proc = subprocess.run(
@@ -116,7 +145,11 @@ def run_prepare_pipeline(
 
     on_stage("extract", 35)
     pack_script = root / "scripts" / "city_pack_prepare.sh"
-    _run(["bash", str(pack_script), slug], cwd=root, env=env)
+    try:
+        _run(["bash", str(pack_script), slug], cwd=root, env=env)
+    except RuntimeError as exc:
+        _cleanup_failed_pack(data_root, slug, str(exc))
+        raise
 
     on_stage("osrm", 70)
     osrm_script = root / "scripts" / "osrm_prepare.sh"
@@ -173,7 +206,7 @@ def prepare_osrm_task(graph_run_id: str, payload: dict) -> None:
         )
     except Exception as exc:
         logger.exception("prepare_osrm failed job=%s slug=%s", job_id, slug)
-        err = str(exc)[:500]
+        err = _job_error_text(exc)
         jobs.update_job_progress(
             job_id,
             status="failed",

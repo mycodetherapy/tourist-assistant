@@ -26,21 +26,40 @@ OSMIUM_IMAGE="${OSMIUM_IMAGE:-local-osmium-tool}"
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-}"
 # complete_ways жрёт RAM на FO ~700MB+; на VPS 4 ГБ — simple (+ swap).
 OSMIUM_EXTRACT_STRATEGY="${OSMIUM_EXTRACT_STRATEGY:-simple}"
-
-if ! docker image inspect "$OSMIUM_IMAGE" >/dev/null 2>&1; then
-  echo "Сборка локального образа osmium-tool (scripts/Dockerfile.osmium) …"
-  docker build -t local-osmium-tool -f "$ROOT/scripts/Dockerfile.osmium" "$ROOT/scripts"
-fi
+OSMIUM_DOCKER_MEMORY="${OSMIUM_DOCKER_MEMORY:-1536m}"
+OSMIUM_DOCKER_MEMORY_SWAP="${OSMIUM_DOCKER_MEMORY_SWAP:-6g}"
 
 IFS=',' read -r POI_W POI_S POI_E POI_N <<< "$POI_BBOX"
 IFS=',' read -r ROUTE_W ROUTE_S ROUTE_E ROUTE_N <<< "$ROUTE_BBOX"
 
-if [[ ! -s "$EXTRACT_PBF" ]] || [[ "${FORCE_EXTRACT:-}" == "1" ]]; then
-  echo "osmium extract (strategy=$OSMIUM_EXTRACT_STRATEGY) …"
+pbf_usable() {
+  "$PYTHON" "$ROOT/search/osm/pbf_usable.py" "$1"
+}
+
+run_osmium_extract() {
+  local src="$1"
+  local dest="$2"
   mkdir -p "$PACK_DIR"
-  rm -f "$PACK_DIR/extract.osm.pbf.partial" "$EXTRACT_PBF"
+  rm -f "$dest"
+  if command -v osmium >/dev/null 2>&1; then
+    echo "osmium extract (native, strategy=$OSMIUM_EXTRACT_STRATEGY) …"
+    osmium extract \
+      --strategy "$OSMIUM_EXTRACT_STRATEGY" \
+      -b "$ROUTE_W,$ROUTE_S,$ROUTE_E,$ROUTE_N" \
+      "$src" \
+      -o "$dest" \
+      --overwrite
+    return
+  fi
+  if ! docker image inspect "$OSMIUM_IMAGE" >/dev/null 2>&1; then
+    echo "Сборка локального образа osmium-tool (scripts/Dockerfile.osmium) …"
+    docker build -t local-osmium-tool -f "$ROOT/scripts/Dockerfile.osmium" "$ROOT/scripts"
+  fi
+  echo "osmium extract (docker, strategy=$OSMIUM_EXTRACT_STRATEGY, memory=$OSMIUM_DOCKER_MEMORY swap=$OSMIUM_DOCKER_MEMORY_SWAP) …"
   docker run --rm \
     ${DOCKER_PLATFORM:+--platform "$DOCKER_PLATFORM"} \
+    --memory "$OSMIUM_DOCKER_MEMORY" \
+    --memory-swap "$OSMIUM_DOCKER_MEMORY_SWAP" \
     -v "$HOST_DATA_DIR/fo:/fo:ro" \
     -v "$HOST_DATA_DIR/cities/$SLUG:/out" \
     "$OSMIUM_IMAGE" \
@@ -48,14 +67,23 @@ if [[ ! -s "$EXTRACT_PBF" ]] || [[ "${FORCE_EXTRACT:-}" == "1" ]]; then
     --strategy "$OSMIUM_EXTRACT_STRATEGY" \
     -b "$ROUTE_W,$ROUTE_S,$ROUTE_E,$ROUTE_N" \
     "/fo/$FO_PBF_NAME" \
-    -o "/out/extract.osm.pbf.partial" \
+    -o "/out/$(basename "$dest")" \
     --overwrite
-  if [[ ! -s "$PACK_DIR/extract.osm.pbf.partial" ]]; then
-    echo "osmium extract дал пустой файл — не хватило памяти или bbox пуст" >&2
-    rm -f "$PACK_DIR/extract.osm.pbf.partial"
+}
+
+FO_SRC="$DATA_DIR/fo/$FO_PBF_NAME"
+PARTIAL="$PACK_DIR/extract.osm.pbf.partial"
+
+if ! pbf_usable "$EXTRACT_PBF" || [[ "${FORCE_EXTRACT:-}" == "1" ]]; then
+  echo "osmium extract (strategy=$OSMIUM_EXTRACT_STRATEGY) …"
+  rm -f "$PARTIAL" "$EXTRACT_PBF"
+  run_osmium_extract "$FO_SRC" "$PARTIAL"
+  if ! pbf_usable "$PARTIAL"; then
+    echo "osmium extract дал пустой или битый PBF — не хватило памяти или bbox пуст" >&2
+    rm -f "$PARTIAL"
     exit 1
   fi
-  mv -f "$PACK_DIR/extract.osm.pbf.partial" "$EXTRACT_PBF"
+  mv -f "$PARTIAL" "$EXTRACT_PBF"
 fi
 
 if [[ ! -f "$POI_DB" ]] || [[ "${FORCE_POI:-}" == "1" ]]; then
