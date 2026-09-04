@@ -51,11 +51,13 @@ export async function fetchMyOsrmPrepares(): Promise<{
   jobs: OsrmPrepareJob[];
   quota_used: number;
   quota_limit: number;
+  quota_unlimited?: boolean;
 }> {
   const { data } = await apiClient.get<{
     jobs: OsrmPrepareJob[];
     quota_used: number;
     quota_limit: number;
+    quota_unlimited?: boolean;
   }>("/osrm-prepares");
   return data;
 }

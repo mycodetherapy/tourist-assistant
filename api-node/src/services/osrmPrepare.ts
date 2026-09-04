@@ -1,7 +1,7 @@
 import { config } from "../config.js";
-import { AuthError, getUserLlmMode } from "./auth.js";
+import { AuthError } from "./auth.js";
 import { assertEmailVerified, requireVerifiedForOsrm } from "./emailVerify.js";
-import { getOsrmPrepareLock } from "./osrmPrepareAccess.js";
+import { resolveOsrmPrepareQuota } from "./osrmPrepareAccess.js";
 import { enqueuePrepareOsrm } from "../jobs/enqueue.js";
 import {
   createOsrmPrepareJob,
@@ -10,7 +10,6 @@ import {
   type OsrmPrepareJob,
 } from "../repos/osrmPrepareJobs.js";
 import {
-  getUserSettings,
   tryReserveOsrmPrepareQuota,
   refundOsrmPrepareQuota,
   type User,
@@ -57,15 +56,7 @@ export async function enqueueUserOsrmPrepare(params: {
     assertEmailVerified(params.user);
   }
 
-  const llmMode = await getUserLlmMode(params.user.id);
-  const settings = await getUserSettings(params.user.id);
-  const prepareLock = getOsrmPrepareLock(
-    llmMode,
-    Boolean(settings?.llm_api_key_enc),
-  );
-  if (prepareLock) {
-    throw new OsrmPrepareError(prepareLock.message, 403);
-  }
+  const quota = await resolveOsrmPrepareQuota(params.user.id);
 
   const entry = getCityPackEntry(slug);
   if (!entry) {
@@ -110,22 +101,24 @@ export async function enqueueUserOsrmPrepare(params: {
 
   await checkEnqueueRateLimit(params.user.id);
 
-  const reserved = await tryReserveOsrmPrepareQuota(
-    params.user.id,
-    config.osrmPrepareQuotaPerUser,
-  );
-  if (!reserved) {
-    throw new OsrmPrepareError(
-      `Лимит: не больше ${config.osrmPrepareQuotaPerUser} новых городов`,
-      403,
+  if (!quota.unlimited) {
+    const reserved = await tryReserveOsrmPrepareQuota(
+      params.user.id,
+      quota.limit,
     );
+    if (!reserved) {
+      throw new OsrmPrepareError(
+        `В бесплатном режиме не больше ${quota.limit} новых городов. Свой API-ключ снимает этот лимит.`,
+        403,
+      );
+    }
   }
 
   try {
     const job = await createOsrmPrepareJob({
       userId: params.user.id,
       slug,
-      countsAgainstQuota: true,
+      countsAgainstQuota: !quota.unlimited,
     });
     await enqueuePrepareOsrm(job.id, {
       job_id: job.id,
@@ -136,7 +129,9 @@ export async function enqueueUserOsrmPrepare(params: {
     });
     return { job };
   } catch (err) {
-    await refundOsrmPrepareQuota(params.user.id);
+    if (!quota.unlimited) {
+      await refundOsrmPrepareQuota(params.user.id);
+    }
     throw err;
   }
 }

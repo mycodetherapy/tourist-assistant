@@ -1,36 +1,23 @@
-import type { LlmMode } from "./auth.js";
+import { getUserLlmMode, type LlmMode } from "./auth.js";
+import { config } from "../config.js";
+import { getUserSettings } from "../repos/users.js";
 
-export type OsrmPrepareLockCode = "free_mode" | "need_key" | "platform";
-
-export type OsrmPrepareLock = {
-  code: OsrmPrepareLockCode;
-  message: string;
-};
-
-export function getOsrmPrepareLock(
+/** Лимит 3 города — только бесплатный режим. BYOK с сохранённым ключом без квоты. */
+export function osrmPrepareQuotaUnlimited(
   mode: LlmMode,
   keyConfigured: boolean,
-): OsrmPrepareLock | null {
-  if (mode === "none") {
-    return {
-      code: "free_mode",
-      message:
-        "В бесплатном режиме нельзя готовить новые города на карте — это нагрузка на сервер. Включите «Свой API-ключ (BYOK)» ниже, укажите ключ при необходимости и нажмите «Сохранить».",
-    };
-  }
-  if (mode === "platform") {
-    return {
-      code: "platform",
-      message:
-        "Оплата AI из приложения скоро будет доступна. Пока используйте свой API-ключ, чтобы готовить города.",
-    };
-  }
-  if (!keyConfigured) {
-    return {
-      code: "need_key",
-      message:
-        "Чтобы готовить города на карте, сохраните API-ключ провайдера в режиме «Свой API-ключ».",
-    };
-  }
-  return null;
+): boolean {
+  return mode === "byok" && keyConfigured;
+}
+
+export async function resolveOsrmPrepareQuota(userId: number): Promise<{
+  unlimited: boolean;
+  limit: number;
+}> {
+  const mode = await getUserLlmMode(userId);
+  const settings = await getUserSettings(userId);
+  return {
+    unlimited: osrmPrepareQuotaUnlimited(mode, Boolean(settings?.llm_api_key_enc)),
+    limit: config.osrmPrepareQuotaPerUser,
+  };
 }

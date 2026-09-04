@@ -1,9 +1,11 @@
 import { config } from "../config.js";
 import { query } from "../db/pool.js";
+import { deleteExpiredAuthSessions } from "../repos/authSessions.js";
 
 export interface GuestCleanupStats {
   deletedUsers: number;
   deletedUserIds: number[];
+  deletedAuthSessions: number;
 }
 
 /** Удаляет guest-пользователей с истёкшей сессией и «осиротевших» без session row. */
@@ -26,13 +28,19 @@ export async function runGuestCleanup(): Promise<GuestCleanupStats> {
     [orphanGraceHours],
   );
   const ids = rows.map((row) => Number(row.id));
+  let deletedAuthSessions = 0;
+  try {
+    deletedAuthSessions = await deleteExpiredAuthSessions();
+  } catch (err) {
+    console.error("Auth session cleanup failed", err);
+  }
   if (ids.length === 0) {
-    return { deletedUsers: 0, deletedUserIds: [] };
+    return { deletedUsers: 0, deletedUserIds: [], deletedAuthSessions };
   }
   await query(`DELETE FROM users WHERE id = ANY($1::bigint[]) AND is_guest = true`, [
     ids,
   ]);
-  return { deletedUsers: ids.length, deletedUserIds: ids };
+  return { deletedUsers: ids.length, deletedUserIds: ids, deletedAuthSessions };
 }
 
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -45,8 +53,10 @@ export function startGuestCleanupScheduler(log: (msg: string) => void = console.
   const tick = () => {
     void runGuestCleanup()
       .then((stats) => {
-        if (stats.deletedUsers > 0) {
-          log(`Guest cleanup: removed ${stats.deletedUsers} expired guest user(s)`);
+        if (stats.deletedUsers > 0 || stats.deletedAuthSessions > 0) {
+          log(
+            `Guest cleanup: removed ${stats.deletedUsers} expired guest user(s), ${stats.deletedAuthSessions} auth session(s)`,
+          );
         }
       })
       .catch((err) => {

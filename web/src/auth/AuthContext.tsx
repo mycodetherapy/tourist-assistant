@@ -8,17 +8,21 @@ import {
   type ReactNode,
 } from "react";
 import type { UserInfo } from "../api/types";
-import { fetchMe, login as apiLogin, register as apiRegister } from "../api/auth";
-import { getAuthToken, setAuthToken, TOKEN_KEY } from "../api/client";
+import {
+  fetchMe,
+  login as apiLogin,
+  logout as apiLogout,
+  register as apiRegister,
+} from "../api/auth";
+import { clearLegacyAuthToken } from "../api/client";
 
 interface AuthContextValue {
   user: UserInfo | null;
-  token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<number | undefined>;
   register: (email: string, password: string) => Promise<number | undefined>;
-  logout: () => void;
-  setTokenFromOAuth: (token: string, claimedTripId?: number) => Promise<void>;
+  logout: () => Promise<void>;
+  completeLogin: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -26,44 +30,40 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   const [loading, setLoading] = useState(true);
 
-  const applySession = useCallback(async (accessToken: string) => {
-    setAuthToken(accessToken);
-    setToken(accessToken);
-    const me = await fetchMe();
-    setUser(me);
-  }, []);
-
-  const logout = useCallback(() => {
-    setAuthToken(null);
-    setToken(null);
-    setUser(null);
-  }, []);
-
   const refreshUser = useCallback(async () => {
-    if (!getAuthToken()) return;
     const me = await fetchMe();
     setUser(me);
+    clearLegacyAuthToken();
+  }, []);
+
+  const completeLogin = useCallback(async () => {
+    await refreshUser();
+  }, [refreshUser]);
+
+  const logout = useCallback(async () => {
+    try {
+      await apiLogout();
+    } catch {
+      /* cookie already gone */
+    }
+    clearLegacyAuthToken();
+    setUser(null);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
       try {
-        setAuthToken(getAuthToken() ?? token);
         const me = await fetchMe();
         if (!cancelled) {
           setUser(me);
+          clearLegacyAuthToken();
         }
       } catch {
         if (!cancelled) {
-          logout();
+          setUser(null);
         }
       } finally {
         if (!cancelled) {
@@ -74,45 +74,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [token, logout]);
+  }, []);
 
   const login = useCallback(
     async (email: string, password: string) => {
       const data = await apiLogin(email, password);
-      await applySession(data.access_token);
+      await completeLogin();
       return data.claimed_trip_id;
     },
-    [applySession],
+    [completeLogin],
   );
 
   const register = useCallback(
     async (email: string, password: string) => {
       const data = await apiRegister(email, password);
-      await applySession(data.access_token);
+      await completeLogin();
       return data.claimed_trip_id;
     },
-    [applySession],
-  );
-
-  const setTokenFromOAuth = useCallback(
-    async (accessToken: string, _claimedTripId?: number) => {
-      await applySession(accessToken);
-    },
-    [applySession],
+    [completeLogin],
   );
 
   const value = useMemo(
     () => ({
       user,
-      token,
       loading,
       login,
       register,
       logout,
-      setTokenFromOAuth,
+      completeLogin,
       refreshUser,
     }),
-    [user, token, loading, login, register, logout, setTokenFromOAuth, refreshUser],
+    [user, loading, login, register, logout, completeLogin, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,19 +1,20 @@
 import axios, { type AxiosError } from "axios";
 
-export const TOKEN_KEY = "tourist_auth_token";
+const LEGACY_TOKEN_KEY = "tourist_auth_token";
 
-let authToken: string | null = localStorage.getItem(TOKEN_KEY);
-
-export function getAuthToken(): string | null {
-  return authToken ?? localStorage.getItem(TOKEN_KEY);
+function readLegacyToken(): string | null {
+  try {
+    return localStorage.getItem(LEGACY_TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
-export function setAuthToken(token: string | null): void {
-  authToken = token;
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
+export function clearLegacyAuthToken(): void {
+  try {
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -24,7 +25,7 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = getAuthToken();
+  const token = readLegacyToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

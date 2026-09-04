@@ -1,8 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { query } from "../db/pool.js";
-import { decodeAccessToken } from "../lib/crypto.js";
-import { userFromTokenSub } from "../services/auth.js";
+import { resolveRequestUser } from "../middleware/auth.js";
 import {
   InputValidationError,
   sanitizeAndValidate,
@@ -18,12 +17,9 @@ function normalizeCityName(name: string): string {
 }
 
 async function optionalUserId(request: FastifyRequest): Promise<number | null> {
-  const header = request.headers.authorization;
-  if (!header?.startsWith("Bearer ")) return null;
   try {
-    const payload = decodeAccessToken(header.slice(7));
-    const user = await userFromTokenSub(payload.sub);
-    return user.id;
+    const user = await resolveRequestUser(request);
+    return user?.id ?? null;
   } catch {
     return null;
   }

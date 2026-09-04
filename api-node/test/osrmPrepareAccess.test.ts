@@ -1,23 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { getOsrmPrepareLock } from "../src/services/osrmPrepareAccess.js";
+import { osrmPrepareQuotaUnlimited } from "../src/services/osrmPrepareAccess.js";
 
-describe("getOsrmPrepareLock", () => {
-  it("blocks free mode even if a key is stored", () => {
-    const lock = getOsrmPrepareLock("none", true);
-    expect(lock?.code).toBe("free_mode");
-    expect(lock?.message).toMatch(/бесплатн/i);
+describe("osrmPrepareQuotaUnlimited", () => {
+  it("applies quota in free mode even if a key is stored", () => {
+    expect(osrmPrepareQuotaUnlimited("none", true)).toBe(false);
   });
 
-  it("blocks BYOK without a saved key", () => {
-    const lock = getOsrmPrepareLock("byok", false);
-    expect(lock?.code).toBe("need_key");
+  it("applies quota for BYOK without a saved key", () => {
+    expect(osrmPrepareQuotaUnlimited("byok", false)).toBe(false);
   });
 
-  it("allows BYOK with a saved key", () => {
-    expect(getOsrmPrepareLock("byok", true)).toBeNull();
+  it("lifts quota for BYOK with a saved key", () => {
+    expect(osrmPrepareQuotaUnlimited("byok", true)).toBe(true);
   });
 
-  it("blocks platform mode", () => {
-    expect(getOsrmPrepareLock("platform", true)?.code).toBe("platform");
+  it("keeps quota in platform mode", () => {
+    expect(osrmPrepareQuotaUnlimited("platform", true)).toBe(false);
   });
 });

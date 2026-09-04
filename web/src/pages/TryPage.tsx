@@ -19,7 +19,7 @@ import { useGuestSmartCaptcha } from "../hooks/useGuestSmartCaptcha";
 import { SMART_CAPTCHA_CONTAINER_CLASS } from "../hooks/useYandexSmartCaptcha";
 import { DEFAULT_USER_QUERY } from "../utils/preferences";
 import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
-import { OsrmCityChips } from "../components/OsrmCityChips";
+import { OsrmCityChips, OsrmCityMatchBadge } from "../components/OsrmCityChips";
 import { FREE_VS_LLM } from "../content/buildModes";
 import { METRIKA_GOALS, reachGoal } from "../utils/analytics";
 
@@ -141,7 +141,7 @@ export function TryPage() {
 
       <Form form={form} layout="vertical" preserve initialValues={{ accept_terms: false, accept_privacy: false }}>
         <Form.Item name="city" label="Город маршрута" rules={[{ required: true }]}>
-          <Input placeholder="Санкт-Петербург" />
+          <Input placeholder="Санкт-Петербург" suffix={<OsrmCityMatchBadge city={city} />} />
         </Form.Item>
         <OsrmCityChips
           selectedCity={city}

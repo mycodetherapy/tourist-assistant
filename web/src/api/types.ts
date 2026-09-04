@@ -134,6 +134,7 @@ export interface UserInfo {
   email_verified?: boolean;
   osrm_prepare_quota_used?: number;
   osrm_prepare_quota_limit?: number;
+  osrm_prepare_quota_unlimited?: boolean;
 }
 
 export interface AuthResponse {

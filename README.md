@@ -22,7 +22,7 @@
 | **Wikidata** | ✅ | Fallback `P131` без `*` для крупных городов (Москва — таймаут transitive SPARQL) |
 | **UI guest** | ✅ | «Прогулка: {город}», `/try` без слова «бесплатно» в публичном UI |
 | **MapLibre + OSRM** | ✅ | Opt-in web, ephemeral worker, city chips `osrm-ready` |
-| **Self-serve OSRM** | ✅ | Eligible города (FO на диске), очередь prepare, лимит 3/аккаунт; нужен BYOK + email verify |
+| **Self-serve OSRM** | ✅ | Eligible города (FO на диске), очередь prepare; free — 3/аккаунт, BYOK — без лимита; email verify |
 | **Email verify** | ✅ | Письмо после register (Resend); Google — сразу verified |
 | **SEO / индекс** | ✅ | `robots.txt`, sitemap, canonical, Open Graph, JSON-LD, noscript; заявка в Вебмастере — вручную (см. ниже) |
 
@@ -31,7 +31,7 @@
 | Задача | Действие |
 | ------ | -------- |
 | **Prod-деплой** | Merge PR `develop` → `main` → CI Deploy; `.env`: `YANDEX_SMARTCAPTCHA_SERVER_KEY`; secret `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` |
-| **Миграции** | Авто при старте worker (`alembic upgrade head`); head: `g2h3i4j5k6l7` (email verify + osrm_prepare_jobs) |
+| **Миграции** | Авто при старте worker (`alembic upgrade head`); head: `h3i4j5k6l7m8` (`auth_sessions`) |
 | **Локальные фиксы** | Кнопка «Пересобрать» (captcha disabled), крестик cookie-баннера — закоммитить в `develop` |
 
 ### Ближайшие планы (phase 2)
@@ -256,7 +256,7 @@ python3 scripts/export_openapi.py
 
 Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/openapi.json` автоматически.
 
-**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На форме новой прогулки и `/try` — чипы городов с OSRM: `GET /api/cities/osrm-ready`. Self-serve (Настройки): `GET /api/cities/osrm-eligible`, `POST /api/osrm-prepares` (лимит 3; нужен verified email и режим BYOK с сохранённым ключом; в бесплатном режиме список недоступен). На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C и свайп влево/вправо (один вариант на экран; жест по карте не переключает вариант); на десктопе — три карточки списком.
+**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На форме новой прогулки и `/try` — чипы городов с OSRM: `GET /api/cities/osrm-ready` (поиск по полю города, свёртка длинного списка, недавние выборы). Self-serve (Настройки): `GET /api/cities/osrm-eligible`, `POST /api/osrm-prepares` (verified email; бесплатно до 3 городов на аккаунт, BYOK — без этого лимита). На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C и свайп влево/вправо (один вариант на экран; жест по карте не переключает вариант); на десктопе — три карточки списком.
 
 Один раз установить автообновление схемы перед коммитом:
 
@@ -266,8 +266,8 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 
 | Экран                  | Действие                                                                                                                                                                                                                                        |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Вход / регистрация** | Email+пароль или Google; JWT в `localStorage`                                                                                                                                                                                                   |
-| **Настройки**          | Режим AI: `none` (бесплатный алгоритм, 30/сутки), `byok` (свой ключ), `platform` (скоро). BYOK: API key, Base URL, модель. Self-serve OSRM — только BYOK + verified email |
+| **Вход / регистрация** | Email+пароль или Google; сессия в httpOnly cookie `auth_session` (14 дней, sliding); JWT Bearer — запасной вариант |
+| **Настройки**          | Режим AI: `none` (бесплатный алгоритм, 30/сутки), `byok` (свой ключ), `platform` (скоро). BYOK: API key, Base URL, модель. Self-serve OSRM: free — 3 города, BYOK — без лимита (нужен verified email) |
 | **Список прогулок**    | Только прогулки текущего пользователя                                                                                                                                                                                                           |
 | **Новая прогулка**     | Wizard: город → запуск → фоновая сборка (polling 1–2 мин)                                                                                                                                                                                       |
 | **Карточка прогулки**  | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling; в бесплатном режиме — Wikipedia без обрыва на «…» и ссылка «Читать далее в Wikipedia»); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`; free — Wikipedia до ~2800 символов, обрезка по предложению + « …» и ссылка; LLM — 8–12 предложений до 2800 + ссылка на статью); пересбор маршрутов одной кнопкой |
@@ -369,13 +369,13 @@ NEW_POSTGRES_PASSWORD='…' bash rotate_postgres_password.sh
 
 ```bash
 cd /opt/tourist-assistant
-docker compose -f docker-compose.prod.yml exec -T worker alembic current   # head: c4e1f8a92d10
+docker compose -f docker-compose.prod.yml exec -T worker alembic current   # head: h3i4j5k6l7m8
 docker compose -f docker-compose.prod.yml exec -T worker alembic upgrade head
 docker compose -f docker-compose.prod.yml up -d --force-recreate worker api-node
 docker compose -f docker-compose.prod.yml logs api-node --tail 80
 ```
 
-Колонка `users.last_seen_at` нужна для audit при входе (ревизия `c4e1f8a92d10`). Worker применяет `alembic upgrade head` при каждом старте; при отставании схемы — команды выше.
+Worker применяет `alembic upgrade head` при каждом старте (таблица `auth_sessions` — ревизия `h3i4j5k6l7m8`). При отставании схемы — команды выше.
 
 Ручной деплой с сервера (если нужно):
 
@@ -514,8 +514,9 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY`     | Нет         | Клиентский ключ SmartCaptcha (сборка web); нужен вместе с server key                                                           |
 | `VITE_YANDEX_VERIFICATION`                | Нет         | Код meta `yandex-verification` (сборка web); иначе подтверждение домена в Вебмастере через DNS TXT                               |
 | `VITE_GOOGLE_SITE_VERIFICATION`           | Нет         | Код meta `google-site-verification` (сборка web); иначе DNS TXT в Search Console                                                 |
-| `ESTIMATED_AI_RUN_COST_RUB`                 | Нет         | Оценка стоимости AI-прогона для UI (default 4)                                                                                   |
-| `JWT_ACCESS_TTL_MINUTES`                    | Нет         | Срок жизни access token (по умолчанию 60)                                                                                      |
+| `ESTIMATED_AI_RUN_COST_RUB`                 | Нет         | Оценка стоимости AI-прогона для UI (default 10)                                                                                  |
+| `JWT_ACCESS_TTL_MINUTES`                    | Нет         | Срок JWT Bearer (запасной способ auth; default 60). Основная сессия — cookie `auth_session`                                     |
+| `AUTH_SESSION_TTL_DAYS`                     | Нет         | Срок httpOnly-сессии после входа (default 14, sliding при активности)                                                          |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет         | Google OAuth (опционально). Один OAuth client — несколько **Authorized redirect URIs** в Google Console                        |
 | `GOOGLE_REDIRECT_URI`                       | Нет         | Fallback; в OAuth `redirect_uri` = `{origin фронта}/api/auth/google/callback` (см. ниже)                                       |
 | `FRONTEND_URL`                              | Нет         | Origin фронта (prod: `https://progulyai.ru`; локально: `https://localhost:5173` при HTTPS dev)                                 |

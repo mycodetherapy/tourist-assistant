@@ -10,6 +10,7 @@ async function main(): Promise<void> {
       ok: true,
       deleted_users: stats.deletedUsers,
       deleted_user_ids: stats.deletedUserIds,
+      deleted_auth_sessions: stats.deletedAuthSessions,
     }),
   );
   await closeRedis();
