@@ -15,6 +15,14 @@ function parseDatabaseUrl(raw: string): string {
   return raw.replace(/^postgresql\+psycopg:/, "postgresql:");
 }
 
+/** Пустая строка / NaN / отрицательное → fallback. 0 оставляем (выкл. лимита). */
+function parseEnvInt(raw: string | undefined, fallback: number): number {
+  if (raw == null || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.floor(n);
+}
+
 /** Как auth/jwt_tokens.py: невалидный JWT_ACCESS_TTL_MINUTES → 60 мин. */
 function parseJwtTtlMinutes(raw: string | undefined): number {
   const trimmed = (raw ?? "60").trim();
@@ -86,7 +94,10 @@ export const config = {
   osrmPrepareQuotaPerUser: Number(process.env.OSRM_PREPARE_QUOTA_PER_USER ?? 3),
   osrmPrepareMaxCities: Number(process.env.OSRM_PREPARE_MAX_CITIES ?? 40),
   osrmPrepareMinFreeGb: Number(process.env.OSRM_PREPARE_MIN_FREE_GB ?? 5),
-  osrmPrepareEnqueuePerHour: Number(process.env.OSRM_PREPARE_ENQUEUE_PER_HOUR ?? 3),
+  osrmPrepareEnqueuePerHour: parseEnvInt(
+    process.env.OSRM_PREPARE_ENQUEUE_PER_HOUR,
+    3,
+  ),
   osrmPrepareRequireEmailVerified: !["0", "false", "no", "off"].includes(
     (process.env.OSRM_PREPARE_REQUIRE_EMAIL_VERIFIED ?? "true").trim().toLowerCase(),
   ),

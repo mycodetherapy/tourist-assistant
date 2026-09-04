@@ -6,6 +6,7 @@ import { enqueuePrepareOsrm } from "../jobs/enqueue.js";
 import {
   createOsrmPrepareJob,
   findActiveOsrmPrepareJob,
+  findLatestOsrmPrepareJob,
   getOsrmPrepareJob,
   type OsrmPrepareJob,
 } from "../repos/osrmPrepareJobs.js";
@@ -26,6 +27,8 @@ import {
 export class OsrmPrepareError extends AuthError {}
 
 async function checkEnqueueRateLimit(userId: number): Promise<void> {
+  const limit = config.osrmPrepareEnqueuePerHour;
+  if (limit <= 0) return;
   const { getRedis } = await import("../db/redis.js");
   const redis = await getRedis();
   const slot = Math.floor(Date.now() / 3_600_000);
@@ -34,7 +37,7 @@ async function checkEnqueueRateLimit(userId: number): Promise<void> {
   if (n === 1) {
     await redis.expire(key, 3600);
   }
-  if (n > config.osrmPrepareEnqueuePerHour) {
+  if (n > limit) {
     await redis.decr(key);
     throw new OsrmPrepareError(
       "Слишком много запросов на подготовку — попробуйте позже",
@@ -99,7 +102,11 @@ export async function enqueueUserOsrmPrepare(params: {
     return { job: active, joined: true };
   }
 
-  await checkEnqueueRateLimit(params.user.id);
+  const last = await findLatestOsrmPrepareJob(slug);
+  // Повтор после failed (OOM / пустой extract) не жрёт hourly cap.
+  if (last?.status !== "failed") {
+    await checkEnqueueRateLimit(params.user.id);
+  }
 
   if (!quota.unlimited) {
     const reserved = await tryReserveOsrmPrepareQuota(

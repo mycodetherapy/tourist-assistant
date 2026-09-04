@@ -210,7 +210,7 @@ HTML-тег Google Search Console уже в [`web/index.html`](web/index.html) (
 
 ### City pack (POI из OSM-выжимки)
 
-POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml), полки `hot`/`warm` — [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута: **MapLibre** при `VITE_MAP_PROVIDER=maplibre` (Docker/CI дефолт) и `route_geometry`; иначе iframe Яндекса. Пешая геометрия OSRM: подготовка **на Mac** (`city_pack_prepare` / `osrm_prepare_batch`), на VPS — rsync `data/cities/` + **`OSRM_MODE=ephemeral`** (`docker.sock` + `OSRM_HOST_DATA_CITIES=/opt/tourist-assistant/data/cities`). Self-serve extract из FO на VPS 4 ГБ: нужен swap 2–4 ГБ, osmium `simple`, пустой `extract.osm.pbf` не считается готовым. Локально можно always-on: `docker compose --profile osrm up -d osrm` + `OSRM_MODE=http`. Без графа сборка не падает. План: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md). Заявки на город вне каталога: `POST /api/city-requests`, CLI `python scripts/city_requests_cli.py`. Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
+POI строятся из `extract.osm.pbf` на город ([`config/city_packs.yaml`](config/city_packs.yaml), полки `hot`/`warm` — [`docs/city-catalog-policy.md`](docs/city-catalog-policy.md)). **Free tier (`llm_mode=none`)** — только **Wikidata**; **city pack (OSM)** доступен при **BYOK/LLM**. Статусы каталога — таблица `city_packs` в Postgres. Карта маршрута: **MapLibre** при `VITE_MAP_PROVIDER=maplibre` (Docker/CI дефолт) и `route_geometry`; иначе iframe Яндекса. Пешая геометрия OSRM: подготовка **на Mac** (`city_pack_prepare` / `osrm_prepare_batch`), на VPS — rsync `data/cities/` + **`OSRM_MODE=ephemeral`** (`docker.sock` + `OSRM_HOST_DATA_CITIES=/opt/tourist-assistant/data/cities`). Self-serve extract на VPS 4 ГБ: swap 2–4 ГБ, `osmium-tool` в образе worker (`simple`), битый `extract.osm.pbf` не считается готовым. Локально можно always-on: `docker compose --profile osrm up -d osrm` + `OSRM_MODE=http`. Без графа сборка не падает. План: [`docs/maps-osrm-maplibre.md`](docs/maps-osrm-maplibre.md). Заявки на город вне каталога: `POST /api/city-requests`, CLI `python scripts/city_requests_cli.py`. Кэш `route_materials` при partial rebuild переиспользуется независимо от режима (в т.ч. POI из pack после смены на free).
 
 **Первый запуск (Поволжский ФО, 8 городов):**
 
@@ -226,7 +226,7 @@ bash scripts/city_pack_batch.sh --tier=hot
 bash scripts/osrm_prepare_batch.sh
 ```
 
-При первом `city_pack_prepare` автоматически собирается Docker-образ `local-osmium-tool` (`scripts/Dockerfile.osmium`), если нет доступа к `ghcr.io/osmcode/osmium-tool`.
+На VPS extract идёт **`osmium-tool` в worker** (пакет в образе). Fallback: Docker-образ `local-osmium-tool` (`scripts/Dockerfile.osmium`) с `--memory-swap`.
 
 Каталог городов: [`config/city_packs.yaml`](config/city_packs.yaml); федеральные округа (Geofabrik): [`config/federal_districts.yaml`](config/federal_districts.yaml). Новый город — запись в YAML + `city_pack_prepare.sh` + `alembic upgrade head` (синхронизация `city_packs`).
 

@@ -152,6 +152,13 @@ def build_index(
     poi_bbox: tuple[float, float, float, float],
     city_hint: str,
 ) -> int:
+    from search.osm.pbf_usable import is_pbf_usable
+
+    if not is_pbf_usable(extract_pbf):
+        raise SystemExit(
+            f"extract непригоден (пустой или обрезан после OOM): {extract_pbf}. "
+            "Удалите файл и запустите prepare снова."
+        )
     handler = PoiExtractHandler(poi_bbox=poi_bbox, city_hint=city_hint)
     handler.apply_file(str(extract_pbf), locations=True)
     return write_poi_sqlite(handler.pois, db_path=db_path)
