@@ -33,11 +33,30 @@ export function SettingsPage() {
   }, [location.hash, settingsQuery.isLoading]);
 
   const saveMutation = useMutation({
-    mutationFn: updateSettings,
-    onSuccess: () => {
+    mutationFn: (values: SettingsFormValues) => {
+      const payload: UpdateSettingsPayload = {
+        llm_mode: values.llm_mode,
+        llm_base_url: values.llm_base_url,
+        llm_model: values.llm_model,
+      };
+      const key = values.llm_api_key?.trim();
+      if (key) {
+        payload.llm_api_key = key;
+      }
+      return updateSettings(payload);
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings"], data);
       notification.success({ title: "Настройки сохранены" });
-      void queryClient.invalidateQueries({ queryKey: ["settings"] });
       form.setFieldValue("llm_api_key", "");
+      if (data.llm_mode === "byok" && data.llm_key_configured) {
+        window.setTimeout(() => {
+          document.getElementById("osrm-cities")?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }, 50);
+      }
     },
     onError: (error) => {
       notification.error({ title: "Ошибка", description: getErrorMessage(error) });
@@ -94,7 +113,7 @@ export function SettingsPage() {
           </>
         }
       />
-      <Card>
+      <Card id="ai-mode">
         <Form
           form={form}
           layout="vertical"
@@ -126,7 +145,15 @@ export function SettingsPage() {
                   Укажите API-ключ провайдера для AI-сборки.
                 </Typography.Paragraph>
               )}
-              <Form.Item name="llm_api_key" label="API key">
+              <Form.Item
+                name="llm_api_key"
+                label="API key"
+                extra={
+                  settings?.llm_key_configured
+                    ? "Оставьте пустым, чтобы оставить текущий ключ."
+                    : undefined
+                }
+              >
                 <Input.Password placeholder="sk-..." autoComplete="off" />
               </Form.Item>
               <Form.Item name="llm_base_url" label="Base URL">

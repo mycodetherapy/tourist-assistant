@@ -22,7 +22,7 @@
 | **Wikidata** | ✅ | Fallback `P131` без `*` для крупных городов (Москва — таймаут transitive SPARQL) |
 | **UI guest** | ✅ | «Прогулка: {город}», `/try` без слова «бесплатно» в публичном UI |
 | **MapLibre + OSRM** | ✅ | Opt-in web, ephemeral worker, city chips `osrm-ready` |
-| **Self-serve OSRM** | ✅ | Eligible города (FO на диске), очередь prepare, лимит 3/аккаунт, email verify |
+| **Self-serve OSRM** | ✅ | Eligible города (FO на диске), очередь prepare, лимит 3/аккаунт; нужен BYOK + email verify |
 | **Email verify** | ✅ | Письмо после register (Resend); Google — сразу verified |
 | **SEO / индекс** | ✅ | `robots.txt`, sitemap, canonical, Open Graph, JSON-LD, noscript; заявка в Вебмастере — вручную (см. ниже) |
 
@@ -204,7 +204,7 @@ curl -sI https://www.progulyai.ru          # 301 на https://progulyai.ru/
 3. В обоих кабинетах отправить sitemap: `https://progulyai.ru/sitemap.xml` и запросить переобход `/` и `/try`.
 4. На VPS в Caddy: www → apex, см. [`deploy/Caddyfile.example`](deploy/Caddyfile.example).
 
-HTML-тег Google Search Console уже в [`web/index.html`](web/index.html) (`google-site-verification`). Для Яндекса: секрет GitHub `VITE_YANDEX_VERIFICATION` → пересборка образа `web`. Файл `google*.html` / `yandex_*.html` в корень **не кладите** — SPA его подменит, пока файл не лежит в `web/public/`.
+HTML-тег Google Search Console уже в [`web/index.html`](web/index.html) (`google-site-verification`). Мета-тег Яндекс.Вебмастера — там же (`yandex-verification`). Файл `google*.html` / `yandex_*.html` в корень **не кладите** — SPA его подменит, пока файл не лежит в `web/public/`.
 
 Проверка индекса через 3–14 дней: `site:progulyai.ru` в Яндексе и Google.
 
@@ -256,7 +256,7 @@ python3 scripts/export_openapi.py
 
 Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/openapi.json` автоматически.
 
-**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На форме новой прогулки и `/try` — чипы городов с OSRM: `GET /api/cities/osrm-ready`. Self-serve (Настройки): `GET /api/cities/osrm-eligible`, `POST /api/osrm-prepares` (лимит 3, нужен verified email). На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C и свайп влево/вправо (один вариант на экран; жест по карте не переключает вариант); на десктопе — три карточки списком.
+**Базовая точка маршрута:** отель или адрес проживания задаётся в мастере новой поездки или в карточке поездки (аккордеон «Базовая точка маршрута», по умолчанию свёрнут; скрывается на время сборки/пересборки). API: `PUT /api/trips/{id}/preferences` (`route_anchor`), геокодинг `POST /api/trips/geocode` и `POST /api/trips/{id}/geocode`, обратный геокодинг `POST /api/trips/reverse-geocode` и `POST /api/trips/{id}/reverse-geocode`, центр города `GET /api/trips/{id}/city-center`. На форме новой прогулки и `/try` — чипы городов с OSRM: `GET /api/cities/osrm-ready`. Self-serve (Настройки): `GET /api/cities/osrm-eligible`, `POST /api/osrm-prepares` (лимит 3; нужен verified email и режим BYOK с сохранённым ключом; в бесплатном режиме список недоступен). На фронте — JavaScript API Яндекс.Карт (`VITE_YANDEX_MAPS_API_KEY` в корневом `.env` или `web/.env`); на бэкенде — `YANDEX_MAPS_API_KEY`. После изменения точки пересбор **только вручную** — «Пересобрать» с областью `routes`. На мобильной вкладке «Маршруты» — переключатель A/B/C и свайп влево/вправо (один вариант на экран; жест по карте не переключает вариант); на десктопе — три карточки списком.
 
 Один раз установить автообновление схемы перед коммитом:
 
@@ -267,7 +267,7 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 | Экран                  | Действие                                                                                                                                                                                                                                        |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Вход / регистрация** | Email+пароль или Google; JWT в `localStorage`                                                                                                                                                                                                   |
-| **Настройки**          | Режим AI: `none` (бесплатный алгоритм, 30/сутки), `byok` (свой ключ), `platform` (скоро). BYOK: API key, Base URL, модель |
+| **Настройки**          | Режим AI: `none` (бесплатный алгоритм, 30/сутки), `byok` (свой ключ), `platform` (скоро). BYOK: API key, Base URL, модель. Self-serve OSRM — только BYOK + verified email |
 | **Список прогулок**    | Только прогулки текущего пользователя                                                                                                                                                                                                           |
 | **Новая прогулка**     | Wizard: город → запуск → фоновая сборка (polling 1–2 мин)                                                                                                                                                                                       |
 | **Карточка прогулки**  | Единая страница маршрутов (A/B/C) с **встроенной картой** + базовая точка; **клик по остановке** → модалка со справкой (on-demand, polling; в бесплатном режиме — Wikipedia без обрыва на «…» и ссылка «Читать далее в Wikipedia»); внизу **«О городе»** (skeleton, пока `city_fact_status=pending`; free — Wikipedia до ~2800 символов, обрезка по предложению + « …» и ссылка; LLM — 8–12 предложений до 2800 + ссылка на статью); пересбор маршрутов одной кнопкой |

@@ -1,6 +1,7 @@
 import { config } from "../config.js";
-import { AuthError } from "./auth.js";
+import { AuthError, getUserLlmMode } from "./auth.js";
 import { assertEmailVerified, requireVerifiedForOsrm } from "./emailVerify.js";
+import { getOsrmPrepareLock } from "./osrmPrepareAccess.js";
 import { enqueuePrepareOsrm } from "../jobs/enqueue.js";
 import {
   createOsrmPrepareJob,
@@ -9,6 +10,7 @@ import {
   type OsrmPrepareJob,
 } from "../repos/osrmPrepareJobs.js";
 import {
+  getUserSettings,
   tryReserveOsrmPrepareQuota,
   refundOsrmPrepareQuota,
   type User,
@@ -53,6 +55,16 @@ export async function enqueueUserOsrmPrepare(params: {
 
   if (requireVerifiedForOsrm()) {
     assertEmailVerified(params.user);
+  }
+
+  const llmMode = await getUserLlmMode(params.user.id);
+  const settings = await getUserSettings(params.user.id);
+  const prepareLock = getOsrmPrepareLock(
+    llmMode,
+    Boolean(settings?.llm_api_key_enc),
+  );
+  if (prepareLock) {
+    throw new OsrmPrepareError(prepareLock.message, 403);
   }
 
   const entry = getCityPackEntry(slug);
