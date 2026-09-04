@@ -189,13 +189,14 @@ export async function saveLlmSettings(
   },
 ): Promise<void> {
   let enc: string | undefined;
-  if (fields.llm_api_key !== undefined && fields.llm_api_key !== null) {
-    const key = fields.llm_api_key.trim();
-    if (!key) throw new AuthError("LLM API key не может быть пустым");
-    if (isPlaceholderSecret(key)) {
+  const rawKey =
+    typeof fields.llm_api_key === "string" ? fields.llm_api_key.trim() : "";
+  // Пустое поле ключа = «не менять»: иначе Save сбрасывает переход на BYOK.
+  if (rawKey) {
+    if (isPlaceholderSecret(rawKey)) {
       throw new AuthError("Укажите реальный API-ключ LLM, не плейсхолдер");
     }
-    enc = encryptSecret(key);
+    enc = encryptSecret(rawKey);
   }
   let llm_mode: LlmMode | undefined;
   if (fields.llm_mode !== undefined && fields.llm_mode !== null) {

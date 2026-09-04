@@ -83,6 +83,8 @@ export function NewTripPage() {
           <Link to="/settings#osrm-cities" className="text-sky-700 underline-offset-2 hover:underline">
             Добавить город на карту в настройках
           </Link>
+          {" "}
+          (доступно в режиме со своим API-ключом).
         </p>
       </Form>
 

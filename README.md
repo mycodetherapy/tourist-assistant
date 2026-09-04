@@ -22,7 +22,7 @@
 | **Wikidata** | ✅ | Fallback `P131` без `*` для крупных городов (Москва — таймаут transitive SPARQL) |
 | **UI guest** | ✅ | «Прогулка: {город}», `/try` без слова «бесплатно» в публичном UI |
 | **MapLibre + OSRM** | ✅ | Opt-in web, ephemeral worker, city chips `osrm-ready` |
-| **Self-serve OSRM** | ✅ | Eligible города (FO на диске), очередь prepare, лимит 3/аккаунт, email verify |
+| **Self-serve OSRM** | ✅ | Eligible города (FO на диске), очередь prepare, лимит 3/аккаунт; нужен BYOK + email verify |
 | **Email verify** | ✅ | Письмо после register (Resend); Google — сразу verified |
 | **SEO / индекс** | ✅ | `robots.txt`, sitemap, canonical, Open Graph, JSON-LD, noscript; заявка в Вебмастере — вручную (см. ниже) |
 

@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Card, Progress, Select, Space, Typography, notification } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getErrorMessage } from "../api/client";
+import { fetchSettings } from "../api/settings";
 import {
   fetchMyOsrmPrepares,
   fetchOsrmEligibleCities,
   startOsrmPrepare,
   type OsrmPrepareJob,
 } from "../api/osrmPrepare";
+import type { LlmMode } from "../api/types";
 import { resendVerification } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 
@@ -77,6 +79,34 @@ function isInProgress(job: OsrmPrepareJob): boolean {
   return job.status === "queued" || job.status === "running";
 }
 
+function osrmPrepareLock(
+  mode: LlmMode | undefined,
+  keyConfigured: boolean | undefined,
+): { title: string; description: string } | null {
+  if (!mode || mode === "none") {
+    return {
+      title: "Недоступно в бесплатном режиме",
+      description:
+        "Готовить новый город на карте (пеший граф улиц) можно после включения «Свой API-ключ (BYOK)» ниже на этой странице. Укажите ключ, если его ещё нет, и нажмите «Сохранить». Готовыми городами из списка при создании прогулки можно пользоваться и бесплатно.",
+    };
+  }
+  if (mode === "platform") {
+    return {
+      title: "Режим пока недоступен",
+      description:
+        "Оплата AI из приложения скоро появится. Чтобы добавлять города, выберите «Свой API-ключ» и сохраните настройки.",
+    };
+  }
+  if (!keyConfigured) {
+    return {
+      title: "Нужен API-ключ",
+      description:
+        "Режим BYOK включён, но ключ ещё не сохранён. Укажите API-ключ провайдера ниже и нажмите «Сохранить» — после этого список городов станет доступен.",
+    };
+  }
+  return null;
+}
+
 export function OsrmPreparePanel() {
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
@@ -84,9 +114,19 @@ export function OsrmPreparePanel() {
   const notifiedRef = useRef<Set<string>>(readIdSet(NOTIFIED_KEY));
   const watchRef = useRef<Set<string>>(readIdSet(WATCH_KEY));
 
+  const settingsQuery = useQuery({
+    queryKey: ["settings"],
+    queryFn: fetchSettings,
+  });
+  const prepareLock = osrmPrepareLock(
+    settingsQuery.data?.llm_mode,
+    settingsQuery.data?.llm_key_configured,
+  );
+
   const eligibleQuery = useQuery({
     queryKey: ["osrm-eligible"],
     queryFn: fetchOsrmEligibleCities,
+    enabled: !prepareLock,
   });
 
   const jobsQuery = useQuery({
@@ -200,6 +240,16 @@ export function OsrmPreparePanel() {
     3;
   const remaining = Math.max(0, quotaLimit - quotaUsed);
 
+  if (settingsQuery.isLoading && !settingsQuery.data) {
+    return (
+      <Card id="osrm-cities" title="Города на карте (OSRM)" className="mb-4 scroll-mt-20">
+        <Typography.Paragraph type="secondary" className="mb-0">
+          Проверяем режим сборки…
+        </Typography.Paragraph>
+      </Card>
+    );
+  }
+
   if (user && user.email_verified === false) {
     return (
       <Card id="osrm-cities" title="Города на карте (OSRM)" className="mb-4 scroll-mt-20">
@@ -207,7 +257,7 @@ export function OsrmPreparePanel() {
           type="warning"
           showIcon
           message="Подтвердите email"
-          description="Чтобы добавлять города на карту, подтвердите адрес из письма после регистрации."
+          description="Чтобы добавлять города на карту, подтвердите адрес из письма после регистрации. Затем нужен режим «Свой API-ключ (BYOK)»."
         />
         <Button
           className="mt-3"
@@ -216,6 +266,22 @@ export function OsrmPreparePanel() {
         >
           Отправить письмо снова
         </Button>
+      </Card>
+    );
+  }
+
+  if (prepareLock) {
+    return (
+      <Card id="osrm-cities" title="Города на карте (OSRM)" className="mb-4 scroll-mt-20">
+        <Alert
+          type="info"
+          showIcon
+          message={prepareLock.title}
+          description={prepareLock.description}
+        />
+        <Typography.Paragraph type="secondary" className="mb-0 mt-3">
+          <a href="#ai-mode">Перейти к режиму AI</a>
+        </Typography.Paragraph>
       </Card>
     );
   }
@@ -231,7 +297,13 @@ export function OsrmPreparePanel() {
         <Select
           className="flex-1"
           showSearch
-          placeholder={cities.length ? "Выберите город" : "Нет доступных городов"}
+          placeholder={
+            eligibleQuery.isError
+              ? "Не удалось загрузить список"
+              : cities.length
+                ? "Выберите город"
+                : "Нет городов для подготовки"
+          }
           optionFilterProp="label"
           value={slug}
           onChange={setSlug}
@@ -240,6 +312,7 @@ export function OsrmPreparePanel() {
             label: c.display_name,
           }))}
           disabled={!cities.length || startMutation.isPending}
+          status={eligibleQuery.isError ? "error" : undefined}
         />
         <Button
           type="primary"
@@ -255,6 +328,25 @@ export function OsrmPreparePanel() {
           Подготовить
         </Button>
       </Space.Compact>
+
+      {eligibleQuery.isError ? (
+        <Alert
+          type="warning"
+          showIcon
+          className="mb-3"
+          message="Не удалось загрузить города"
+          description={getErrorMessage(eligibleQuery.error)}
+        />
+      ) : null}
+      {!eligibleQuery.isLoading && !eligibleQuery.isError && cities.length === 0 ? (
+        <Alert
+          type="info"
+          showIcon
+          className="mb-3"
+          message="Пока нечего готовить"
+          description="Либо пеший граф для городов каталога уже есть на сервере, либо регион (FO) ещё не скачан. Город всё равно можно ввести вручную при создании прогулки — будет виджет Яндекс.Карт."
+        />
+      ) : null}
 
       {inProgress.map((job) => (
         <div key={job.id} className="mb-3">
