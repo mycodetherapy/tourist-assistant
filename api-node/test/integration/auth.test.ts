@@ -34,6 +34,10 @@ describe.skipIf(!hasDatabase)("auth integration", () => {
     expect(reg.statusCode).toBe(201);
     const regBody = reg.json() as { access_token: string; user: { id: number } };
     expect(regBody.access_token).toBeTruthy();
+    const sessionCookie = (reg.cookies as { name: string; value: string }[]).find(
+      (c) => c.name === "auth_session",
+    );
+    expect(sessionCookie?.value).toBeTruthy();
 
     const auditReg = await query<{ action: string }>(
       `SELECT action FROM audit_events
@@ -68,6 +72,28 @@ describe.skipIf(!hasDatabase)("auth integration", () => {
     });
     expect(me.statusCode).toBe(200);
     expect((me.json() as { email: string }).email).toBe(testEmail);
+
+    const meCookie = await app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      cookies: { auth_session: sessionCookie!.value },
+    });
+    expect(meCookie.statusCode).toBe(200);
+    expect((meCookie.json() as { email: string }).email).toBe(testEmail);
+
+    const loggedOut = await app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      cookies: { auth_session: sessionCookie!.value },
+    });
+    expect(loggedOut.statusCode).toBe(204);
+
+    const meAfterLogout = await app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      cookies: { auth_session: sessionCookie!.value },
+    });
+    expect(meAfterLogout.statusCode).toBe(401);
 
     const seen = await query<{ last_seen_at: Date | null }>(
       "SELECT last_seen_at FROM users WHERE id = $1",

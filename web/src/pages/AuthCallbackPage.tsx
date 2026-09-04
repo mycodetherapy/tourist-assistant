@@ -6,16 +6,11 @@ import { useAuth } from "../auth/AuthContext";
 export function AuthCallbackPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { setTokenFromOAuth } = useAuth();
+  const { completeLogin } = useAuth();
 
   useEffect(() => {
-    const token = params.get("token");
     const claimedTripId = params.get("trip");
-    if (!token) {
-      navigate("/login", { replace: true });
-      return;
-    }
-    void setTokenFromOAuth(token)
+    void completeLogin()
       .then(() => {
         if (claimedTripId) {
           navigate(`/trips/${claimedTripId}`, { replace: true });
@@ -24,7 +19,7 @@ export function AuthCallbackPage() {
         navigate("/settings", { replace: true, state: { onboarding: true } });
       })
       .catch(() => navigate("/login", { replace: true }));
-  }, [params, navigate, setTokenFromOAuth]);
+  }, [params, navigate, completeLogin]);
 
   return (
     <div className="flex flex-1 items-center justify-center py-24">

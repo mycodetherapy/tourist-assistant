@@ -105,11 +105,17 @@ function asComponent(name: string, schema: z.ZodTypeAny) {
 
 export const openApiComponents = {
   securitySchemes: {
+    cookieAuth: {
+      type: "apiKey" as const,
+      in: "cookie" as const,
+      name: "auth_session",
+      description: "httpOnly-сессия из login/register/Google (основной способ)",
+    },
     bearerAuth: {
       type: "http" as const,
       scheme: "bearer",
       bearerFormat: "JWT",
-      description: "JWT из POST /api/auth/login или /api/auth/register",
+      description: "JWT из login/register (запасной вариант; основной — cookie auth_session)",
     },
   },
   schemas: {
@@ -136,7 +142,7 @@ export const openApiComponents = {
   },
 };
 
-export const bearerSecurity = [{ bearerAuth: [] }] as const;
+export const bearerSecurity = [{ cookieAuth: [] }, { bearerAuth: [] }] as const;
 
 export function ref(name: keyof typeof openApiComponents.schemas) {
   return { $ref: `${name}#` };

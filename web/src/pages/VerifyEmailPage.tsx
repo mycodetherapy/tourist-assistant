@@ -9,7 +9,7 @@ export function VerifyEmailPage() {
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
   const navigate = useNavigate();
-  const { setTokenFromOAuth } = useAuth();
+  const { completeLogin } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
@@ -21,9 +21,9 @@ export function VerifyEmailPage() {
         return;
       }
       try {
-        const data = await verifyEmail(token);
+        await verifyEmail(token);
         if (cancelled) return;
-        await setTokenFromOAuth(data.access_token);
+        await completeLogin();
         setDone(true);
         notification.success({ title: "Email подтверждён" });
         window.setTimeout(() => navigate("/settings", { replace: true }), 1200);
@@ -36,7 +36,7 @@ export function VerifyEmailPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, navigate, setTokenFromOAuth]);
+  }, [token, navigate, completeLogin]);
 
   return (
     <div className="mx-auto flex min-h-[50vh] max-w-md flex-col justify-center px-4 py-12">

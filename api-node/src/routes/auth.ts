@@ -37,6 +37,10 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import { resolveOsrmPrepareQuota } from "../services/osrmPrepareAccess.js";
 import {
+  destroyAuthSession,
+  issueAuthSession,
+} from "../services/authSession.js";
+import {
   recordUserLogin,
   recordUserRegister,
 } from "../services/authAudit.js";
@@ -112,6 +116,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           reply,
           user.id,
         );
+        await issueAuthSession(request, reply, user.id);
         return reply
           .code(201)
           .send(authResponsePayload(user, token, claimedTripId));
@@ -163,6 +168,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           reply,
           user.id,
         );
+        await issueAuthSession(request, reply, user.id);
         return reply
           .code(200)
           .send(authResponsePayload(user, token, claimedTripId));
@@ -223,6 +229,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       try {
         const user = await verifyEmailToken(body.data.token);
         const token = createAccessToken(user.id, user.email);
+        await issueAuthSession(request, reply, user.id);
         return reply.code(200).send(authResponsePayload(user, token));
       } catch (err) {
         if (err instanceof AuthError) {
@@ -273,7 +280,10 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         response: { 204: { type: "null", description: "No content" } },
       },
     },
-    async (_request, reply) => reply.code(204).send(),
+    async (request, reply) => {
+      await destroyAuthSession(request, reply);
+      return reply.code(204).send();
+    },
   );
 
   app.get(
@@ -390,7 +400,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           redirectUri,
           (message, extra) => request.log.warn(extra ?? {}, message),
         );
-        const { token, user, isNewUser } = await loginOrLinkGoogle({
+        const { user, isNewUser } = await loginOrLinkGoogle({
           googleSub: profile.sub,
           email: profile.email,
         });
@@ -412,6 +422,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           reply,
           user.id,
         );
+        await issueAuthSession(request, reply, user.id, frontend);
         reply
           .clearCookie(cookies.state, clearOpts)
           .clearCookie(cookies.frontend, clearOpts)
@@ -420,9 +431,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           .clearCookie(cookies.frontend, domainOpts)
           .clearCookie(cookies.redirect, domainOpts);
         const tripParam =
-          claimedTripId != null ? `&trip=${claimedTripId}` : "";
-        const redirectUrl =
-          `${frontend}/auth/callback?token=${encodeURIComponent(token)}${tripParam}`;
+          claimedTripId != null ? `?trip=${claimedTripId}` : "";
+        const redirectUrl = `${frontend}/auth/callback${tripParam}`;
         return reply.redirect(redirectUrl);
       } catch (err) {
         const frontend = resolveFrontendUrl(

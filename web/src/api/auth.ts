@@ -25,6 +25,10 @@ export async function resendVerification(): Promise<void> {
   await apiClient.post("/auth/resend-verification");
 }
 
+export async function logout(): Promise<void> {
+  await apiClient.post("/auth/logout");
+}
+
 export function googleLoginUrl(): string {
   const frontend = encodeURIComponent(window.location.origin);
   return `/api/auth/google?frontend=${frontend}`;

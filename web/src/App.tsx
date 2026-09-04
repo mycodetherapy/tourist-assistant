@@ -129,8 +129,7 @@ export default function App() {
                 okText="Выйти"
                 cancelText="Отмена"
                 onConfirm={() => {
-                  logout();
-                  navigate("/", { replace: true });
+                  void logout().then(() => navigate("/", { replace: true }));
                 }}
               >
                 <Button

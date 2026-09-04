@@ -31,7 +31,7 @@
 | Задача | Действие |
 | ------ | -------- |
 | **Prod-деплой** | Merge PR `develop` → `main` → CI Deploy; `.env`: `YANDEX_SMARTCAPTCHA_SERVER_KEY`; secret `VITE_YANDEX_SMARTCAPTCHA_CLIENT_KEY` |
-| **Миграции** | Авто при старте worker (`alembic upgrade head`); head: `g2h3i4j5k6l7` (email verify + osrm_prepare_jobs) |
+| **Миграции** | Авто при старте worker (`alembic upgrade head`); head: `h3i4j5k6l7m8` (`auth_sessions`) |
 | **Локальные фиксы** | Кнопка «Пересобрать» (captcha disabled), крестик cookie-баннера — закоммитить в `develop` |
 
 ### Ближайшие планы (phase 2)
@@ -266,7 +266,7 @@ Pre-commit hook (`./scripts/install_git_hooks.sh`) обновляет `docs/open
 
 | Экран                  | Действие                                                                                                                                                                                                                                        |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Вход / регистрация** | Email+пароль или Google; JWT в `localStorage`                                                                                                                                                                                                   |
+| **Вход / регистрация** | Email+пароль или Google; сессия в httpOnly cookie `auth_session` (14 дней, sliding); JWT Bearer — запасной вариант |
 | **Настройки**          | Режим AI: `none` (бесплатный алгоритм, 30/сутки), `byok` (свой ключ), `platform` (скоро). BYOK: API key, Base URL, модель. Self-serve OSRM: free — 3 города, BYOK — без лимита (нужен verified email) |
 | **Список прогулок**    | Только прогулки текущего пользователя                                                                                                                                                                                                           |
 | **Новая прогулка**     | Wizard: город → запуск → фоновая сборка (polling 1–2 мин)                                                                                                                                                                                       |
@@ -369,13 +369,13 @@ NEW_POSTGRES_PASSWORD='…' bash rotate_postgres_password.sh
 
 ```bash
 cd /opt/tourist-assistant
-docker compose -f docker-compose.prod.yml exec -T worker alembic current   # head: c4e1f8a92d10
+docker compose -f docker-compose.prod.yml exec -T worker alembic current   # head: h3i4j5k6l7m8
 docker compose -f docker-compose.prod.yml exec -T worker alembic upgrade head
 docker compose -f docker-compose.prod.yml up -d --force-recreate worker api-node
 docker compose -f docker-compose.prod.yml logs api-node --tail 80
 ```
 
-Колонка `users.last_seen_at` нужна для audit при входе (ревизия `c4e1f8a92d10`). Worker применяет `alembic upgrade head` при каждом старте; при отставании схемы — команды выше.
+Worker применяет `alembic upgrade head` при каждом старте (таблица `auth_sessions` — ревизия `h3i4j5k6l7m8`). При отставании схемы — команды выше.
 
 Ручной деплой с сервера (если нужно):
 
@@ -515,7 +515,8 @@ Eval проверяет **fixtures** в `eval/fixtures/` (схема прогр�
 | `VITE_YANDEX_VERIFICATION`                | Нет         | Код meta `yandex-verification` (сборка web); иначе подтверждение домена в Вебмастере через DNS TXT                               |
 | `VITE_GOOGLE_SITE_VERIFICATION`           | Нет         | Код meta `google-site-verification` (сборка web); иначе DNS TXT в Search Console                                                 |
 | `ESTIMATED_AI_RUN_COST_RUB`                 | Нет         | Оценка стоимости AI-прогона для UI (default 10)                                                                                  |
-| `JWT_ACCESS_TTL_MINUTES`                    | Нет         | Срок жизни access token (по умолчанию 60)                                                                                      |
+| `JWT_ACCESS_TTL_MINUTES`                    | Нет         | Срок JWT Bearer (запасной способ auth; default 60). Основная сессия — cookie `auth_session`                                     |
+| `AUTH_SESSION_TTL_DAYS`                     | Нет         | Срок httpOnly-сессии после входа (default 14, sliding при активности)                                                          |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Нет         | Google OAuth (опционально). Один OAuth client — несколько **Authorized redirect URIs** в Google Console                        |
 | `GOOGLE_REDIRECT_URI`                       | Нет         | Fallback; в OAuth `redirect_uri` = `{origin фронта}/api/auth/google/callback` (см. ниже)                                       |
 | `FRONTEND_URL`                              | Нет         | Origin фронта (prod: `https://progulyai.ru`; локально: `https://localhost:5173` при HTTPS dev)                                 |

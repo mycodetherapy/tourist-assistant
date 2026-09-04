@@ -7,11 +7,17 @@
   },
   "components": {
     "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "auth_session",
+        "description": "httpOnly-сессия из login/register/Google (основной способ)"
+      },
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "JWT из POST /api/auth/login или /api/auth/register"
+        "description": "JWT из login/register (запасной вариант; основной — cookie auth_session)"
       }
     },
     "schemas": {
@@ -248,6 +254,9 @@
         ],
         "security": [
           {
+            "cookieAuth": []
+          },
+          {
             "bearerAuth": []
           }
         ],
@@ -331,6 +340,9 @@
         ],
         "security": [
           {
+            "cookieAuth": []
+          },
+          {
             "bearerAuth": []
           }
         ],
@@ -408,6 +420,9 @@
         ],
         "security": [
           {
+            "cookieAuth": []
+          },
+          {
             "bearerAuth": []
           }
         ],
@@ -424,6 +439,9 @@
           "profile"
         ],
         "security": [
+          {
+            "cookieAuth": []
+          },
           {
             "bearerAuth": []
           }
@@ -450,6 +468,9 @@
         },
         "security": [
           {
+            "cookieAuth": []
+          },
+          {
             "bearerAuth": []
           }
         ],
@@ -466,6 +487,9 @@
           "profile"
         ],
         "security": [
+          {
+            "cookieAuth": []
+          },
           {
             "bearerAuth": []
           }
@@ -484,6 +508,9 @@
           "trips"
         ],
         "security": [
+          {
+            "cookieAuth": []
+          },
           {
             "bearerAuth": []
           }
@@ -520,6 +547,9 @@
           }
         },
         "security": [
+          {
+            "cookieAuth": []
+          },
           {
             "bearerAuth": []
           }
@@ -605,6 +635,9 @@
           }
         },
         "security": [
+          {
+            "cookieAuth": []
+          },
           {
             "bearerAuth": []
           }
@@ -813,6 +846,9 @@
           }
         },
         "security": [
+          {
+            "cookieAuth": []
+          },
           {
             "bearerAuth": []
           }
@@ -1314,6 +1350,9 @@
         },
         "security": [
           {
+            "cookieAuth": []
+          },
+          {
             "bearerAuth": []
           }
         ],
@@ -1329,6 +1368,9 @@
           "osrm"
         ],
         "security": [
+          {
+            "cookieAuth": []
+          },
           {
             "bearerAuth": []
           }
@@ -1347,6 +1389,9 @@
           "osrm"
         ],
         "security": [
+          {
+            "cookieAuth": []
+          },
           {
             "bearerAuth": []
           }
@@ -1386,6 +1431,9 @@
           }
         ],
         "security": [
+          {
+            "cookieAuth": []
+          },
           {
             "bearerAuth": []
           }

@@ -54,6 +54,8 @@ export const config = {
   estimatedAiRunCostRub: Number(process.env.ESTIMATED_AI_RUN_COST_RUB ?? 10),
   graphRunStaleSec: Number(process.env.GRAPH_RUN_STALE_SEC ?? 600),
   guestSessionTtlDays: Number(process.env.GUEST_SESSION_TTL_DAYS ?? 7),
+  /** Logged-in httpOnly session cookie (sliding). */
+  authSessionTtlDays: Number(process.env.AUTH_SESSION_TTL_DAYS ?? 14),
   guestCookieSecure: !["0", "false", "no", "off"].includes(
     (process.env.GUEST_COOKIE_SECURE ?? "").trim().toLowerCase(),
   ) && process.env.NODE_ENV === "production",
