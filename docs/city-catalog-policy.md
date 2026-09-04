@@ -33,7 +33,8 @@ Wikidata + iframe. Wishlist: `POST /api/city-requests`.
    Для `docker run -v` из worker нужен **путь хоста**: `TOURIST_HOST_DATA_DIR` (локально `${PWD}/data`, VPS `/opt/tourist-assistant/data`). `TOURIST_DATA_DIR=/app/data` — только I/O внутри контейнере.
 4. Прогресс и уведомление в UI. При ошибке квота **бесплатного** режима возвращается (BYOK квоту не тратит).
 5. Диск: hard stop если свободно &lt; `OSRM_PREPARE_MIN_FREE_GB` (default 5). Soft-cap городов: `OSRM_PREPARE_MAX_CITIES` (40).
-6. Если у пользователя уже есть маршруты по городу и граф OSRM обновился (mtime `*.osrm.mldgr` новее `itinerary_versions.created_at`) — на странице прогулки баннер «Карта обновилась» + CTA пересбор (`GET /api/trips/:id/osrm-update`).
+6. Extract из FO на **VPS 4 ГБ** часто не влезает в RAM (`osmium` → exit 137, пустой `extract.osm.pbf`). Нужен **swap 2–4 ГБ**; стратегия extract по умолчанию `simple` (`OSMIUM_EXTRACT_STRATEGY=complete_ways` — больше RAM, целее ways). Пустой extract не считается готовым.
+7. Если у пользователя уже есть маршруты по городу и граф OSRM обновился (mtime `*.osrm.mldgr` новее `itinerary_versions.created_at`) — на странице прогулки баннер «Карта обновилась» + CTA пересбор (`GET /api/trips/:id/osrm-update`).
 
 ## Runtime ephemeral
 
