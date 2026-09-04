@@ -74,6 +74,7 @@ def _cleanup_failed_pack(data_root: Path, slug: str, error: str) -> None:
 
     city = data_root / "cities" / slug
     (city / "extract.osm.pbf.partial").unlink(missing_ok=True)
+    (city / "extract.partial.osm.pbf").unlink(missing_ok=True)
     extract = city / "extract.osm.pbf"
     poi = city / "poi.sqlite"
     if not extract.is_file():

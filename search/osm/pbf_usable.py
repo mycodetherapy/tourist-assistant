@@ -28,7 +28,7 @@ def is_pbf_usable(path: Path | str, *, deep: bool | None = None) -> bool:
             return False
         try:
             proc = subprocess.run(
-                [osmium, "fileinfo", "-e", str(p)],
+                [osmium, "fileinfo", "-F", "pbf", "-e", str(p)],
                 check=False,
                 capture_output=True,
                 text=True,
