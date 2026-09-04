@@ -150,7 +150,7 @@ def main() -> int:
         for _ in range(fo_n):
             if not state.get("fo_queue"):
                 break
-            fo_id = state["fo_queue"].pop(0)
+            fo_id = state["fo_queue"][0]
             print(f"refresh FO {fo_id}")
             script = ROOT / "scripts" / "fo_ensure.sh"
             env = os.environ.copy()
@@ -158,17 +158,24 @@ def main() -> int:
             env["TOURIST_DATA_DIR"] = os.getenv("TOURIST_DATA_DIR") or str(ROOT / "data")
             import subprocess
 
-            subprocess.run(
+            result = subprocess.run(
                 ["bash", str(script), fo_id],
                 cwd=str(ROOT),
                 env=env,
                 check=False,
             )
+            if result.returncode != 0:
+                print(
+                    f"refresh FO {fo_id} failed (exit {result.returncode}) — leave in queue",
+                    file=sys.stderr,
+                )
+                break
+            state["fo_queue"].pop(0)
 
         for _ in range(city_n):
             if not state.get("city_queue"):
                 break
-            slug = state["city_queue"].pop(0)
+            slug = state["city_queue"][0]
             spec = get_city_pack_spec(slug)
             fo = spec.federal_district if spec else ""
             print(f"refresh city {slug} fo={fo}")
@@ -184,6 +191,8 @@ def main() -> int:
                 )
             except Exception as exc:
                 print(f"  failed: {exc}", file=sys.stderr)
+                break
+            state["city_queue"].pop(0)
 
         _save_state(state)
         print("nightly refresh done")

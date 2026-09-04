@@ -42,6 +42,8 @@ Wikidata + iframe. Wishlist: `POST /api/city-requests`.
 ## Обновления
 
 - Nightly staggered: `scripts/osrm_nightly_refresh.py` (окно 02–06 Europe/Moscow, цикл ~14 дней: 1 FO / ночь, затем 2 города / ночь).
+- `fo_ensure.sh` качает во временный файл и подменяет PBF только после проверки; в образе worker нужен `curl`.
+- При ошибке скачивания FO/город остаются в очереди (не сдвигаются).
 - User prepare и nightly делят lock `tourist:lock:osrm_prepare`.
 
 ## Заявки вне каталога
