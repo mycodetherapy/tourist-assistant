@@ -45,6 +45,7 @@ run_osmium_extract() {
     echo "osmium extract (native, strategy=$OSMIUM_EXTRACT_STRATEGY) …"
     osmium extract \
       --strategy "$OSMIUM_EXTRACT_STRATEGY" \
+      --output-format pbf \
       -b "$ROUTE_W,$ROUTE_S,$ROUTE_E,$ROUTE_N" \
       "$src" \
       -o "$dest" \
@@ -65,6 +66,7 @@ run_osmium_extract() {
     "$OSMIUM_IMAGE" \
     extract \
     --strategy "$OSMIUM_EXTRACT_STRATEGY" \
+    --output-format pbf \
     -b "$ROUTE_W,$ROUTE_S,$ROUTE_E,$ROUTE_N" \
     "/fo/$FO_PBF_NAME" \
     -o "/out/$(basename "$dest")" \
@@ -72,11 +74,13 @@ run_osmium_extract() {
 }
 
 FO_SRC="$DATA_DIR/fo/$FO_PBF_NAME"
-PARTIAL="$PACK_DIR/extract.osm.pbf.partial"
+# Суффикс обязан быть .osm.pbf — иначе osmium: "Could not detect file format".
+PARTIAL="$PACK_DIR/extract.partial.osm.pbf"
+LEGACY_PARTIAL="$PACK_DIR/extract.osm.pbf.partial"
 
 if ! pbf_usable "$EXTRACT_PBF" || [[ "${FORCE_EXTRACT:-}" == "1" ]]; then
   echo "osmium extract (strategy=$OSMIUM_EXTRACT_STRATEGY) …"
-  rm -f "$PARTIAL" "$EXTRACT_PBF"
+  rm -f "$PARTIAL" "$LEGACY_PARTIAL" "$EXTRACT_PBF"
   run_osmium_extract "$FO_SRC" "$PARTIAL"
   if ! pbf_usable "$PARTIAL"; then
     echo "osmium extract дал пустой или битый PBF — не хватило памяти или bbox пуст" >&2
