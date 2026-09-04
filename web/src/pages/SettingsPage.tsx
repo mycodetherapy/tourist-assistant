@@ -8,12 +8,14 @@ import type { LlmMode, UpdateSettingsPayload } from "../api/types";
 import { HowRoutesWorkDrawer } from "../components/HowRoutesWorkDrawer";
 import { OsrmPreparePanel } from "../components/OsrmPreparePanel";
 import { FREE_VS_LLM } from "../content/buildModes";
+import { useAuth } from "../auth/AuthContext";
 
 type SettingsFormValues = UpdateSettingsPayload & { llm_mode: LlmMode };
 
 export function SettingsPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { refreshUser } = useAuth();
   const [form] = Form.useForm<SettingsFormValues>();
   const watchedMode = Form.useWatch("llm_mode", form);
 
@@ -47,6 +49,8 @@ export function SettingsPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["settings"], data);
+      void queryClient.invalidateQueries({ queryKey: ["osrm-prepares"] });
+      void refreshUser?.();
       notification.success({ title: "Настройки сохранены" });
       form.setFieldValue("llm_api_key", "");
       if (data.llm_mode === "byok" && data.llm_key_configured) {
@@ -68,6 +72,8 @@ export function SettingsPage() {
     onSuccess: () => {
       notification.success({ title: "Ключ удалён" });
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      void queryClient.invalidateQueries({ queryKey: ["osrm-prepares"] });
+      void refreshUser?.();
     },
     onError: (error) => {
       notification.error({ title: "Ошибка", description: getErrorMessage(error) });
@@ -97,14 +103,13 @@ export function SettingsPage() {
         description={
           <>
             <p className="m-0 mb-2">
-              <strong>Бесплатно</strong> — алгоритм и пул мест из Wikipedia (до 30 сборок в сутки).
-              Подготовленный справочник города в этом режиме не используется.
+              <strong>Бесплатно</strong> — маршруты строит алгоритм на основе пула мест из Wikipedia (до 30 сборок в сутки).
             </p>
             <p className="m-0 mb-2">
               <strong>Свой API-ключ (BYOK)</strong> — LLM помогает с формулировками маршрутов и
               справками. Если город загружен на сервер — расширенный справочник мест (обычно больше
               точек). Оплата — у провайдера (ProxyAPI, OpenRouter). Ориентир одной AI-сборки: ~
-              {settings?.estimated_ai_run_cost_rub ?? 4} ₽.
+              {settings?.estimated_ai_run_cost_rub ?? 10} ₽.
             </p>
             <p className="m-0 text-xs text-slate-600">{FREE_VS_LLM.cityPackHint}</p>
             <p className="m-0 mt-2">

@@ -35,6 +35,7 @@ import {
   verifyOAuthState,
 } from "../services/googleOAuth.js";
 import { requireAuth } from "../middleware/auth.js";
+import { resolveOsrmPrepareQuota } from "../services/osrmPrepareAccess.js";
 import {
   recordUserLogin,
   recordUserRegister,
@@ -186,11 +187,15 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         response: { 200: ref("UserResponse"), 401: ref("ErrorDetail") },
       },
     },
-    async (request) => ({
-      ...userPublic(request.user!),
-      osrm_prepare_quota_used: request.user!.osrm_prepare_quota_used ?? 0,
-      osrm_prepare_quota_limit: config.osrmPrepareQuotaPerUser,
-    }),
+    async (request) => {
+      const quota = await resolveOsrmPrepareQuota(request.user!.id);
+      return {
+        ...userPublic(request.user!),
+        osrm_prepare_quota_used: request.user!.osrm_prepare_quota_used ?? 0,
+        osrm_prepare_quota_limit: quota.limit,
+        osrm_prepare_quota_unlimited: quota.unlimited,
+      };
+    },
   );
 
   app.post(

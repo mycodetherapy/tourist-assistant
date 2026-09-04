@@ -13,6 +13,7 @@ import {
   getOsrmPrepareJobForUser,
   OsrmPrepareError,
 } from "../services/osrmPrepare.js";
+import { resolveOsrmPrepareQuota } from "../services/osrmPrepareAccess.js";
 
 export async function registerCitiesRoutes(app: FastifyInstance): Promise<void> {
   app.get(
@@ -130,11 +131,15 @@ export async function registerOsrmPrepareRoutes(app: FastifyInstance): Promise<v
         security: [...bearerSecurity],
       },
     },
-    async (request) => ({
-      jobs: await listUserOsrmPrepareJobs(request.user!.id),
-      quota_used: request.user!.osrm_prepare_quota_used ?? 0,
-      quota_limit: config.osrmPrepareQuotaPerUser,
-    }),
+    async (request) => {
+      const quota = await resolveOsrmPrepareQuota(request.user!.id);
+      return {
+        jobs: await listUserOsrmPrepareJobs(request.user!.id),
+        quota_used: request.user!.osrm_prepare_quota_used ?? 0,
+        quota_limit: quota.limit,
+        quota_unlimited: quota.unlimited,
+      };
+    },
   );
 
   app.get(

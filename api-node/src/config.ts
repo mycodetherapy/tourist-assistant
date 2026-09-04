@@ -51,7 +51,7 @@ export const config = {
   freeRunQuotasEnabled: !["0", "false", "no", "off"].includes(
     (process.env.FREE_RUN_QUOTAS_ENABLED ?? "true").trim().toLowerCase(),
   ),
-  estimatedAiRunCostRub: Number(process.env.ESTIMATED_AI_RUN_COST_RUB ?? 4),
+  estimatedAiRunCostRub: Number(process.env.ESTIMATED_AI_RUN_COST_RUB ?? 10),
   graphRunStaleSec: Number(process.env.GRAPH_RUN_STALE_SEC ?? 600),
   guestSessionTtlDays: Number(process.env.GUEST_SESSION_TTL_DAYS ?? 7),
   guestCookieSecure: !["0", "false", "no", "off"].includes(

@@ -13,7 +13,7 @@ LlmMode = Literal["none", "platform", "byok"]
 VALID_LLM_MODES: tuple[LlmMode, ...] = ("none", "platform", "byok")
 
 # Оценка стоимости одного AI-прогона для UI (Фаза 2 — wallet).
-ESTIMATED_AI_RUN_COST_RUB = 4.0
+ESTIMATED_AI_RUN_COST_RUB = 10.0
 
 
 class AuthError(Exception):

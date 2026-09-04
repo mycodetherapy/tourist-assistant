@@ -28,6 +28,7 @@ export const userResponseSchema = z.object({
   email_verified: z.boolean(),
   osrm_prepare_quota_used: z.number().int(),
   osrm_prepare_quota_limit: z.number().int(),
+  osrm_prepare_quota_unlimited: z.boolean(),
 });
 
 export const errorDetailSchema = z.object({

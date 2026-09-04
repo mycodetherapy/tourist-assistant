@@ -87,33 +87,13 @@ describe.skipIf(!hasDatabase)("auth integration", () => {
     expect(resp.json()).toEqual({ status: "ok" });
   });
 
-  it("osrm prepare is blocked in free mode", async () => {
+  it("empty byok key is rejected without existing key", async () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/login",
       payload: { email: testEmail, password: testPassword },
     });
     const token = (login.json() as { access_token: string }).access_token;
-    const me = await app.inject({
-      method: "GET",
-      url: "/api/auth/me",
-      headers: { authorization: `Bearer ${token}` },
-    });
-    const userId = (me.json() as { id: number }).id;
-    await query("UPDATE users SET email_verified_at = NOW() WHERE id = $1", [
-      userId,
-    ]);
-
-    const prep = await app.inject({
-      method: "POST",
-      url: "/api/osrm-prepares",
-      headers: { authorization: `Bearer ${token}` },
-      payload: { slug: "kazan" },
-    });
-    expect(prep.statusCode).toBe(403);
-    expect(String((prep.json() as { detail: string }).detail)).toMatch(
-      /бесплатн|API-ключ/i,
-    );
 
     const saveEmpty = await app.inject({
       method: "PUT",
